@@ -23,7 +23,9 @@ let cachedDetails: {
  * @param envVar - The environment variable name to read.
  * @returns The verified override path, or null when unset/missing.
  */
-function envBinaryPath(envVar: "FORGE_FFMPEG_PATH" | "FORGE_FFPROBE_PATH"): string | null {
+function envBinaryPath(
+  envVar: "KUMIX_WORKER_FFMPEG_PATH" | "KUMIX_WORKER_FFPROBE_PATH",
+): string | null {
   const value = process.env[envVar]?.trim();
   if (!value) return null;
   if (!existsSync(value)) {
@@ -45,7 +47,7 @@ function requireBinaryPath(packageName: "ffmpeg-static" | "ffprobe-static"): str
   const binaryPath = typeof moduleValue === "string" ? moduleValue : moduleValue?.path;
 
   if (!binaryPath || !existsSync(binaryPath)) {
-    throw new Error(`${packageName} binary is not available. Reinstall Forge Worker dependencies.`);
+    throw new Error(`${packageName} binary is not available. Reinstall Kumix Worker dependencies.`);
   }
 
   return binaryPath;
@@ -60,8 +62,8 @@ export function resolveFfmpegBinaries(): { ffmpegPath: string; ffprobePath: stri
   if (cachedPaths) return cachedPaths;
 
   cachedPaths = {
-    ffmpegPath: envBinaryPath("FORGE_FFMPEG_PATH") ?? requireBinaryPath("ffmpeg-static"),
-    ffprobePath: envBinaryPath("FORGE_FFPROBE_PATH") ?? requireBinaryPath("ffprobe-static"),
+    ffmpegPath: envBinaryPath("KUMIX_WORKER_FFMPEG_PATH") ?? requireBinaryPath("ffmpeg-static"),
+    ffprobePath: envBinaryPath("KUMIX_WORKER_FFPROBE_PATH") ?? requireBinaryPath("ffprobe-static"),
   };
 
   return cachedPaths;

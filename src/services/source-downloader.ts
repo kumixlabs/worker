@@ -21,12 +21,14 @@ import { runtimeMetrics } from "../runtime/metrics";
 import { probeAndUpdateSource } from "./probe";
 
 const DEFAULT_MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
-const maxDownloadBytes = Number(process.env.FORGE_MAX_DOWNLOAD_BYTES) || DEFAULT_MAX_DOWNLOAD_BYTES;
+const maxDownloadBytes =
+  Number(process.env.KUMIX_WORKER_MAX_DOWNLOAD_BYTES) || DEFAULT_MAX_DOWNLOAD_BYTES;
 const fetchTimeoutMs = 30_000;
-const forgeWorkerUserAgent = "Mozilla/5.0 (compatible; ForgeWorker/1.0)";
+const downloadTimeoutMs = Number(process.env.KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS) || 60 * 60 * 1000; // 1 hour
+const kumixWorkerUserAgent = "Mozilla/5.0 (compatible; KumixWorker/1.0)";
 const gdriveFileIdPattern = /^[A-Za-z0-9_-]{10,128}$/;
 
-if (process.env.FORGE_WORKER_IPV4_FIRST !== "0") {
+if (process.env.KUMIX_WORKER_IPV4_FIRST !== "0") {
   setDefaultResultOrder("ipv4first");
 }
 
@@ -56,7 +58,7 @@ function pinnedLookup(
     // one IPv4 address is available. Many VPS hosts publish AAAA records but have
     // broken/unrouted IPv6, which makes undici stall on the v6 address before it
     // falls back. Returning IPv4-only here avoids that connect-timeout hang.
-    const preferIpv4 = process.env.FORGE_WORKER_IPV4_FIRST !== "0";
+    const preferIpv4 = process.env.KUMIX_WORKER_IPV4_FIRST !== "0";
     const hasIpv4 = safe.some((record) => record.family === 4);
     const resolved = preferIpv4 && hasIpv4 ? safe.filter((record) => record.family === 4) : safe;
     if (options.all) return callback(null, resolved);
@@ -296,7 +298,7 @@ function appendCookies(cookie: string | null, setCookie: string[]): string | nul
 
 function fetchInit(init?: RequestInit, cookie?: string | null): RequestInit {
   const headers = new Headers(init?.headers);
-  if (!headers.has("user-agent")) headers.set("user-agent", forgeWorkerUserAgent);
+  if (!headers.has("user-agent")) headers.set("user-agent", kumixWorkerUserAgent);
   if (!headers.has("accept")) headers.set("accept", "*/*");
   if (cookie && !headers.has("cookie")) headers.set("cookie", cookie);
   return {
@@ -427,6 +429,12 @@ export async function downloadAndProbeSource(sourceId: string) {
   const source = getSource(sourceId);
   if (!source?.url) return source;
 
+  // Auto-detect Google Drive links registered as plain URL sources so the
+  // confirmation-token download flow runs even when the caller picked the
+  // wrong kind. Falls back to the regular URL flow for non-Drive links.
+  const _effectiveKind: "url" | "gdrive" =
+    source.kind === "gdrive" || extractGDriveFileId(source.url) ? "gdrive" : "url";
+
   if (!(await validateUrl(source.url))) {
     return updateSourceProbe(sourceId, {
       status: "invalid",
@@ -453,7 +461,9 @@ export async function downloadAndProbeSource(sourceId: string) {
 
   let response: Response;
   try {
-    response = await safeFetch(downloadUrl, headers ? { headers } : undefined);
+    const downloadInit: RequestInit = { signal: AbortSignal.timeout(downloadTimeoutMs) };
+    if (headers) downloadInit.headers = headers;
+    response = await safeFetch(downloadUrl, downloadInit);
   } catch (error) {
     console.error(`[worker] downloadAndProbeSource ${sourceId} (${source.kind}) failed:`, error);
     return updateSourceProbe(sourceId, {

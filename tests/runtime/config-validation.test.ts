@@ -15,12 +15,12 @@ import {
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "forge-worker-"));
-  process.env.FORGE_WORKER_DATA_DIR = dataDir;
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
 });
 
 afterEach(() => {
-  delete process.env.FORGE_WORKER_DATA_DIR;
+  delete process.env.KUMIX_WORKER_DATA_DIR;
   rmSync(dataDir, { force: true, recursive: true });
 });
 
@@ -53,7 +53,7 @@ describe("config validation", () => {
   it("throws a repair hint on corrupt config", () => {
     ensureDataDir();
     writeFileSync(getConfigPath(), "{ not valid json");
-    expect(() => readSettings()).toThrow(/Failed to read Forge Worker config/);
+    expect(() => readSettings()).toThrow(/Failed to read Kumix Worker config/);
   });
 
   it("backfills defaults for a fresh config", () => {
@@ -67,7 +67,7 @@ describe("config validation", () => {
 describe("resetWorkerData guard", () => {
   it("refuses to reset an unmarked directory", () => {
     const bareDir = mkdtempSync(path.join(tmpdir(), "forge-bare-"));
-    process.env.FORGE_WORKER_DATA_DIR = bareDir;
+    process.env.KUMIX_WORKER_DATA_DIR = bareDir;
     // Create the directory contents without the marker file.
     mkdirSync(path.join(bareDir, "cache"), { recursive: true });
 

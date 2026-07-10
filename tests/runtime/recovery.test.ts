@@ -21,8 +21,8 @@ import { hasSqlite } from "../helpers";
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "forge-worker-"));
-  process.env.FORGE_WORKER_DATA_DIR = dataDir;
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
   resetDbForTests();
   writeSettings({
     dataDir,
@@ -35,7 +35,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetDbForTests();
-  delete process.env.FORGE_WORKER_DATA_DIR;
+  delete process.env.KUMIX_WORKER_DATA_DIR;
   rmSync(dataDir, { force: true, recursive: true });
 });
 
@@ -99,7 +99,7 @@ describe.skipIf(!hasSqlite())("recovery reconciliation", () => {
 
     expect(recovered).toHaveLength(1);
     expect(updated?.status).toBe("failed");
-    expect(updated?.lastError).toBe("Forge Worker restarted before stream stopped cleanly");
+    expect(updated?.lastError).toBe("Kumix Worker restarted before stream stopped cleanly");
     expect(listTombstones()).toEqual([]);
     expect(listEvents(stream.id)[0]?.kind).toBe("failed");
   });

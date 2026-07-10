@@ -13,8 +13,8 @@ import {
 
 describe("FFmpeg binary resolver", () => {
   afterEach(() => {
-    delete process.env.FORGE_FFMPEG_PATH;
-    delete process.env.FORGE_FFPROBE_PATH;
+    delete process.env.KUMIX_WORKER_FFMPEG_PATH;
+    delete process.env.KUMIX_WORKER_FFPROBE_PATH;
     resetFfmpegBinaryCacheForTests();
   });
 
@@ -27,11 +27,11 @@ describe("FFmpeg binary resolver", () => {
     expect(getFfprobePath()).toBe(binaries.ffprobePath);
   });
 
-  it("prefers FORGE_FFMPEG_PATH/FORGE_FFPROBE_PATH overrides when the files exist", () => {
+  it("prefers KUMIX_WORKER_FFMPEG_PATH/KUMIX_WORKER_FFPROBE_PATH overrides when the files exist", () => {
     const fallback = resolveFfmpegBinaries();
     resetFfmpegBinaryCacheForTests();
-    process.env.FORGE_FFMPEG_PATH = fallback.ffprobePath;
-    process.env.FORGE_FFPROBE_PATH = fallback.ffmpegPath;
+    process.env.KUMIX_WORKER_FFMPEG_PATH = fallback.ffprobePath;
+    process.env.KUMIX_WORKER_FFPROBE_PATH = fallback.ffmpegPath;
 
     const overridden = resolveFfmpegBinaries();
 
@@ -40,9 +40,9 @@ describe("FFmpeg binary resolver", () => {
   });
 
   it("throws when an override path does not exist", () => {
-    process.env.FORGE_FFMPEG_PATH = "/nonexistent/forge/ffmpeg";
+    process.env.KUMIX_WORKER_FFMPEG_PATH = "/nonexistent/forge/ffmpeg";
 
-    expect(() => resolveFfmpegBinaries()).toThrow("FORGE_FFMPEG_PATH");
+    expect(() => resolveFfmpegBinaries()).toThrow("KUMIX_WORKER_FFMPEG_PATH");
   });
 
   it("reads binary version details when binaries are executable", () => {

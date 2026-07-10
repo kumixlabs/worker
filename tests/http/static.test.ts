@@ -9,9 +9,9 @@ import { serveStatic } from "../../src/http/static";
 
 describe("static UI serving", () => {
   it("serves index.html for SPA fallback", async () => {
-    const publicDir = mkdtempSync(path.join(tmpdir(), "forge-worker-public-"));
+    const publicDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-public-"));
     try {
-      writeFileSync(path.join(publicDir, "index.html"), "<html>Forge Worker UI</html>");
+      writeFileSync(path.join(publicDir, "index.html"), "<html>Kumix Worker UI</html>");
       const app = new Hono();
       app.get("/*", (c) => serveStatic(c, publicDir));
 
@@ -19,7 +19,7 @@ describe("static UI serving", () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toContain("text/html");
-      expect(await response.text()).toBe("<html>Forge Worker UI</html>");
+      expect(await response.text()).toBe("<html>Kumix Worker UI</html>");
     } finally {
       rmSync(publicDir, { force: true, recursive: true });
     }
@@ -44,7 +44,7 @@ describe("static UI serving", () => {
   });
 
   it("serves immutable asset cache headers", async () => {
-    const publicDir = mkdtempSync(path.join(tmpdir(), "forge-worker-public-"));
+    const publicDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-public-"));
     try {
       writeFileSync(path.join(publicDir, "index.html"), "<html></html>");
       writeFileSync(path.join(publicDir, "app-A1b2C3d4.js"), "console.log('ok')");

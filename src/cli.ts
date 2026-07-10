@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Command-line interface for initializing, serving, inspecting, and updating Forge Worker.
+ * Command-line interface for initializing, serving, inspecting, and updating Kumix Worker.
  */
 
 import { randomBytes } from "node:crypto";
@@ -129,8 +129,8 @@ function exitWithError(error: unknown): never {
  */
 function restartHint(): string {
   return process.platform === "win32"
-    ? "Restart the forge-worker terminal or Windows service to apply the new version."
-    : "Restart the forge-worker service/process to apply the new version.";
+    ? "Restart the kumix-worker terminal or Windows service to apply the new version."
+    : "Restart the kumix-worker service/process to apply the new version.";
 }
 
 /**
@@ -163,7 +163,7 @@ async function autoStartStreams(
 }
 
 /**
- * Builds the Forge Worker CLI program with init, serve, and status commands.
+ * Builds the Kumix Worker CLI program with init, serve, and status commands.
  *
  * @returns The configured commander program.
  */
@@ -171,22 +171,22 @@ export function createCliProgram(): Command {
   const program = new Command();
 
   program
-    .name("forge-worker")
-    .description("Forge Worker self-hosted live runner")
-    .version(readPackageVersion(), "-v, --version", "Print the installed Forge Worker version")
+    .name("kumix-worker")
+    .description("Kumix Worker self-hosted live runner")
+    .version(readPackageVersion(), "-v, --version", "Print the installed Kumix Worker version")
     .helpOption("-h, --help", "Show all commands and usage information")
     .addHelpText("after", cliHelpText);
 
   // No subcommand: show a short hint instead of exiting silently.
   program.action(() => {
-    console.log("Forge Worker - self-hosted live runner");
+    console.log("Kumix Worker - self-hosted live runner");
     console.log("");
-    console.log("No command provided. Run 'forge-worker --help' to see all commands.");
+    console.log("No command provided. Run 'kumix-worker --help' to see all commands.");
   });
 
   program
     .command("init")
-    .description("Create or update the local Forge Worker config")
+    .description("Create or update the local Kumix Worker config")
     .option("--token <token>", "dashboard/API token")
     .option("--port <port>", "local HTTP port")
     .option("--host <host>", "host used only for printed dashboard URLs", "localhost")
@@ -219,7 +219,7 @@ export function createCliProgram(): Command {
           if (nextToken !== current.token) reencryptTargetSecrets(current.token, nextToken);
           writeSettings(next);
           const showSecret = Boolean(opts.show || opts.dev);
-          console.log(`Forge Worker config written to ${ensureDataDir()}`);
+          console.log(`Kumix Worker config written to ${ensureDataDir()}`);
           console.log(`Token: ${showSecret ? next.token : maskToken(next.token)}`);
           console.log(`Port: ${next.port}`);
           console.log(`Timezone: ${next.timezone}`);
@@ -236,7 +236,7 @@ export function createCliProgram(): Command {
 
   program
     .command("serve")
-    .description("Run local Forge Worker API")
+    .description("Run local Kumix Worker API")
     .option("--host <host>", "host", "localhost")
     .option("--port <port>", "port override")
     .option("--dev", "development mode (prints the full token)")
@@ -281,7 +281,7 @@ export function createCliProgram(): Command {
       process.once("SIGINT", () => void shutdown());
       process.once("SIGTERM", () => void shutdown());
 
-      console.log(`Forge Worker API listening on http://${opts.host}:${port}`);
+      console.log(`Kumix Worker API listening on http://${opts.host}:${port}`);
       console.log(`Dashboard: ${dashboardUrl(opts.host, port)}`);
       if (opts.host === "0.0.0.0") {
         console.log("Warning: API is exposed on the network. Keep the worker token secret.");
@@ -308,7 +308,7 @@ export function createCliProgram(): Command {
 
   program
     .command("status")
-    .description("Print local Forge Worker status, binary health, and disk usage")
+    .description("Print local Kumix Worker status, binary health, and disk usage")
     .action(() => {
       const settings = readSettings();
       const health = runtimeHealthDetails();
@@ -357,7 +357,7 @@ export function createCliProgram(): Command {
       console.log(
         settings.token.length >= 12
           ? "[ok] Token present"
-          : "[warn] Token looks too short; run 'forge-worker token --regenerate'",
+          : "[warn] Token looks too short; run 'kumix-worker token --regenerate'",
       );
 
       const disk = runtimeMetrics().storage.disk;
@@ -378,7 +378,7 @@ export function createCliProgram(): Command {
 
   program
     .command("token")
-    .description("Print or rotate the local Forge Worker token")
+    .description("Print or rotate the local Kumix Worker token")
     .option("--regenerate", "generate and store a new token")
     .option("--show", "print the full token instead of a masked preview")
     .action((opts: { regenerate?: boolean; show?: boolean }) => {
@@ -396,7 +396,7 @@ export function createCliProgram(): Command {
 
   program
     .command("update")
-    .description("Update the @tubeforge/worker package via npm")
+    .description("Update the @kumix/worker package via npm")
     .option("--check", "only check for a newer version, do not install")
     .option("--restart", "restart the service after install when no streams are active")
     .option("--force", "restart even when streams are active")
@@ -432,7 +432,7 @@ export function createCliProgram(): Command {
         }
         const restartMode: RestartMode = opts.force ? "force" : opts.restart ? "auto" : "never";
 
-        console.log(`Updating @tubeforge/worker (current v${current})...`);
+        console.log(`Updating @kumix/worker (current v${current})...`);
         try {
           const result = await performSelfUpdate({
             autoStart: Boolean(opts.autoStart),
@@ -442,8 +442,8 @@ export function createCliProgram(): Command {
           if (result.installed) {
             console.log(
               result.latestVersion
-                ? `Installed @tubeforge/worker@${result.latestVersion}`
-                : "Installed @tubeforge/worker@latest",
+                ? `Installed @kumix/worker@${result.latestVersion}`
+                : "Installed @kumix/worker@latest",
             );
           } else if (result.latestVersion === current) {
             console.log(`Already up to date (v${current})`);
@@ -502,7 +502,7 @@ export function createCliProgram(): Command {
 
       console.log(`Reset complete. Data directory: ${ensureDataDir()}`);
       if (opts.all) {
-        console.log("Config deleted. Run 'forge-worker init' to configure a new token.");
+        console.log("Config deleted. Run 'kumix-worker init' to configure a new token.");
       }
     });
 

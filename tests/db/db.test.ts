@@ -16,8 +16,8 @@ import { hasSqlite } from "../helpers";
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "forge-worker-"));
-  process.env.FORGE_WORKER_DATA_DIR = dataDir;
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
   resetDbForTests();
   writeSettings({
     diskUsageLimitPercent: 90,
@@ -30,7 +30,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetDbForTests();
-  delete process.env.FORGE_WORKER_DATA_DIR;
+  delete process.env.KUMIX_WORKER_DATA_DIR;
   rmSync(dataDir, { force: true, recursive: true });
 });
 

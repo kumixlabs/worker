@@ -14,8 +14,8 @@ let app: ReturnType<typeof createApiApp>;
 const headers = { Authorization: "Bearer core-token-123456" };
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "forge-worker-core-"));
-  process.env.FORGE_WORKER_DATA_DIR = dataDir;
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-core-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
   resetDbForTests();
   writeSettings({
     dataDir,
@@ -29,7 +29,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetDbForTests();
-  delete process.env.FORGE_WORKER_DATA_DIR;
+  delete process.env.KUMIX_WORKER_DATA_DIR;
   rmSync(dataDir, { force: true, recursive: true });
 });
 
@@ -48,7 +48,7 @@ describe.skipIf(!hasSqlite())("Core-facing Worker API contract", () => {
     expect(JSON.stringify(body)).not.toContain("core-token-123456");
   });
 
-  it("exposes capabilities for TubeForge Web", async () => {
+  it("exposes capabilities for external integrations", async () => {
     const response = await app.request("/api/v1/capabilities", { headers });
     const body = await response.json();
 

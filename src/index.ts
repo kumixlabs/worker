@@ -1,5 +1,5 @@
 /**
- * Public package entry point for Forge Worker runtime consumers.
+ * Public package entry point for Kumix Worker runtime consumers.
  */
 
 export { createCliProgram, dashboardUrl, maskToken } from "./cli";

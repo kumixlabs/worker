@@ -39,7 +39,7 @@
   },
   "Auth": {
     "deniedTitle": "Access denied",
-    "deniedDescription": "This local dashboard can only be opened from TubeForge Web."
+    "deniedDescription": "This local dashboard can only be opened from the dashboard URL."
   },
   "Common": {
     "refresh": "Refresh",
@@ -85,7 +85,7 @@
   },
   "Dashboard": {
     "title": "Live Dashboard",
-    "description": "Monitor streams, schedules, and Forge Worker health from one place.",
+    "description": "Monitor streams, schedules, and Kumix Worker health from one place.",
     "create": "Create Live Task",
     "live": "Live Now",
     "scheduled": "Scheduled",
@@ -210,7 +210,7 @@
   "Monitoring": {
     "title": "VPS Monitoring",
     "description": "Monitor CPU, memory, bandwidth, storage, and running FFmpeg jobs.",
-    "online": "Forge Worker online",
+    "online": "Kumix Worker online",
     "offline": "Connection issue",
     "refresh": "Refresh",
     "cpu": "CPU Usage",
@@ -223,7 +223,7 @@
     "server": "Server Details",
     "disk": "VPS Disk",
     "diskUsage": "Free / total",
-    "diskDescription": "{used} used on the disk that stores Forge Worker data.",
+    "diskDescription": "{used} used on the disk that stores Kumix Worker data.",
     "platform": "Platform",
     "pid": "Process ID",
     "uptime": "Uptime",
@@ -323,7 +323,7 @@
   },
   "Settings": {
     "title": "Settings",
-    "description": "Manage Forge Worker runtime preferences.",
+    "description": "Manage Kumix Worker runtime preferences.",
     "saved": "Settings saved",
     "timezone": "Timezone",
     "timezoneDescription": "Time zone used to resolve live stream schedules.",

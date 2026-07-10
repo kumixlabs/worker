@@ -19,7 +19,7 @@ describe("frontend smoke", () => {
   it("sets page-specific browser titles through AppShell", () => {
     const shell = read("frontend/src/components/AppShell.tsx");
     expect(shell).toContain("document.title = `");
-    expect(shell).toContain(" - Forge Worker`");
+    expect(shell).toContain(" - Kumix Worker`");
   });
 
   it("uses starter Checkbox for selectable tables", () => {

@@ -165,7 +165,7 @@ function rotateToken(token: string) {
 export function registerWebRoutes(app: Hono) {
   app.get(
     "/api/v1/health",
-    doc("Web", "Read web health", "Returns lightweight worker health for TubeForge Web."),
+    doc("Web", "Read web health", "Returns lightweight worker health for external integrations."),
     (c) => c.json(ok(webHealth())),
   );
 
@@ -174,7 +174,7 @@ export function registerWebRoutes(app: Hono) {
     doc(
       "Web",
       "Read worker capabilities",
-      "Returns production API capabilities and safe runtime settings for TubeForge Web.",
+      "Returns production API capabilities and safe runtime settings for external integrations.",
     ),
     (c) => c.json(ok(webCapabilities())),
   );
@@ -184,14 +184,18 @@ export function registerWebRoutes(app: Hono) {
     doc(
       "Web",
       "Read link metadata",
-      "Returns worker link metadata for TubeForge Web install and onboarding flows.",
+      "Returns worker link metadata for external integrations and onboarding flows.",
     ),
     (c) => c.json(ok(webLinkInfo())),
   );
 
   app.get(
     "/api/v1/stats",
-    doc("Web", "Read web stats", "Returns read-only worker monitoring data for TubeForge Web."),
+    doc(
+      "Web",
+      "Read web stats",
+      "Returns read-only worker monitoring data for external integrations.",
+    ),
     (c) => c.json(ok(webStats())),
   );
 

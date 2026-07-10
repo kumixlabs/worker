@@ -39,7 +39,7 @@
   },
   "Auth": {
     "deniedTitle": "Akses ditolak",
-    "deniedDescription": "Dashboard lokal ini hanya bisa dibuka dari TubeForge Web."
+    "deniedDescription": "Dashboard lokal ini hanya bisa dibuka dari URL dashboard."
   },
   "Common": {
     "refresh": "Muat ulang",
@@ -85,7 +85,7 @@
   },
   "Dashboard": {
     "title": "Dashboard Live",
-    "description": "Pantau stream, jadwal, dan kondisi Forge Worker dari satu tempat.",
+    "description": "Pantau stream, jadwal, dan kondisi Kumix Worker dari satu tempat.",
     "create": "Buat Tugas Live",
     "live": "Live Sekarang",
     "scheduled": "Terjadwal",
@@ -210,7 +210,7 @@
   "Monitoring": {
     "title": "Monitoring VPS",
     "description": "Pantau CPU, memori, bandwidth, penyimpanan, dan job FFmpeg yang berjalan.",
-    "online": "Forge Worker online",
+    "online": "Kumix Worker online",
     "offline": "Koneksi bermasalah",
     "refresh": "Muat ulang",
     "cpu": "Penggunaan CPU",
@@ -223,7 +223,7 @@
     "server": "Detail Server",
     "disk": "Disk VPS",
     "diskUsage": "Kosong / total",
-    "diskDescription": "{used} terpakai pada disk yang menyimpan data Forge Worker.",
+    "diskDescription": "{used} terpakai pada disk yang menyimpan data Kumix Worker.",
     "platform": "Platform",
     "pid": "Process ID",
     "uptime": "Uptime",
@@ -323,7 +323,7 @@
   },
   "Settings": {
     "title": "Pengaturan",
-    "description": "Kelola preferensi runtime Forge Worker.",
+    "description": "Kelola preferensi runtime Kumix Worker.",
     "saved": "Pengaturan disimpan",
     "timezone": "Zona Waktu",
     "timezoneDescription": "Zona waktu untuk menentukan jadwal live stream.",

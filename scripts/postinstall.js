@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Postinstall script to ensure Forge Worker public assets exist
+ * Postinstall script to ensure Kumix Worker public assets exist
  * This runs after package installation to handle edge cases where
  * the public directory is not extracted properly
  */
@@ -31,18 +31,18 @@ if (hasPublicInDist || hasPublicInRoot) {
       }
       copyRecursive(publicInRoot, publicInDist);
     } catch (err) {
-      console.warn("[forge-worker] Warning: Could not copy to dist/public:", err.message);
+      console.warn("[kumix-worker] Warning: Could not copy to dist/public:", err.message);
     }
   } else if (hasPublicInDist && !hasPublicInRoot) {
     try {
       copyRecursive(publicInDist, publicInRoot);
     } catch (err) {
-      console.warn("[forge-worker] Warning: Could not copy to public:", err.message);
+      console.warn("[kumix-worker] Warning: Could not copy to public:", err.message);
     }
   }
 } else {
   console.warn(
-    "[forge-worker] Warning: Public directory not found. Forge Worker may not work correctly.",
+    "[kumix-worker] Warning: Public directory not found. Kumix Worker may not work correctly.",
   );
 }
 

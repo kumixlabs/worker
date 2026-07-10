@@ -123,7 +123,7 @@ export function LogPage() {
         signed = await api.signedUrl(path);
       } catch {
         setConnected(false);
-        window.dispatchEvent(new CustomEvent("forge-worker-auth-invalid"));
+        window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
         return;
       }
       if (cancelled) return;

@@ -64,7 +64,7 @@ export function registerSystemRoutes(app: Hono) {
 
   app.get(
     "/api/settings",
-    doc("Settings", "Read settings", "Returns local Forge Worker settings without the raw token."),
+    doc("Settings", "Read settings", "Returns local Kumix Worker settings without the raw token."),
     (c) => c.json(ok(publicSettings(readSettings()))),
   );
 

@@ -1,5 +1,5 @@
 /**
- * Zod schemas for web-facing worker API responses consumed by TubeForge Web.
+ * Zod schemas for web-facing worker API responses consumed by external integrations.
  */
 
 import { z } from "zod";

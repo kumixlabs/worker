@@ -12,7 +12,7 @@ import {
 describe("public package exports", () => {
   it("exports the CLI program factory", () => {
     expect(typeof createCliProgram).toBe("function");
-    expect(createCliProgram().name()).toBe("forge-worker");
+    expect(createCliProgram().name()).toBe("kumix-worker");
   });
 
   it("exports the token mask helper", () => {

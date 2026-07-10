@@ -5,7 +5,7 @@ import { sourceCreateSchema } from "../../src/schemas/source";
 import { streamCreateSchema } from "../../src/schemas/stream";
 import { targetCreateSchema } from "../../src/schemas/target";
 
-describe("Forge Worker schemas", () => {
+describe("Kumix Worker schemas", () => {
   it("validates URL sources", () => {
     expect(
       sourceCreateSchema.parse({

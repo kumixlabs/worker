@@ -41,7 +41,7 @@ export function resetRateLimitsForTests(): void {
  * caller evade or poison the rate-limit buckets. Enable only when running
  * behind a known reverse proxy that sets these headers.
  */
-const trustProxyHeaders = process.env.FORGE_WORKER_TRUST_PROXY === "1";
+const trustProxyHeaders = process.env.KUMIX_WORKER_TRUST_PROXY === "1";
 
 /**
  * Derives a rate-limit bucket key from the request's socket address. When a
@@ -119,7 +119,7 @@ export async function tokenAuth(c: Context, next: Next) {
     nextFailure.count += 1;
     authFailures.set(key, nextFailure);
     return c.json(
-      { ok: false, error: { code: "UNAUTHORIZED", message: "Invalid Forge Worker token" } },
+      { ok: false, error: { code: "UNAUTHORIZED", message: "Invalid Kumix Worker token" } },
       401,
     );
   }

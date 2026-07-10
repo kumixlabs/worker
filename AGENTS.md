@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file guides coding agents working in the standalone Forge Worker repository.
+This file guides coding agents working in the standalone Kumix Worker repository.
 
 ## Scope
 
-Forge Worker is the self-hosted TubeForge live-stream runner. It is an independent package/repository for running a local dashboard, local API, SQLite state, source cache, scheduled jobs, and FFmpeg/FFprobe stream execution.
+Kumix Worker is the self-hosted Kumix live-stream runner. It is an independent package/repository for running a local dashboard, local API, SQLite state, source cache, scheduled jobs, and FFmpeg/FFprobe stream execution.
 
 Primary folders:
 
@@ -17,7 +17,7 @@ Primary folders:
 
 ## Architecture
 
-- `src/cli.ts` owns the `forge-worker` CLI: init, serve, status, doctor, token, reset, update, and runtime bootstrap.
+- `src/cli.ts` owns the `kumix-worker` CLI: init, serve, status, doctor, token, reset, update, and runtime bootstrap.
 - `src/http/app.ts` wires Hono routes, CORS, OpenAPI, docs, auth middleware, core-facing routes, dashboard routes, and static serving.
 - `src/http/middleware.ts` owns Bearer token auth, signed URL auth, auth failure rate limiting, web API rate limiting, and response envelopes.
 - `src/http/routes/` owns route groups:
@@ -27,7 +27,7 @@ Primary folders:
   - `targets.ts` - target CRUD, active state, encrypted stream keys, bulk delete.
   - `streams.ts` - stream CRUD, start, stop, stopped time patching, bulk delete.
   - `events.ts` - event listing, SSE, exports, signed URLs.
-  - `web.ts` - TubeForge Core-facing `/api/v1/*` health, stats, capabilities, link, and token rotation.
+  - `web.ts` - core-facing `/api/v1/*` health, stats, capabilities, link, and token rotation.
 - `src/db/` owns SQLite schema and query helpers.
 - `src/runtime/` owns config, FFmpeg binary resolution, metrics, scheduler, recovery/tombstones, and update helpers.
 - `src/services/` owns FFprobe probing, source download/cache, and FFmpeg stream runner behavior.
@@ -37,15 +37,15 @@ Primary folders:
 
 ## Feature Summary
 
-Forge Worker currently supports:
+Kumix Worker currently supports:
 
 - Local dashboard with Overview, Monitoring, Log, Sources, Targets, Streams, Create Stream, and Settings pages.
 - Token-authenticated API with rate limiting.
 - Core-facing `/api/v1/*` API for health, stats, capabilities, link metadata, and token rotation.
-- Runtime config in `~/.forge-worker/config.json` by default.
-- Local SQLite DB in `~/.forge-worker/db.sqlite`.
-- Source cache under `~/.forge-worker/cache`.
-- Tombstone recovery under `~/.forge-worker/tombstones`.
+- Runtime config in `~/.kumix-worker/config.json` by default.
+- Local SQLite DB in `~/.kumix-worker/db/db.sqlite`.
+- Source cache under `~/.kumix-worker/cache`.
+- Tombstone recovery under `~/.kumix-worker/tombstones`.
 - Direct URL and Google Drive source registration.
 - Source download with SSRF protection (DNS checks + per-redirect-hop validation + connection-time DNS pinning via an `undici` Agent that only connects to vetted public addresses), safe filename handling, max size enforcement, configured disk-usage-limit enforcement, streaming SHA-256, and FFprobe metadata extraction with a probe timeout.
 - H.264/AAC source validation with max video bitrate `35000 kbps` / `35 Mbps`, falling back to `format.bit_rate` when the per-stream bitrate is absent.
@@ -70,8 +70,8 @@ Forge Worker currently supports:
 - Never expose raw target stream keys to the renderer or public/core-facing API.
 - Never return the raw worker token from settings, bootstrap, or `/api/v1/*` responses.
 - Keep all dashboard/private API routes token-authenticated unless explicitly public.
-- Keep `/api/v1/*` stable for TubeForge Core.
-- Preserve CORS defaults for TubeForge local development (`https://tubeforge.local`, `https://api.tubeforge.local`) and production (`https://tubeforge.space`, `https://app.tubeforge.space`, `https://api.tubeforge.space`) unless the task explicitly changes deployment origins.
+- Keep `/api/v1/*` stable for external integrations.
+- CORS origins are not allowed by default; allowed origins must be configured via `KUMIX_WORKER_CORS_ORIGINS`.
 - Keep stream key encryption compatible with token rotation.
 - Keep source URL handling safe; sanitize cache filenames and clean partial downloads on failure.
 - Keep static serving path traversal protections.
@@ -118,25 +118,26 @@ If the change is very small and the user needs speed, run the smallest relevant 
 Default data directory:
 
 ```text
-~/.forge-worker
+~/.kumix-worker
 ```
 
 Supported environment variables:
 
 ```text
-FORGE_WORKER_DATA_DIR
-FORGE_WORKER_PORT
-FORGE_WORKER_TIMEZONE
-FORGE_WORKER_IPV4_FIRST
-FORGE_WORKER_TRUST_PROXY
-FORGE_DISK_LIMIT_PERCENT
-FORGE_MAX_DOWNLOAD_BYTES
-FORGE_WORKER_CORS_ORIGINS
-FORGE_FFMPEG_PATH
-FORGE_FFPROBE_PATH
+KUMIX_WORKER_DATA_DIR
+KUMIX_WORKER_PORT
+KUMIX_WORKER_TIMEZONE
+KUMIX_WORKER_IPV4_FIRST
+KUMIX_WORKER_TRUST_PROXY
+KUMIX_WORKER_DISK_LIMIT_PERCENT
+KUMIX_WORKER_MAX_DOWNLOAD_BYTES
+KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS
+KUMIX_WORKER_CORS_ORIGINS
+KUMIX_WORKER_FFMPEG_PATH
+KUMIX_WORKER_FFPROBE_PATH
 ```
 
-`FORGE_FFMPEG_PATH` and `FORGE_FFPROBE_PATH` override the bundled `ffmpeg-static`/`ffprobe-static` binaries with system binaries. Use them when the static build segfaults resolving DNS for RTMP output (statically linked glibc cannot load NSS modules on some hosts). When unset, the bundled static binaries are used.
+`KUMIX_WORKER_FFMPEG_PATH` and `KUMIX_WORKER_FFPROBE_PATH` override the bundled `ffmpeg-static`/`ffprobe-static` binaries with system binaries. Use them when the static build segfaults resolving DNS for RTMP output (statically linked glibc cannot load NSS modules on some hosts). When unset, the bundled static binaries are used.
 
 Settings fields:
 
@@ -180,13 +181,13 @@ Signed URL routes are generated by `POST /api/events/signed-url` (valid only for
 ## Frontend Rules
 
 - Use React + Vite + React Router route modules in `frontend/src/routes`.
-- Use Pelatform Starter UI components for tables, dialogs, buttons, badges, popovers, selects, and date/time picker primitives.
+- Use Kumix UI components for tables, dialogs, buttons, badges, popovers, selects, and date/time picker primitives.
 - Tables use `DataTable` where possible.
 - Keep row actions consistent with stream status rules.
 - Keep destructive actions behind confirmation dialogs.
 - Use `useDateTimeFormatter` for displayed dates so locale and worker timezone are respected.
-- Keep browser tab title format: `{Page} - Forge Worker`.
-- Keep table select controls using Starter UI `Checkbox`, not native checkbox inputs.
+- Keep browser tab title format: `{Page} - Kumix Worker`.
+- Keep table select controls using Kumix UI `Checkbox`, not native checkbox inputs.
 - Keep all user-facing strings in `frontend/messages/en.json` and `frontend/messages/id.json`.
 - The message test checks parity and orphan UI keys; update tests only when a key is intentionally dynamic.
 
@@ -205,10 +206,10 @@ Signed URL routes are generated by `POST /api/events/signed-url` (valid only for
 
 ## Testing Notes
 
-The suite currently has 95 tests across 23 test files. Important test areas:
+The suite currently has 99 tests across 23 test files. Important test areas:
 
 - `tests/http/api-crud.test.ts` - dashboard/private API behavior, including stream-key non-exposure and running-stream delete protection.
-- `tests/http/web-contract.test.ts` - TubeForge Core-facing API contract.
+- `tests/http/web-contract.test.ts` - core-facing API contract.
 - `tests/http/static.test.ts` - static file safety.
 - `tests/db/db.test.ts` - SQLite integration.
 - `tests/runtime/*` - config, scheduler, recovery, metrics, FFmpeg resolution.

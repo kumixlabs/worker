@@ -21,7 +21,7 @@ import { registerWebRoutes } from "./routes/v1";
 import { findPublicDir, serveStatic } from "./static";
 
 /**
- * Builds the Forge Worker Hono application with API routes, OpenAPI docs, and dashboard serving.
+ * Builds the Kumix Worker Hono application with API routes, OpenAPI docs, and dashboard serving.
  *
  * @returns The configured Hono app instance.
  */
@@ -38,14 +38,7 @@ export function createApiApp() {
         const allowed = allowedCorsOrigins();
         if (allowed.length === 0) {
           if (process.env.NODE_ENV !== "production") return origin || "*";
-          const defaults = [
-            "https://tubeforge.local",
-            "https://api.tubeforge.local",
-            "https://tubeforge.space",
-            "https://app.tubeforge.space",
-            "https://api.tubeforge.space",
-          ];
-          return origin && defaults.includes(origin) ? origin : "";
+          return origin && allowed.includes(origin) ? origin : "";
         }
         return origin && allowed.includes(origin) ? origin : "";
       },
@@ -63,15 +56,15 @@ export function createApiApp() {
     openAPIRouteHandler(app, {
       documentation: {
         info: {
-          title: "Forge Worker API",
+          title: "Kumix Worker API",
           version: "0.1.0",
           description:
-            "Local API for Forge Worker sources, targets, streams, logs, settings, and runtime diagnostics.",
+            "Local API for Kumix Worker sources, targets, streams, logs, settings, and runtime diagnostics.",
         },
         servers: [
           {
-            url: `http://localhost:${process.env.FORGE_WORKER_PORT ?? 8080}`,
-            description: "Local Forge Worker server",
+            url: `http://localhost:${process.env.KUMIX_WORKER_PORT ?? 8080}`,
+            description: "Local Kumix Worker server",
           },
         ],
         components: {
@@ -79,7 +72,7 @@ export function createApiApp() {
             bearerAuth: {
               type: "http",
               scheme: "bearer",
-              description: "Forge Worker token. Paste it once to authorize all /api/* requests.",
+              description: "Kumix Worker token. Paste it once to authorize all /api/* requests.",
             },
           },
         },

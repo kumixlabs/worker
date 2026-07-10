@@ -62,7 +62,7 @@ function formatValue(value: string, emptyLabel: string): string {
 }
 
 /**
- * Wall-clock date and time picker built from Pelatform Starter UI primitives.
+ * Wall-clock date and time picker built from Kumix UI primitives.
  * Emits a `YYYY-MM-DDTHH:MM` string that the worker interprets in its timezone.
  *
  * @param props - Value, change handler, and optional bounds/placeholder.

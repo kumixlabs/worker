@@ -1,0 +1,17 @@
+services:
+  kumix-worker:
+    image: kumix/worker:latest
+    container_name: kumix-worker
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - kumix-worker-data:/app/data
+    environment:
+      KUMIX_WORKER_DATA_DIR: /app/data
+      KUMIX_WORKER_PORT: "8080"
+      NODE_ENV: production
+
+volumes:
+  kumix-worker-data:
+    name: kumix-worker-data

@@ -95,7 +95,7 @@ async function workerRequest<T>(
 }
 
 /**
- * Builds a dashboard handoff URL that lets TubeForge Web open a local worker session.
+ * Builds a dashboard handoff URL that lets external integrations open a local worker session.
  *
  * @param baseUrl - Worker origin, for example http://127.0.0.1:8080.
  * @param token - Worker token used by the handoff endpoint.
@@ -106,7 +106,7 @@ export function workerDashboardUrl(baseUrl: string, token: string): string {
 }
 
 /**
- * Fetches cached worker monitoring stats for TubeForge Web.
+ * Fetches cached worker monitoring stats for external integrations.
  *
  * @param options - Worker API client options.
  * @returns Worker stats validated by the public schema.
@@ -116,7 +116,7 @@ export function fetchWorkerStats(options: WorkerClientOptions): Promise<WebWorke
 }
 
 /**
- * Fetches lightweight worker health for TubeForge Web.
+ * Fetches lightweight worker health for external integrations.
  *
  * @param options - Worker API client options.
  * @returns Worker health validated by the public schema.

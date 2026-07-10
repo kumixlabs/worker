@@ -98,7 +98,7 @@ export function registerEventRoutes(app: Hono) {
       new Response(formatEventsText(c.req.param("id")), {
         headers: {
           "content-type": "text/plain; charset=utf-8",
-          "content-disposition": `attachment; filename="forge-worker-stream-${safeFilenamePart(c.req.param("id"))}-events-${Date.now()}.txt"`,
+          "content-disposition": `attachment; filename="kumix-worker-stream-${safeFilenamePart(c.req.param("id"))}-events-${Date.now()}.txt"`,
         },
       }),
   );
@@ -133,7 +133,7 @@ export function registerEventRoutes(app: Hono) {
       new Response(formatEventsText(), {
         headers: {
           "content-type": "text/plain; charset=utf-8",
-          "content-disposition": `attachment; filename="forge-worker-events-${Date.now()}.txt"`,
+          "content-disposition": `attachment; filename="kumix-worker-events-${Date.now()}.txt"`,
         },
       }),
   );

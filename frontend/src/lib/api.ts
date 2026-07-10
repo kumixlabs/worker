@@ -18,8 +18,8 @@ export const queryClient = new QueryClient({
   },
 });
 
-const tokenStorageKey = "forge-worker-token";
-const tokenExpiresStorageKey = "forge-worker-token-expires-at";
+const tokenStorageKey = "kumix-worker-token";
+const tokenExpiresStorageKey = "kumix-worker-token-expires-at";
 const tokenTtlMs = 7 * 24 * 60 * 60 * 1000;
 
 export function getApiToken() {
@@ -63,7 +63,7 @@ async function consumeHandoffCode(code: string) {
   } catch {
     // Ignore; the auth gate will prompt for a valid link.
   } finally {
-    window.dispatchEvent(new CustomEvent("forge-worker-auth-ready"));
+    window.dispatchEvent(new CustomEvent("kumix-worker-auth-ready"));
   }
 }
 
@@ -95,7 +95,7 @@ async function request<T>(path: string, init?: RequestInit) {
   if (response.status === 401) {
     setApiToken("");
     queryClient.clear();
-    window.dispatchEvent(new CustomEvent("forge-worker-auth-invalid"));
+    window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
   }
   if (response.status === 429) {
     throw new Error("Too many requests. Please slow down and try again.");

@@ -9,9 +9,9 @@ import path from "node:path";
 
 import type { WorkerSettings } from "../types/worker";
 
-const DEFAULT_DIR = path.join(homedir(), ".forge-worker");
+const DEFAULT_DIR = path.join(homedir(), ".kumix-worker");
 const CONFIG_FILE = "config.json";
-const markerFile = ".forge-worker-data";
+const markerFile = ".kumix-worker-data";
 
 /**
  * Validates a port number from config or environment.
@@ -22,7 +22,7 @@ const markerFile = ".forge-worker-data";
 function validPort(value: unknown): number {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid Forge Worker port: ${String(value)}. Expected integer 1-65535.`);
+    throw new Error(`Invalid Kumix Worker port: ${String(value)}. Expected integer 1-65535.`);
   }
   return port;
 }
@@ -36,7 +36,9 @@ function validPort(value: unknown): number {
 function validDiskLimit(value: unknown): number {
   const percent = Number(value);
   if (!Number.isInteger(percent) || percent < 50 || percent > 99) {
-    throw new Error(`Invalid disk usage limit: ${String(value)}. Expected integer 50-99.`);
+    throw new Error(
+      `Invalid Kumix Worker disk usage limit: ${String(value)}. Expected integer 50-99.`,
+    );
   }
   return percent;
 }
@@ -49,19 +51,19 @@ function validDiskLimit(value: unknown): number {
  */
 function validTimezone(value: unknown): string {
   if (typeof value !== "string" || value.length < 1 || value.length > 64) {
-    throw new Error("Invalid Forge Worker timezone. Expected 1-64 character IANA timezone.");
+    throw new Error("Invalid Kumix Worker timezone. Expected 1-64 character IANA timezone.");
   }
   try {
     Intl.DateTimeFormat("en-US", { timeZone: value });
   } catch {
-    throw new Error(`Invalid Forge Worker timezone: ${value}. Expected valid IANA timezone.`);
+    throw new Error(`Invalid Kumix Worker timezone: ${value}. Expected valid IANA timezone.`);
   }
   return value;
 }
 
 export function validToken(value: unknown): string {
   if (typeof value !== "string" || value.length < 16 || value.length > 256) {
-    throw new Error("Invalid Forge Worker token. Expected 16-256 characters.");
+    throw new Error("Invalid Kumix Worker token. Expected 16-256 characters.");
   }
   return value;
 }
@@ -81,18 +83,18 @@ function normalizeSettings(
 ): WorkerSettings {
   if (!parsed.token && !allowTokenGeneration) {
     throw new Error(
-      "Forge Worker config is missing its token. Refusing to generate a new one because " +
+      "Kumix Worker config is missing its token. Refusing to generate a new one because " +
         "it would make existing encrypted stream keys undecryptable. Restore the token or run " +
-        "'forge-worker reset --all --yes' to recreate the worker from scratch.",
+        "'kumix-worker reset --all --yes' to recreate the worker from scratch.",
     );
   }
   return {
     token: validToken(parsed.token || randomBytes(32).toString("base64url")),
-    port: validPort(parsed.port ?? process.env.FORGE_WORKER_PORT ?? 8080),
+    port: validPort(parsed.port ?? process.env.KUMIX_WORKER_PORT ?? 8080),
     diskUsageLimitPercent: validDiskLimit(
-      parsed.diskUsageLimitPercent ?? process.env.FORGE_DISK_LIMIT_PERCENT ?? 90,
+      parsed.diskUsageLimitPercent ?? process.env.KUMIX_WORKER_DISK_LIMIT_PERCENT ?? 90,
     ),
-    timezone: validTimezone(parsed.timezone ?? process.env.FORGE_WORKER_TIMEZONE ?? "Asia/Jakarta"),
+    timezone: validTimezone(parsed.timezone ?? process.env.KUMIX_WORKER_TIMEZONE ?? "Asia/Jakarta"),
     dataDir: ensureDataDir(),
   };
 }
@@ -125,14 +127,12 @@ export function resetWorkerData(includeConfig: boolean): void {
   if (!existsSync(dir)) return;
   assertSafeDataDir(dir);
 
-  const dbFile = getDbPath();
+  const dbDir = path.join(dir, "db");
   const cacheDir = getCacheDir();
   const tombstonesDir = path.join(dir, "tombstones");
   const configFile = getConfigPath();
 
-  if (existsSync(dbFile)) rmSync(dbFile, { force: true });
-  if (existsSync(`${dbFile}-wal`)) rmSync(`${dbFile}-wal`, { force: true });
-  if (existsSync(`${dbFile}-shm`)) rmSync(`${dbFile}-shm`, { force: true });
+  if (existsSync(dbDir)) rmSync(dbDir, { recursive: true, force: true });
   if (existsSync(cacheDir)) rmSync(cacheDir, { recursive: true, force: true });
   if (existsSync(tombstonesDir)) rmSync(tombstonesDir, { recursive: true, force: true });
 
@@ -146,12 +146,12 @@ export function resetWorkerData(includeConfig: boolean): void {
 
 /**
  * Resolves the root data directory for the worker.
- * Honors the FORGE_WORKER_DATA_DIR env override, otherwise defaults to ~/.forge-worker.
+ * Honors the KUMIX_WORKER_DATA_DIR env override, otherwise defaults to ~/.kumix-worker.
  *
  * @returns The absolute path to the data directory.
  */
 export function getDataDir(): string {
-  return process.env.FORGE_WORKER_DATA_DIR || DEFAULT_DIR;
+  return process.env.KUMIX_WORKER_DATA_DIR || DEFAULT_DIR;
 }
 
 /**
@@ -163,10 +163,11 @@ export function getDataDir(): string {
 export function ensureDataDir(): string {
   const dir = getDataDir();
   mkdirSync(dir, { recursive: true });
+  mkdirSync(path.join(dir, "db"), { recursive: true });
   mkdirSync(path.join(dir, "cache"), { recursive: true });
   mkdirSync(path.join(dir, "tombstones"), { recursive: true });
   if (!existsSync(path.join(dir, markerFile))) {
-    writeFileSync(path.join(dir, markerFile), "Forge Worker data directory\n", { mode: 0o600 });
+    writeFileSync(path.join(dir, markerFile), "Kumix Worker data directory\n", { mode: 0o600 });
   }
   return dir;
 }
@@ -186,7 +187,7 @@ export function getConfigPath(): string {
  * @returns The absolute path to db.sqlite.
  */
 export function getDbPath(): string {
-  return path.join(ensureDataDir(), "db.sqlite");
+  return path.join(ensureDataDir(), "db", "db.sqlite");
 }
 
 /**
@@ -221,7 +222,7 @@ export function readSettings(): WorkerSettings {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown config error";
     throw new Error(
-      `Failed to read Forge Worker config at ${file}: ${message}. Run 'forge-worker init' to repair or 'forge-worker reset --all --yes' to recreate.`,
+      `Failed to read Kumix Worker config at ${file}: ${message}. Run 'kumix-worker init' to repair or 'kumix-worker reset --all --yes' to recreate.`,
     );
   }
 }
@@ -241,7 +242,7 @@ export function writeSettings(settings: WorkerSettings): void {
 }
 
 export function allowedCorsOrigins(): string[] {
-  return (process.env.FORGE_WORKER_CORS_ORIGINS ?? "")
+  return (process.env.KUMIX_WORKER_CORS_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);

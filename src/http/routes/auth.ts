@@ -39,7 +39,7 @@ export function registerAuthRoutes(app: Hono) {
     doc("Auth", "Open dashboard", "Validates a token and opens the dashboard."),
     (c) => {
       const token = new URL(c.req.url).searchParams.get("token") ?? "";
-      if (!verifyToken(token)) return fail("UNAUTHORIZED", "Invalid Forge Worker token", 401);
+      if (!verifyToken(token)) return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
       const now = Date.now();
       pruneHandoffCodes(now);
       const code = randomBytes(32).toString("base64url");
@@ -78,7 +78,7 @@ export function registerAuthRoutes(app: Hono) {
     async (c) => {
       const body = (await c.req.json().catch(() => null)) as { token?: unknown } | null;
       const token = typeof body?.token === "string" ? body.token : "";
-      if (!verifyToken(token)) return fail("UNAUTHORIZED", "Invalid Forge Worker token", 401);
+      if (!verifyToken(token)) return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
       return c.json(ok({ expiresAt: new Date(Date.now() + sessionTtlMs).toISOString() }));
     },
   );

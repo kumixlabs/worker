@@ -242,8 +242,8 @@ export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamR
     const orphanAlive = !pidReusable && isPidAlive(pid);
     if (orphanAlive) terminateOrphanPid(pid);
     const message = orphanAlive
-      ? "Forge Worker recovered and terminated an orphaned FFmpeg process"
-      : "Forge Worker restarted before stream stopped cleanly";
+      ? "Kumix Worker recovered and terminated an orphaned FFmpeg process"
+      : "Kumix Worker restarted before stream stopped cleanly";
     const stream = setStreamStatus(streamId, "failed", {
       lastError: message,
       pid: null,

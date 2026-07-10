@@ -1,11 +1,13 @@
 {
-  "name": "@tubeforge/worker",
-  "version": "1.1.2",
-  "description": "Forge Worker self-hosted live runner for FFmpeg jobs.",
+  "name": "@kumix/worker",
+  "version": "0.0.1",
+  "description": "Kumix Worker self-hosted live runner for FFmpeg jobs.",
+  "author": "Kumix Labs <hai@kumix.io>",
+  "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "./dist/index.js",
   "bin": {
-    "forge-worker": "./dist/cli.js"
+    "kumix-worker": "./dist/cli.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
@@ -33,22 +35,28 @@
     "test:coverage": "vitest --coverage",
     "bump": "bumpp"
   },
+  "homepage": "https://github.com/kumixlabs/worker",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kumixlabs/worker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kumixlabs/worker/issues"
+  },
   "files": [
     "dist",
     "README.md",
     "scripts/postinstall.js"
   ],
   "keywords": [
-    "tubeforge",
-    "forge-live",
+    "kumix",
+    "worker",
+    "live",
     "ffmpeg",
     "rtmp",
     "youtube",
-    "live-streaming",
-    "worker"
+    "live-streaming"
   ],
-  "author": "Lukman Aviccena <lukman@pelatform.com>",
-  "license": "MIT",
   "dependencies": {
     "@hono/node-server": "^2.0.8",
     "@hono/standard-validator": "^0.2.3",

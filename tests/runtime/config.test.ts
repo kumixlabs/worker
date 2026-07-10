@@ -7,16 +7,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "forge-worker-"));
-  process.env.FORGE_WORKER_DATA_DIR = dataDir;
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
 });
 
 afterEach(() => {
-  delete process.env.FORGE_WORKER_DATA_DIR;
+  delete process.env.KUMIX_WORKER_DATA_DIR;
   rmSync(dataDir, { force: true, recursive: true });
 });
 
-describe("Forge Worker config", () => {
+describe("Kumix Worker config", () => {
   it("creates default settings in the configured data directory", async () => {
     const { readSettings } = await import("../../src/runtime/config");
 

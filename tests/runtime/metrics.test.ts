@@ -10,8 +10,8 @@ import { runtimeHealthDetails, runtimeMetrics } from "../../src/runtime/metrics"
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "forge-worker-"));
-  process.env.FORGE_WORKER_DATA_DIR = dataDir;
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
   writeSettings({
     dataDir,
     diskUsageLimitPercent: 90,
@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.FORGE_WORKER_DATA_DIR;
+  delete process.env.KUMIX_WORKER_DATA_DIR;
   rmSync(dataDir, { force: true, recursive: true });
 });
 

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { createCliProgram, dashboardUrl, maskToken } from "../../src/cli";
 
 describe("CLI", () => {
-  it("uses forge-worker as command name", () => {
-    expect(createCliProgram().name()).toBe("forge-worker");
+  it("uses kumix-worker as command name", () => {
+    expect(createCliProgram().name()).toBe("kumix-worker");
   });
 
   it("masks tokens for status output", () => {

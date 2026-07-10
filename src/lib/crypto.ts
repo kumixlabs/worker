@@ -1,5 +1,5 @@
 /**
- * Token-derived encryption helpers for secrets stored by Forge Worker.
+ * Token-derived encryption helpers for secrets stored by Kumix Worker.
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";

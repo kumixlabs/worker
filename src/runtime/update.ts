@@ -11,8 +11,8 @@ import { listTombstones, writeAutoStartMarker } from "./recovery";
 
 const execFileAsync = promisify(execFile);
 
-const NPM_PACKAGE = "@tubeforge/worker";
-const SERVICE_NAME = "forge-worker";
+const NPM_PACKAGE = "@kumix/worker";
+const SERVICE_NAME = "kumix-worker";
 
 /**
  * How aggressively the updater is allowed to restart the systemd service.
@@ -137,7 +137,7 @@ export function activeStreamIds(): string[] {
 }
 
 /**
- * Checks whether the forge-worker systemd service is currently active.
+ * Checks whether the kumix-worker systemd service is currently active.
  * Always false on non-Linux platforms.
  *
  * @returns True when the service reports "active".
@@ -153,7 +153,7 @@ async function systemdServiceActive(): Promise<boolean> {
 }
 
 /**
- * Restarts the forge-worker systemd service.
+ * Restarts the kumix-worker systemd service.
  */
 async function restartSystemdService(): Promise<void> {
   await run("systemctl", ["restart", SERVICE_NAME]);

@@ -57,7 +57,7 @@ export function AppShell({
   const location = useLocation();
 
   useEffect(() => {
-    document.title = `${title} - Forge Worker`;
+    document.title = `${title} - Kumix Worker`;
   }, [title]);
 
   const logout = () => {

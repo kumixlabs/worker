@@ -8,13 +8,14 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  publish:
+  publish-npm:
     name: Build and publish to NPM
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +41,7 @@ jobs:
             fi
           fi
           echo "version_no_v=$PKG_VER" >> "$GITHUB_ENV"
-          echo "Resolved @tubeforge/worker@$PKG_VER"
+          echo "Resolved @kumix/worker@$PKG_VER"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -82,6 +83,56 @@ jobs:
 
       - name: Release summary
         run: |
-          echo "Published @tubeforge/worker@${{ env.version_no_v }} to npm"
-          echo "Install: npm install -g @tubeforge/worker@${{ env.version_no_v }}"
-          echo "CLI: forge-worker"
+          echo "Published @kumix/worker@${{ env.version_no_v }} to npm"
+          echo "Install: npm install -g @kumix/worker@${{ env.version_no_v }}"
+          echo "CLI: kumix-worker"
+
+  publish-docker:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/kumixlabs/worker
+            kumix/worker
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/kumixlabs/worker:buildcache
+          cache-to: type=registry,ref=ghcr.io/kumixlabs/worker:buildcache,mode=max
+          platforms: linux/amd64,linux/arm64
+          provenance: false
+          sbom: false

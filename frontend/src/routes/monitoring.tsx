@@ -6,37 +6,13 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@kumix/
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/api";
 import { useTimeFormatter } from "@/lib/date";
-
-function formatBytes(bytes = 0) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
-}
-
-function formatMbps(value = 0) {
-  return `${value.toFixed(value >= 10 ? 1 : 2)} Mbps`;
-}
-
-function formatUptime(seconds = 0) {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
-function formatDuration(milliseconds = 0) {
-  if (!milliseconds) return "-";
-  const seconds = milliseconds / 1000;
-  return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${Math.round(seconds)}s`;
-}
-
-function percent(value = 0, total = 0) {
-  if (!total) return 0;
-  return Math.min(100, Math.max(0, Math.round((value / total) * 100)));
-}
+import {
+  formatBytes,
+  formatDurationMs as formatDuration,
+  formatMbps,
+  formatUptime,
+  percent,
+} from "@/lib/format";
 
 function ProgressBar({ value }: { value: number }) {
   return (

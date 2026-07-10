@@ -1,5 +1,5 @@
 /**
- * SQLite connection wrapper and schema bootstrap for Forge Worker.
+ * SQLite connection wrapper and schema bootstrap for Kumix Worker.
  */
 
 import type { Database as SqliteDatabaseInstance } from "better-sqlite3";

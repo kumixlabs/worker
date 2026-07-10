@@ -12,8 +12,15 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const onInvalid = () => {
       setToken("");
     };
-    window.addEventListener("forge-worker-auth-invalid", onInvalid);
-    return () => window.removeEventListener("forge-worker-auth-invalid", onInvalid);
+    const onReady = () => {
+      setToken(getApiToken());
+    };
+    window.addEventListener("kumix-worker-auth-invalid", onInvalid);
+    window.addEventListener("kumix-worker-auth-ready", onReady);
+    return () => {
+      window.removeEventListener("kumix-worker-auth-invalid", onInvalid);
+      window.removeEventListener("kumix-worker-auth-ready", onReady);
+    };
   }, []);
 
   if (token) return children;

@@ -19,7 +19,7 @@ export default defineConfig({
           if (id.includes("node_modules/react") || id.includes("node_modules/react-dom"))
             return "react";
           if (id.includes("node_modules/@tanstack")) return "router";
-          if (id.includes("node_modules/@pelatform") || id.includes("node_modules/lucide-react"))
+          if (id.includes("node_modules/@kumix") || id.includes("node_modules/lucide-react"))
             return "ui";
         },
       },
@@ -39,8 +39,8 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
-  define: {
-    // Polyfill for process.env.NODE_ENV required by @pelatform/utils
-    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "development"),
-  },
+  // define: {
+  //   // Polyfill for process.env.NODE_ENV required by @kumix/utils
+  //   "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "development"),
+  // },
 });
