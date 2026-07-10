@@ -1,0 +1,86 @@
+{
+  "name": "@tubeforge/worker",
+  "version": "1.1.2",
+  "description": "Forge Worker self-hosted live runner for FFmpeg jobs.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "forge-worker": "./dist/cli.js"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "clean:all": "bun run frontend:clean && rm -rf bun.lock dist node_modules",
+    "postinstall": "node scripts/postinstall.js",
+    "copy:public": "rm -rf dist/public && cp -R public dist/",
+    "verify:public": "test -f dist/public/index.html && echo '✓ Public directory copied successfully' || (echo '✗ ERROR: Public directory not copied!' && exit 1)",
+    "frontend:clean": "cd frontend && bun run clean",
+    "frontend:dev": "cd frontend && bun run dev",
+    "frontend:build": "cd frontend && bun run build",
+    "frontend:preview": "cd frontend && bun run preview",
+    "frontend:types:check": "cd frontend && bun run types:check",
+    "dev:api": "node --watch --import tsx src/cli.ts serve --host 0.0.0.0 --port 8080 --dev",
+    "dev": "concurrently -k -n \"worker,vite\" -c \"cyan,green\" \"bun run dev:api\" \"bun run frontend:dev\"",
+    "build": "bun run clean && tsc --noEmit false && bun run fix:esm && bun run frontend:build && bun run copy:public && bun run verify:public",
+    "fix:esm": "node scripts/fix-esm-extensions.mjs",
+    "start": "node dist/cli.js",
+    "lint": "biome check",
+    "lint:fix": "biome check --write --unsafe",
+    "format": "biome format --write",
+    "format:check": "biome check --write",
+    "types:check": "tsc --noEmit && bun run frontend:types:check",
+    "test": "vitest --run",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "bump": "bumpp"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "scripts/postinstall.js"
+  ],
+  "keywords": [
+    "tubeforge",
+    "forge-live",
+    "ffmpeg",
+    "rtmp",
+    "youtube",
+    "live-streaming",
+    "worker"
+  ],
+  "author": "Lukman Aviccena <lukman@pelatform.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@hono/node-server": "^2.0.8",
+    "@hono/standard-validator": "^0.2.3",
+    "@scalar/hono-api-reference": "^0.11.9",
+    "better-sqlite3": "^12.11.1",
+    "commander": "^15.0.0",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "hono": "^4.12.29",
+    "hono-openapi": "^1.3.1",
+    "nanoid": "^5.1.16",
+    "undici": "8.7.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.3",
+    "@kumix/biome-config": "^0.1.0",
+    "@kumix/tsconfig": "^0.1.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.1.1",
+    "bumpp": "^11.1.0",
+    "concurrently": "^10.0.3",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22",
+    "bun": ">=1.3.0"
+  },
+  "packageManager": "bun@1.3.14"
+}
