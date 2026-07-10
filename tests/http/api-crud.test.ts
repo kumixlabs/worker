@@ -208,7 +208,7 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     expect(signedResponse.status).toBe(404);
   });
 
-  it("supports auth handoff, web stats, and token rotation", async () => {
+  it("supports auth handoff, public stats, and token rotation", async () => {
     const authResponse = await app.request("/auth?token=test-token-123456");
     const authLocation = authResponse.headers.get("location") ?? "";
     const handoffCode = new URL(authLocation, "http://worker.local").searchParams.get("code") ?? "";

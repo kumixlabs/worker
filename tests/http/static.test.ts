@@ -26,7 +26,7 @@ describe("static UI serving", () => {
   });
 
   it("rejects path traversal", async () => {
-    const publicDir = mkdtempSync(path.join(tmpdir(), "forge-public-"));
+    const publicDir = mkdtempSync(path.join(tmpdir(), "kumix-public-"));
     try {
       writeFileSync(path.join(publicDir, "index.html"), "<html></html>");
       writeFileSync(path.join(path.dirname(publicDir), "secret.txt"), "outside-secret");
@@ -38,6 +38,21 @@ describe("static UI serving", () => {
         expect(response.status, requestPath).toBe(404);
         expect(await response.text()).not.toContain("outside-secret");
       }
+    } finally {
+      rmSync(publicDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects malformed encoded paths", async () => {
+    const publicDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-public-"));
+    try {
+      writeFileSync(path.join(publicDir, "index.html"), "<html></html>");
+      const app = new Hono();
+      app.get("/*", (c) => serveStatic(c, publicDir));
+
+      const response = await app.request("/%E0%A4%A");
+
+      expect(response.status).toBe(404);
     } finally {
       rmSync(publicDir, { force: true, recursive: true });
     }

@@ -127,6 +127,7 @@ function storageMetrics(cacheDir: string) {
           value: { cacheBytes, disk: diskUsage(cacheDir) },
         };
       })
+      .catch(() => undefined)
       .finally(() => {
         storageRefreshInFlight = false;
       });
@@ -134,6 +135,13 @@ function storageMetrics(cacheDir: string) {
   return cachedStorage.value;
 }
 
+/**
+ * Estimates process CPU usage as a smoothed percentage across available cores.
+ *
+ * @param usage - Current process resource usage snapshot.
+ * @param coreCount - Number of CPU cores available to the process.
+ * @returns Smoothed CPU usage percentage from 0 to 100.
+ */
 function cpuUsagePercent(usage: NodeJS.ResourceUsage, coreCount: number): number {
   const now = Date.now();
   const currentMicros = usage.userCPUTime + usage.systemCPUTime;

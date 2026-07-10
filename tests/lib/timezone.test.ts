@@ -24,6 +24,12 @@ describe("timezone helpers", () => {
     expect(parseUserDateTime("", "Asia/Jakarta")).toBeNull();
   });
 
+  it("returns null for invalid or normalized calendar values", () => {
+    expect(parseUserDateTime("2026-02-31T08:00", "Asia/Jakarta")).toBeNull();
+    expect(parseUserDateTime("2026-01-01T24:00", "Asia/Jakarta")).toBeNull();
+    expect(parseUserDateTime("January 1, 2026 08:00", "Asia/Jakarta")).toBeNull();
+  });
+
   it("reads weekday in the target timezone", () => {
     expect(zonedWeekday(new Date("2026-01-01T20:00:00.000Z"), "Asia/Jakarta")).toBe(5);
   });

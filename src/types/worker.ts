@@ -30,7 +30,7 @@ export interface WorkerStats {
 }
 
 /**
- * Health details of the worker.
+ * Detailed local health status used by dashboard and CLI diagnostics.
  */
 export type WorkerHealthDetails = {
   status: string;
@@ -39,7 +39,10 @@ export type WorkerHealthDetails = {
   ffprobe: { available: boolean; path: string; version: string };
 };
 
-export type WebWorkerCapabilities = {
+/**
+ * Stable capability document returned by `/api/v1/capabilities` for core integrations.
+ */
+export type PublicWorkerCapabilities = {
   apiVersion: "v1";
   agentVersion: string;
   features: {
@@ -55,7 +58,7 @@ export type WebWorkerCapabilities = {
   limits: {
     signedUrlTtlMs: number;
     bulkDeleteMaxIds: number;
-    webStatsCacheTtlMs: number;
+    publicStatsCacheTtlMs: number;
   };
   settings: {
     timezone: string;
@@ -63,15 +66,21 @@ export type WebWorkerCapabilities = {
   };
 };
 
-export type WebWorkerLinkInfo = {
+/**
+ * Link metadata returned by `/api/v1/link` for onboarding and external integrations.
+ */
+export type PublicWorkerLinkInfo = {
   apiVersion: "v1";
   agentVersion: string;
   dashboardPath: string;
   tokenLength: number;
-  capabilities: WebWorkerCapabilities;
+  capabilities: PublicWorkerCapabilities;
 };
 
-export type WebWorkerStats = {
+/**
+ * Read-only monitoring payload returned by `/api/v1/stats`.
+ */
+export type PublicWorkerStats = {
   system: {
     agentVersion: string;
     cpu: WorkerMetrics["cpu"];
@@ -115,7 +124,7 @@ export type WebWorkerStats = {
 };
 
 /**
- * Metrics of the worker.
+ * Runtime host, storage, network, scheduler, and process metrics.
  */
 export type WorkerMetrics = {
   cpu: {

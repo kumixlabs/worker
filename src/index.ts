@@ -12,6 +12,12 @@ export {
   workerDashboardUrl,
 } from "./client";
 export { readPackageVersion } from "./lib/version";
+export type { PublicWorkerHealth } from "./schemas/public";
+export {
+  publicWorkerHealthSchema,
+  publicWorkerStatsSchema,
+  rotateWorkerTokenResultSchema,
+} from "./schemas/public";
 export type { SettingsPatchInput } from "./schemas/settings";
 export { settingsPatchSchema, tokenRotateSchema } from "./schemas/settings";
 export type { SourceCreateInput } from "./schemas/source";
@@ -25,18 +31,12 @@ export {
 } from "./schemas/stream";
 export type { TargetCreateInput, TargetPatchInput } from "./schemas/target";
 export { targetCreateSchema, targetPatchSchema } from "./schemas/target";
-export type { WebWorkerHealth } from "./schemas/web";
-export {
-  rotateWorkerTokenResultSchema,
-  webWorkerHealthSchema,
-  webWorkerStatsSchema,
-} from "./schemas/web";
 export type { EventRecord } from "./types/event";
 export type { SourceKind, SourceRecord, SourceStatus } from "./types/source";
 export type { StreamMetrics, StreamRecord, StreamRecurrence, StreamStatus } from "./types/stream";
 export type { TargetRecord } from "./types/target";
 export type {
-  WebWorkerStats,
+  PublicWorkerStats,
   WorkerHealthDetails,
   WorkerMetrics,
   WorkerSettings,

@@ -5,8 +5,7 @@
 import { z } from "zod";
 
 /**
- * Payload to create a new target destination.
- * The streamKey is passed in plaintext and encrypted at rest by the backend.
+ * Validates RTMP/RTMPS ingest URLs accepted by stream targets.
  */
 const ingestUrlSchema = z
   .url()
@@ -15,6 +14,10 @@ const ingestUrlSchema = z
     message: "Ingest URL must use rtmp or rtmps",
   });
 
+/**
+ * Validates target creation payloads.
+ * The stream key is accepted in plaintext here and encrypted before persistence.
+ */
 export const targetCreateSchema = z.object({
   label: z.string().min(1).max(160),
   ingestUrl: ingestUrlSchema.default("rtmp://a.rtmp.youtube.com/live2"),

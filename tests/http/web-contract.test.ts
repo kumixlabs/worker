@@ -68,7 +68,7 @@ describe.skipIf(!hasSqlite())("Core-facing Worker API contract", () => {
     expect(body.data.limits).toMatchObject({
       signedUrlTtlMs: 60_000,
       bulkDeleteMaxIds: 100,
-      webStatsCacheTtlMs: 2_000,
+      publicStatsCacheTtlMs: 2_000,
     });
     expect(body.data.settings).toEqual({ timezone: "Asia/Jakarta", diskUsageLimitPercent: 88 });
     expect(JSON.stringify(body)).not.toContain("core-token-123456");

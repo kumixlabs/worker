@@ -10,11 +10,11 @@ import { verifySignedUrl } from "../lib/signed-url";
 import { readSettings } from "../runtime/config";
 
 const authFailures = new Map<string, { count: number; resetAt: number }>();
-const webApiHits = new Map<string, { count: number; resetAt: number }>();
+const publicApiHits = new Map<string, { count: number; resetAt: number }>();
 const authWindowMs = 60_000;
 const authMaxFailures = 30;
-const webApiWindowMs = 60_000;
-const webApiMaxRequests = 120;
+const publicApiWindowMs = 60_000;
+const publicApiMaxRequests = 120;
 
 function pruneExpiredBuckets(
   map: Map<string, { count: number; resetAt: number }>,
@@ -32,7 +32,7 @@ function pruneExpiredBuckets(
  */
 export function resetRateLimitsForTests(): void {
   authFailures.clear();
-  webApiHits.clear();
+  publicApiHits.clear();
 }
 
 /**
@@ -59,6 +59,13 @@ function requestKey(c: Context): string {
   return forwarded || remote;
 }
 
+/**
+ * Compares a candidate token against the expected worker token using constant-time comparison.
+ *
+ * @param token - The candidate token from the request.
+ * @param expected - The expected token (defaults to the current settings token).
+ * @returns True when the tokens match.
+ */
 export function verifyToken(token: string, expected = readSettings().token): boolean {
   if (!token || !expected) return false;
   const actualBuffer = Buffer.from(token);
@@ -67,12 +74,14 @@ export function verifyToken(token: string, expected = readSettings().token): boo
   return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
+/** Extracts the Bearer token from the Authorization header. */
 function requestToken(c: Context): string {
   const header = c.req.header("authorization") ?? "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
   return bearer || "";
 }
 
+/** Checks whether the request carries a valid signed URL for an allowed path. */
 function signedRequest(c: Context): boolean {
   const url = new URL(c.req.url);
   const signature = url.searchParams.get("sig");
@@ -94,8 +103,8 @@ function signedRequest(c: Context): boolean {
 
 /**
  * Hono middleware that authenticates requests against the worker token.
- * Accepts a Bearer header or a `token` query param, and rate-limits clients
- * that exceed the invalid-attempt threshold within the rolling window.
+ * Accepts a Bearer header or a valid signed URL, and rate-limits clients that
+ * exceed the invalid-attempt threshold within the rolling window.
  *
  * @param c - The Hono request context.
  * @param next - The next handler in the chain.
@@ -127,17 +136,24 @@ export async function tokenAuth(c: Context, next: Next) {
   await next();
 }
 
-export async function webApiRateLimit(c: Context, next: Next) {
+/**
+ * Hono middleware that rate-limits `/api/v1/*` requests per client+token.
+ *
+ * @param c - The Hono request context.
+ * @param next - The next handler in the chain.
+ * @returns A 429 JSON response when the limit is exceeded, otherwise passes control on.
+ */
+export async function publicApiRateLimit(c: Context, next: Next) {
   const tokenHash = createHash("sha256").update(requestToken(c)).digest("hex").slice(0, 16);
   const key = `${requestKey(c)}:${tokenHash}`;
   const now = Date.now();
-  pruneExpiredBuckets(webApiHits, now);
-  const current = webApiHits.get(key);
+  pruneExpiredBuckets(publicApiHits, now);
+  const current = publicApiHits.get(key);
   const bucket =
-    current && current.resetAt > now ? current : { count: 0, resetAt: now + webApiWindowMs };
+    current && current.resetAt > now ? current : { count: 0, resetAt: now + publicApiWindowMs };
   bucket.count += 1;
-  webApiHits.set(key, bucket);
-  if (bucket.count > webApiMaxRequests) {
+  publicApiHits.set(key, bucket);
+  if (bucket.count > publicApiMaxRequests) {
     return c.json(
       { ok: false, error: { code: "RATE_LIMITED", message: "Too many worker API requests" } },
       429,

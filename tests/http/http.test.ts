@@ -99,7 +99,7 @@ describe("Kumix Worker HTTP app", () => {
     expect(JSON.stringify(body)).not.toContain("test-token-123456");
   });
 
-  it("honors configured CORS origins for web API", async () => {
+  it("honors configured CORS origins for public API", async () => {
     process.env.KUMIX_WORKER_CORS_ORIGINS = "https://app.example.test";
     app = createApiApp();
 
@@ -134,7 +134,7 @@ describe("Kumix Worker HTTP app", () => {
     expect(unconfigured.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  it("rate limits authenticated web API requests", async () => {
+  it("rate limits authenticated public API requests", async () => {
     let response = await app.request("/api/v1/stats", {
       headers: {
         Authorization: "Bearer test-token-123456",

@@ -39,7 +39,12 @@
   },
   "Auth": {
     "deniedTitle": "Akses ditolak",
-    "deniedDescription": "Dashboard lokal ini hanya bisa dibuka dari URL dashboard."
+    "deniedDescription": "Dashboard lokal ini hanya bisa dibuka dari URL dashboard.",
+    "loginTitle": "Masuk",
+    "loginDescription": "Masukkan token Kumix Worker untuk melanjutkan.",
+    "tokenPlaceholder": "Token worker",
+    "loginSubmit": "Masuk",
+    "loginError": "Token worker tidak valid."
   },
   "Common": {
     "refresh": "Muat ulang",

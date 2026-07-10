@@ -61,6 +61,12 @@ function validTimezone(value: unknown): string {
   return value;
 }
 
+/**
+ * Validates a worker auth token from config, CLI, or API input.
+ *
+ * @param value - The raw value to validate.
+ * @returns The validated token.
+ */
 export function validToken(value: unknown): string {
   if (typeof value !== "string" || value.length < 16 || value.length > 256) {
     throw new Error("Invalid Kumix Worker token. Expected 16-256 characters.");
@@ -140,7 +146,6 @@ export function resetWorkerData(includeConfig: boolean): void {
     rmSync(configFile, { force: true });
   }
 
-  // Re-create the empty directories
   ensureDataDir();
 }
 
@@ -231,7 +236,7 @@ export function readSettings(): WorkerSettings {
  * Persists the worker settings to config.json.
  * Writes with 0600 permissions to protect the auth token.
  *
- * @param {WorkerSettings} settings - The settings object to save.
+ * @param settings - The settings object to save.
  */
 export function writeSettings(settings: WorkerSettings): void {
   ensureDataDir();
@@ -241,6 +246,11 @@ export function writeSettings(settings: WorkerSettings): void {
   renameSync(tempPath, configPath);
 }
 
+/**
+ * Reads the configured CORS allowlist for core-facing public API routes.
+ *
+ * @returns Trimmed origins from `KUMIX_WORKER_CORS_ORIGINS`.
+ */
 export function allowedCorsOrigins(): string[] {
   return (process.env.KUMIX_WORKER_CORS_ORIGINS ?? "")
     .split(",")

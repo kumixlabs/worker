@@ -66,7 +66,7 @@ export function getDb(): SqliteDatabase {
 /**
  * Ensures the required tables (sources, targets, streams, events) and indexes exist.
  *
- * @param {SqliteDatabase} database - The SQLite database instance.
+ * @param database - The SQLite database instance.
  */
 function ensureSchema(database: SqliteDatabase): void {
   database.exec(`

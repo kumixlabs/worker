@@ -91,10 +91,14 @@ export function terminateOrphanPid(pid: number | null): void {
       if (isPidAlive(pid)) {
         try {
           process.kill(pid!, "SIGKILL");
-        } catch {}
+        } catch {
+          return;
+        }
       }
     }, 5_000).unref?.();
-  } catch {}
+  } catch {
+    return;
+  }
 }
 
 /**
@@ -226,7 +230,7 @@ export function listTombstones(): TombstoneRecord[] {
  * instead of being marked failed.
  *
  * @param skipStreamIds - Stream IDs scheduled for auto-start after a planned restart.
- * @returns {StreamRecord[]} The streams that were transitioned to failed.
+ * @returns The streams that were transitioned to failed.
  */
 export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamRecord[] {
   const skip = new Set(skipStreamIds);

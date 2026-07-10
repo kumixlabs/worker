@@ -73,6 +73,8 @@ export function parseFfprobeJson(stdout: string): ProbeResult {
   };
 }
 
+const maxYouTubeVideoBitrateKbps = 35_000;
+
 /**
  * Validates probe results against streaming requirements.
  * Requires H.264 video, AAC audio, and a YouTube-compatible video bitrate.
@@ -80,8 +82,6 @@ export function parseFfprobeJson(stdout: string): ProbeResult {
  * @param probe - The parsed probe result.
  * @returns A human-readable reason when invalid, otherwise null.
  */
-const maxYouTubeVideoBitrateKbps = 35_000;
-
 export function getInvalidProbeReason(probe: ProbeResult): string | null {
   const video = (probe.videoCodec ?? "").toLowerCase();
   const audio = (probe.audioCodec ?? "").toLowerCase();

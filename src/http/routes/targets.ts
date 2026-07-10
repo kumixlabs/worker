@@ -1,3 +1,5 @@
+/** Target CRUD and bulk delete routes with encrypted stream key handling. */
+
 import type { Hono } from "hono";
 import { z } from "zod";
 

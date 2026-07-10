@@ -39,7 +39,12 @@
   },
   "Auth": {
     "deniedTitle": "Access denied",
-    "deniedDescription": "This local dashboard can only be opened from the dashboard URL."
+    "deniedDescription": "This local dashboard can only be opened from the dashboard URL.",
+    "loginTitle": "Sign in",
+    "loginDescription": "Enter your Kumix Worker token to continue.",
+    "tokenPlaceholder": "Worker token",
+    "loginSubmit": "Sign in",
+    "loginError": "Invalid worker token."
   },
   "Common": {
     "refresh": "Refresh",

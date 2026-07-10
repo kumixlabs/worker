@@ -100,17 +100,31 @@ export function parseUserDateTime(
   if (/Z$|[+-]\d{2}:?\d{2}$/.test(value)) return toIso(new Date(value));
 
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (!match) return toIso(new Date(value));
+  if (!match) return null;
 
   const [, year, month, day, hour = "00", minute = "00", second = "00"] = match;
+  const numbers = [year, month, day, hour, minute, second].map(Number);
+  const [yearNumber, monthNumber, dayNumber, hourNumber, minuteNumber, secondNumber] = numbers;
+  const candidate = new Date(
+    Date.UTC(yearNumber, monthNumber - 1, dayNumber, hourNumber, minuteNumber, secondNumber),
+  );
+  if (
+    candidate.getUTCFullYear() !== yearNumber ||
+    candidate.getUTCMonth() !== monthNumber - 1 ||
+    candidate.getUTCDate() !== dayNumber ||
+    candidate.getUTCHours() !== hourNumber ||
+    candidate.getUTCMinutes() !== minuteNumber ||
+    candidate.getUTCSeconds() !== secondNumber
+  )
+    return null;
   return fromZonedParts(
     {
-      day: Number(day),
-      hour: Number(hour),
-      minute: Number(minute),
-      month: Number(month),
-      second: Number(second),
-      year: Number(year),
+      day: dayNumber,
+      hour: hourNumber,
+      minute: minuteNumber,
+      month: monthNumber,
+      second: secondNumber,
+      year: yearNumber,
     },
     timezone,
   ).toISOString();

@@ -1,5 +1,5 @@
 /**
- * Zod schemas for web-facing worker API responses consumed by external integrations.
+ * Zod schemas for public-facing worker API responses consumed by external integrations.
  */
 
 import { z } from "zod";
@@ -29,7 +29,7 @@ const recentStreamSchema = z.object({
 /**
  * Validates the read-only worker stats payload returned by `/api/v1/stats`.
  */
-export const webWorkerStatsSchema = z.object({
+export const publicWorkerStatsSchema = z.object({
   system: z.object({
     agentVersion: z.string(),
     cpu: z.object({
@@ -89,7 +89,7 @@ export const webWorkerStatsSchema = z.object({
 /**
  * Validates the lightweight health payload returned by `/api/v1/health`.
  */
-export const webWorkerHealthSchema = z.object({
+export const publicWorkerHealthSchema = z.object({
   status: z.string(),
   agentVersion: z.string(),
   uptimeSec: z.number(),
@@ -106,5 +106,5 @@ export const rotateWorkerTokenResultSchema = z.object({
   tokenLength: z.number(),
 });
 
-/** Parsed web worker health payload. */
-export type WebWorkerHealth = z.infer<typeof webWorkerHealthSchema>;
+/** Parsed public worker health payload. */
+export type PublicWorkerHealth = z.infer<typeof publicWorkerHealthSchema>;

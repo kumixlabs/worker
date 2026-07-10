@@ -43,7 +43,7 @@ Security:
 Data directory:
    Config, database, tombstones, and source cache live in ~/.kumix-worker.
    Override with KUMIX_WORKER_DATA_DIR.
-   Restrict web API CORS with KUMIX_WORKER_CORS_ORIGINS=https://app.example.com.
+   Restrict public API CORS with KUMIX_WORKER_CORS_ORIGINS=https://app.example.com.
 
 Dashboard:
   Run "kumix-worker serve" then open the dashboard URL printed in the console.

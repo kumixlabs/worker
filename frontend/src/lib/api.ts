@@ -43,7 +43,6 @@ export function setApiToken(token: string) {
 
 const queryParams = new URLSearchParams(window.location.search);
 const queryCode = queryParams.get("code");
-const legacyQueryToken = queryParams.get("token");
 
 /**
  * Exchanges a one-time handoff code from the dashboard URL for the worker
@@ -70,10 +69,6 @@ async function consumeHandoffCode(code: string) {
 if (queryCode) {
   window.history.replaceState(null, "", window.location.pathname);
   void consumeHandoffCode(queryCode);
-} else if (legacyQueryToken) {
-  // Backwards compatibility for direct token links.
-  setApiToken(legacyQueryToken);
-  window.history.replaceState(null, "", window.location.pathname);
 }
 
 type ApiEnvelope<T> = { ok: true; data: T } | { ok: false; error: { message: string } };

@@ -14,6 +14,7 @@ import { removeTombstone, writeTombstone } from "../runtime/recovery";
 import type { StreamMetrics, StreamRecord } from "../types/stream";
 
 const processes = new Map<string, ChildProcess>();
+const startingStreams = new Set<string>();
 const listeners = new Map<string, Set<(event: unknown) => void>>();
 
 /**
@@ -31,11 +32,20 @@ export type StopAllStreamsResult = {
  * @param event - The event payload to broadcast.
  */
 function emit(streamId: string, event: unknown): void {
-  for (const listener of listeners.get(streamId) ?? []) listener(event);
+  for (const listener of listeners.get(streamId) ?? []) {
+    try {
+      listener(event);
+    } catch {
+      listeners.get(streamId)?.delete(listener);
+    }
+  }
 }
 
 /**
  * Requests a graceful stop for every currently running stream process.
+ *
+ * @param timeoutMs - Maximum time to wait for tracked processes to exit.
+ * @returns Stop request summary with remaining tracked streams.
  */
 export async function stopAllStreams(timeoutMs = 12_000): Promise<StopAllStreamsResult> {
   const streamIds = Array.from(processes.keys());
@@ -158,119 +168,110 @@ function killChildProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   child.kill(signal);
 }
 
+/**
+ * Starts a stream by validating its source/target, spawning FFmpeg, and tracking tombstones.
+ *
+ * @param streamId - The stream to start.
+ * @returns The updated stream record, or null when the stream no longer exists.
+ */
 export async function startStream(streamId: string): Promise<StreamRecord | null> {
   if (processes.has(streamId)) return getStream(streamId);
-  const stream = getStream(streamId);
-  if (!stream) throw new Error("Stream not found");
-  if (stream.status === "running" || stream.status === "stopping") {
-    throw new Error("Stream is already running or stopping");
-  }
-  const source = getSource(stream.sourceId);
-  const target = getTarget(stream.targetId);
-  if (source?.status !== "ready" || !source.filePath) throw new Error("Source is not ready");
-  if (!target?.active) throw new Error("Target is disabled");
-  const streamKey = decryptSecret(target.streamKey);
-  if (!streamKey) throw new Error("Stream key unavailable");
+  if (startingStreams.has(streamId)) throw new Error("Stream start is already in progress");
+  startingStreams.add(streamId);
+  try {
+    const stream = getStream(streamId);
+    if (!stream) throw new Error("Stream not found");
+    if (stream.status === "running" || stream.status === "stopping") {
+      throw new Error("Stream is already running or stopping");
+    }
+    const source = getSource(stream.sourceId);
+    const target = getTarget(stream.targetId);
+    if (source?.status !== "ready" || !source.filePath) throw new Error("Source is not ready");
+    if (!target?.active) throw new Error("Target is disabled");
+    const streamKey = decryptSecret(target.streamKey);
+    if (!streamKey) throw new Error("Stream key unavailable");
 
-  const args = buildFfmpegArgs({
-    filePath: source.filePath,
-    ingestUrl: target.ingestUrl,
-    loop: stream.loop,
-    streamKey,
-  });
-
-  const child = spawn(getFfmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"] });
-  const spawnError = new Promise<never>((_, reject) => {
-    child.once("error", (error) => {
-      child.removeAllListeners();
-      reject(error);
+    const child = spawn(
+      getFfmpegPath(),
+      buildFfmpegArgs({
+        filePath: source.filePath,
+        ingestUrl: target.ingestUrl,
+        loop: stream.loop,
+        streamKey,
+      }),
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    if (!child.pid) throw new Error("Failed to spawn ffmpeg");
+    processes.set(streamId, child);
+    writeTombstone({
+      pid: child.pid,
+      status: "running",
+      streamId,
+      writtenAt: new Date().toISOString(),
     });
-  });
-  if (!child.pid) {
-    const race = await Promise.race([
-      spawnError.catch((error: Error) => error.message),
-      Promise.resolve(null),
-    ]);
-    throw new Error(race ?? "Failed to spawn ffmpeg");
-  }
-  processes.set(streamId, child);
-  writeTombstone({
-    pid: child.pid,
-    status: "running",
-    streamId,
-    writtenAt: new Date().toISOString(),
-  });
-  setStreamStatus(streamId, "running", {
-    startedAt: new Date().toISOString(),
-    pid: child.pid,
-    lastError: null,
-  });
-  addEvent(streamId, "running", `FFmpeg started with pid ${child.pid}`, { pid: child.pid });
-  emit(streamId, { type: "status", status: "running" });
+    setStreamStatus(streamId, "running", {
+      startedAt: new Date().toISOString(),
+      pid: child.pid,
+      lastError: null,
+    });
+    addEvent(streamId, "running", `FFmpeg started with pid ${child.pid}`, { pid: child.pid });
+    emit(streamId, { type: "status", status: "running" });
 
-  let lastMetrics: StreamMetrics | null = null;
-  let lastMetricsPersistAt = 0;
-  const metricsPersistIntervalMs = 5_000;
-  child.stderr.on("data", (chunk) => {
-    const text = chunk.toString();
-    for (const line of text.split(/\r?\n/).filter(Boolean)) {
-      const redacted = redactFfmpegLog(line);
-      emit(streamId, { type: "log", line: redacted });
-      const metrics = parseMetrics(line, lastMetrics);
-      if (metrics && metrics !== lastMetrics) {
-        lastMetrics = metrics;
-        emit(streamId, { type: "metrics", metrics });
-        const now = Date.now();
-        if (now - lastMetricsPersistAt >= metricsPersistIntervalMs) {
-          lastMetricsPersistAt = now;
-          if (getStream(streamId)?.status === "running") {
-            setStreamStatus(streamId, "running", { lastMetrics: metrics });
+    let lastMetrics: StreamMetrics | null = null;
+    let lastMetricsPersistAt = 0;
+    child.stderr.on("data", (chunk) => {
+      for (const line of chunk.toString().split(/\r?\n/).filter(Boolean)) {
+        emit(streamId, { type: "log", line: redactFfmpegLog(line) });
+        const metrics = parseMetrics(line, lastMetrics);
+        if (metrics && metrics !== lastMetrics) {
+          lastMetrics = metrics;
+          emit(streamId, { type: "metrics", metrics });
+          if (Date.now() - lastMetricsPersistAt >= 5_000) {
+            lastMetricsPersistAt = Date.now();
+            if (getStream(streamId)?.status === "running")
+              setStreamStatus(streamId, "running", { lastMetrics: metrics });
           }
         }
       }
-    }
-  });
-
-  child.on("error", (error) => {
-    processes.delete(streamId);
-    removeTombstone(streamId);
-    setStreamStatus(streamId, "failed", {
-      stoppedAt: new Date().toISOString(),
-      pid: null,
-      lastError: error.message,
     });
-    addEvent(streamId, "failed", `FFmpeg failed: ${error.message}`, null);
-    emit(streamId, { type: "status", status: "failed" });
-  });
 
-  child.on("close", (code, signal) => {
-    processes.delete(streamId);
-    removeTombstone(streamId);
-    const current = getStream(streamId);
-    if (!current) {
-      emit(streamId, { type: "status", status: "deleted" });
-      return;
-    }
-    const stoppedAt = new Date().toISOString();
-    const intentional =
-      current.status === "stopping" || signal === "SIGTERM" || signal === "SIGKILL";
-    const status = code === 0 || intentional ? "stopped" : "failed";
-    const reason = signal ? `signal ${signal}` : `code ${code}`;
-    setStreamStatus(streamId, status, {
-      stoppedAt,
-      pid: null,
-      lastError: status === "stopped" ? null : `ffmpeg exited with ${reason}`,
+    child.on("error", (error) => {
+      processes.delete(streamId);
+      removeTombstone(streamId);
+      setStreamStatus(streamId, "failed", {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: error.message,
+      });
+      addEvent(streamId, "failed", `FFmpeg failed: ${error.message}`, null);
+      emit(streamId, { type: "status", status: "failed" });
     });
-    addEvent(
-      streamId,
-      status,
-      status === "stopped" ? "FFmpeg stopped" : `FFmpeg failed with ${reason}`,
-      { code, signal },
-    );
-    emit(streamId, { type: "status", status });
-  });
-
-  return getStream(streamId);
+    child.on("close", (code, signal) => {
+      processes.delete(streamId);
+      removeTombstone(streamId);
+      const current = getStream(streamId);
+      if (!current) return emit(streamId, { type: "status", status: "deleted" });
+      const intentional =
+        current.status === "stopping" || signal === "SIGTERM" || signal === "SIGKILL";
+      const status = code === 0 || intentional ? "stopped" : "failed";
+      const reason = signal ? `signal ${signal}` : `code ${code}`;
+      setStreamStatus(streamId, status, {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: status === "stopped" ? null : `ffmpeg exited with ${reason}`,
+      });
+      addEvent(
+        streamId,
+        status,
+        status === "stopped" ? "FFmpeg stopped" : `FFmpeg failed with ${reason}`,
+        { code, signal },
+      );
+      emit(streamId, { type: "status", status });
+    });
+    return getStream(streamId);
+  } finally {
+    startingStreams.delete(streamId);
+  }
 }
 
 /**

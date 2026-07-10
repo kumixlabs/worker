@@ -1,17 +1,21 @@
+/**
+ * Typed client for the worker's authenticated integration API.
+ */
+
 import type { z } from "zod";
 
 import {
+  type PublicWorkerHealth,
+  publicWorkerHealthSchema,
+  publicWorkerStatsSchema,
   rotateWorkerTokenResultSchema,
-  type WebWorkerHealth,
-  webWorkerHealthSchema,
-  webWorkerStatsSchema,
-} from "./schemas/web";
-import type { WebWorkerStats } from "./types/worker";
+} from "./schemas/public";
+import type { PublicWorkerStats } from "./types/worker";
 
 type ApiEnvelope<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
 
 /**
- * Options for the read-only worker web API client.
+ * Options for the read-only worker public API client.
  */
 export type WorkerClientOptions = {
   baseUrl: string;
@@ -30,14 +34,34 @@ export type RotateWorkerTokenResult = {
   tokenLength: number;
 };
 
+/**
+ * Removes trailing slashes so endpoint paths can be appended predictably.
+ *
+ * @param baseUrl - Worker base URL.
+ * @returns Normalized base URL.
+ */
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+/**
+ * Waits for a retry delay.
+ *
+ * @param ms - Delay in milliseconds.
+ */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Performs one authenticated worker API request and validates its response data.
+ *
+ * @param options - Worker API client options.
+ * @param path - API path to request.
+ * @param schema - Zod schema used to validate the response payload.
+ * @param init - Optional fetch init.
+ * @returns Validated response data.
+ */
 async function workerRequestOnce<T>(
   options: WorkerClientOptions,
   path: string,
@@ -74,6 +98,15 @@ async function workerRequestOnce<T>(
   return schema.parse(body.data);
 }
 
+/**
+ * Performs an authenticated worker API request with linear backoff retries.
+ *
+ * @param options - Worker API client options.
+ * @param path - API path to request.
+ * @param schema - Zod schema used to validate the response payload.
+ * @param init - Optional fetch init.
+ * @returns Validated response data.
+ */
 async function workerRequest<T>(
   options: WorkerClientOptions,
   path: string,
@@ -111,8 +144,8 @@ export function workerDashboardUrl(baseUrl: string, token: string): string {
  * @param options - Worker API client options.
  * @returns Worker stats validated by the public schema.
  */
-export function fetchWorkerStats(options: WorkerClientOptions): Promise<WebWorkerStats> {
-  return workerRequest<WebWorkerStats>(options, "/api/v1/stats", webWorkerStatsSchema);
+export function fetchWorkerStats(options: WorkerClientOptions): Promise<PublicWorkerStats> {
+  return workerRequest<PublicWorkerStats>(options, "/api/v1/stats", publicWorkerStatsSchema);
 }
 
 /**
@@ -121,8 +154,8 @@ export function fetchWorkerStats(options: WorkerClientOptions): Promise<WebWorke
  * @param options - Worker API client options.
  * @returns Worker health validated by the public schema.
  */
-export function fetchWorkerHealth(options: WorkerClientOptions): Promise<WebWorkerHealth> {
-  return workerRequest<WebWorkerHealth>(options, "/api/v1/health", webWorkerHealthSchema);
+export function fetchWorkerHealth(options: WorkerClientOptions): Promise<PublicWorkerHealth> {
+  return workerRequest<PublicWorkerHealth>(options, "/api/v1/health", publicWorkerHealthSchema);
 }
 
 /**

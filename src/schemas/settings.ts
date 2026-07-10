@@ -5,14 +5,33 @@
 import { z } from "zod";
 
 /**
- * Payload to update the worker daemon runtime configuration.
- * Port is intentionally excluded as it is an install-time concern.
+ * Validates an IANA timezone setting accepted by the worker runtime.
+ */
+const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine((value) => {
+    try {
+      Intl.DateTimeFormat("en-US", { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Expected a valid IANA timezone");
+
+/**
+ * Validates dashboard settings updates.
+ * Port and token are intentionally excluded because they are managed separately.
  */
 export const settingsPatchSchema = z.object({
   diskUsageLimitPercent: z.number().int().min(50).max(99).optional(),
-  timezone: z.string().min(1).max(64).optional(),
+  timezone: timezoneSchema.optional(),
 });
 
+/**
+ * Validates worker token rotation requests.
+ */
 export const tokenRotateSchema = z.object({
   token: z.string().min(16).max(256),
 });

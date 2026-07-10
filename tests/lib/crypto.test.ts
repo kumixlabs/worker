@@ -35,6 +35,12 @@ describe("Kumix Worker secret crypto", () => {
     expect(decryptSecret(encrypted)).toBe("secret-stream-key");
   });
 
+  it("returns an empty string for malformed ciphertext envelopes", () => {
+    expect(decryptSecret("enc:v1:short:tag:ciphertext")).toBe("");
+    expect(decryptSecret("enc:v1::::::::")).toBe("");
+    expect(decryptSecret("plain-secret")).toBe("");
+  });
+
   it("masks short and long secrets", () => {
     expect(maskSecret("short")).toBe("••••");
     expect(maskSecret("abcd-efgh-ijkl")).toBe("abcd••••ijkl");

@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+/**
+ * Rewrites extensionless relative imports in TypeScript's Node-compatible ESM output.
+ * Node.js requires `.js` extensions for relative ESM imports at runtime.
+ */
+
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";

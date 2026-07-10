@@ -90,6 +90,11 @@ export function setFetchImplForTests(fn: FetchLike | null): void {
   fetchImpl = fn ?? defaultFetch;
 }
 
+/**
+ * Computes how many bytes may still be downloaded under package and disk limits.
+ *
+ * @returns Remaining allowed download size in bytes.
+ */
 function allowedDownloadBytes(): number {
   const settings = readSettings();
   const disk = runtimeMetrics().storage.disk;
@@ -98,12 +103,6 @@ function allowedDownloadBytes(): number {
   return Math.max(0, Math.min(maxDownloadBytes, limitBytes - disk.usedBytes));
 }
 
-/**
- * Builds a filesystem-safe cache filename component from a source identifier.
- *
- * @param value - Source identifier stored in SQLite.
- * @returns Sanitized filename component.
- */
 /**
  * Deletes a cache file if it exists, ignoring cleanup failures.
  *
@@ -283,6 +282,12 @@ function extractGDriveConfirmedUrl(
   return url.toString();
 }
 
+/**
+ * Reads Set-Cookie values from a fetch response across runtime header implementations.
+ *
+ * @param response - Fetch response to inspect.
+ * @returns Raw Set-Cookie header values.
+ */
 function cookieValues(response: Response): string[] {
   return (
     response.headers.getSetCookie?.() ??
@@ -290,12 +295,42 @@ function cookieValues(response: Response): string[] {
   );
 }
 
+/**
+ * Appends response cookies to an existing Cookie header value.
+ *
+ * @param cookie - Existing Cookie header value.
+ * @param setCookie - Set-Cookie values from the latest response.
+ * @returns The combined Cookie header, or null when no cookies exist.
+ */
 function appendCookies(cookie: string | null, setCookie: string[]): string | null {
   const next = toCookieHeader(setCookie);
   if (!next) return cookie;
   return cookie ? `${cookie}; ${next}` : next;
 }
 
+/**
+ * Removes query parameters from a URL before it is written to logs.
+ *
+ * @param value - URL to redact.
+ * @returns Redacted URL or a placeholder for invalid input.
+ */
+function redactDownloadUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.search = "";
+    return url.toString();
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
+/**
+ * Builds fetch options with worker defaults for manual redirects and browser-like headers.
+ *
+ * @param init - Optional caller-provided fetch options.
+ * @param cookie - Cookie header to include for Google Drive continuation requests.
+ * @returns Fetch options for one request hop.
+ */
 function fetchInit(init?: RequestInit, cookie?: string | null): RequestInit {
   const headers = new Headers(init?.headers);
   if (!headers.has("user-agent")) headers.set("user-agent", kumixWorkerUserAgent);
@@ -336,10 +371,10 @@ export async function safeFetch(
       const causeMessage = cause instanceof Error ? cause.message : String(cause ?? "");
       const detail = causeMessage ? `: ${causeMessage}` : "";
       console.error(
-        `[worker] safeFetch failed for ${currentUrl}${detail}`,
+        `[worker] safeFetch failed for ${redactDownloadUrl(currentUrl)}${detail}`,
         cause instanceof Error ? { code: (cause as NodeJS.ErrnoException).code } : undefined,
       );
-      throw new Error(`fetch failed: ${currentUrl}${detail}`);
+      throw new Error(`fetch failed: ${redactDownloadUrl(currentUrl)}${detail}`);
     }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
@@ -352,6 +387,14 @@ export async function safeFetch(
   throw new Error("Too many redirects");
 }
 
+/**
+ * Fetches a URL with SSRF-safe redirects while carrying cookies across hops.
+ *
+ * @param urlString - The initial URL to fetch.
+ * @param init - Optional fetch init applied to each hop.
+ * @param maxRedirects - Maximum number of redirects to follow.
+ * @returns The final response and accumulated Cookie header.
+ */
 async function safeFetchWithCookies(
   urlString: string,
   init?: RequestInit,
@@ -371,10 +414,10 @@ async function safeFetchWithCookies(
       const causeMessage = cause instanceof Error ? cause.message : String(cause ?? "");
       const detail = causeMessage ? `: ${causeMessage}` : "";
       console.error(
-        `[worker] safeFetch failed for ${currentUrl}${detail}`,
+        `[worker] safeFetch failed for ${redactDownloadUrl(currentUrl)}${detail}`,
         cause instanceof Error ? { code: (cause as NodeJS.ErrnoException).code } : undefined,
       );
-      throw new Error(`fetch failed: ${currentUrl}${detail}`);
+      throw new Error(`fetch failed: ${redactDownloadUrl(currentUrl)}${detail}`);
     }
     cookie = appendCookies(cookie, cookieValues(response));
     if (response.status >= 300 && response.status < 400) {
@@ -429,10 +472,7 @@ export async function downloadAndProbeSource(sourceId: string) {
   const source = getSource(sourceId);
   if (!source?.url) return source;
 
-  // Auto-detect Google Drive links registered as plain URL sources so the
-  // confirmation-token download flow runs even when the caller picked the
-  // wrong kind. Falls back to the regular URL flow for non-Drive links.
-  const _effectiveKind: "url" | "gdrive" =
+  const effectiveKind: "url" | "gdrive" =
     source.kind === "gdrive" || extractGDriveFileId(source.url) ? "gdrive" : "url";
 
   if (!(await validateUrl(source.url))) {
@@ -446,7 +486,7 @@ export async function downloadAndProbeSource(sourceId: string) {
 
   let downloadUrl = source.url;
   let headers: Record<string, string> | undefined;
-  if (source.kind === "gdrive") {
+  if (effectiveKind === "gdrive") {
     const fileId = extractGDriveFileId(source.url);
     if (!fileId) {
       return updateSourceProbe(sourceId, {
@@ -465,7 +505,7 @@ export async function downloadAndProbeSource(sourceId: string) {
     if (headers) downloadInit.headers = headers;
     response = await safeFetch(downloadUrl, downloadInit);
   } catch (error) {
-    console.error(`[worker] downloadAndProbeSource ${sourceId} (${source.kind}) failed:`, error);
+    console.error(`[worker] downloadAndProbeSource ${sourceId} (${effectiveKind}) failed:`, error);
     return updateSourceProbe(sourceId, {
       status: "invalid",
       invalidReason: error instanceof Error ? error.message : "Download blocked",

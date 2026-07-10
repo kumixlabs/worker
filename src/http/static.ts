@@ -88,7 +88,12 @@ export function findPublicDir(): string | null {
 export async function serveStatic(c: Context, publicDir: string): Promise<Response> {
   const url = new URL(c.req.url);
   const rawPath = url.pathname;
-  const requestPath = decodeURIComponent(rawPath);
+  let requestPath: string;
+  try {
+    requestPath = decodeURIComponent(rawPath);
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
   if (!isSafePath(rawPath) || !isSafePath(requestPath) || rawPath.toLowerCase().includes("%2e")) {
     return new Response("Not found", { status: 404 });
   }

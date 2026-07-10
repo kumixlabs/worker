@@ -40,7 +40,7 @@ describe("FFmpeg binary resolver", () => {
   });
 
   it("throws when an override path does not exist", () => {
-    process.env.KUMIX_WORKER_FFMPEG_PATH = "/nonexistent/forge/ffmpeg";
+    process.env.KUMIX_WORKER_FFMPEG_PATH = "/nonexistent/kumix/ffmpeg";
 
     expect(() => resolveFfmpegBinaries()).toThrow("KUMIX_WORKER_FFMPEG_PATH");
   });

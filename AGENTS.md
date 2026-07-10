@@ -12,7 +12,6 @@ Primary folders:
 - `frontend/` - Vite React dashboard, i18n messages, and UI routes.
 - `public/` - built dashboard assets served by the worker package.
 - `tests/` - Vitest test suite for runtime, API, DB, frontend smoke/i18n, and service behavior.
-- `scripts/` - package postinstall helpers.
 - `.github/workflows/` - CI and NPM release workflows.
 
 ## Architecture
@@ -28,12 +27,14 @@ Primary folders:
   - `streams.ts` - stream CRUD, start, stop, stopped time patching, bulk delete.
   - `events.ts` - event listing, SSE, exports, signed URLs.
   - `web.ts` - core-facing `/api/v1/*` health, stats, capabilities, link, and token rotation.
-- `src/db/` owns SQLite schema and query helpers.
+- `src/db/` owns SQLite schema and query helpers. Schema is bootstrapped inline via `CREATE TABLE IF NOT EXISTS` in `getDb()` — there is no migration runner, no migration files, and no version table. Schema changes require manual ALTER or drop-recreate.
 - `src/runtime/` owns config, FFmpeg binary resolution, metrics, scheduler, recovery/tombstones, and update helpers.
 - `src/services/` owns FFprobe probing, source download/cache, and FFmpeg stream runner behavior.
 - `src/lib/` owns crypto, signed URLs, timezone parsing, utilities, and package version helpers.
 - `frontend/src/routes/` owns dashboard pages.
 - `frontend/messages/en.json` and `frontend/messages/id.json` must stay structurally identical.
+- `src/index.ts` is the public package API surface for external consumers (e.g. Kumix core). Renaming or removing exports is a breaking change.
+- `public/assets/` contains generated Vite build output — do not edit manually.
 
 ## Feature Summary
 
@@ -96,11 +97,16 @@ bun run types:check
 bun run test
 bun run test:watch
 bun run test:coverage
+bun run bump
 ```
 
 `bun run types:check` checks both backend and frontend TypeScript.
 
-`bun run build` builds backend and frontend, copies `public/` into `dist/public`, and verifies the built dashboard exists.
+`bun run build` builds backend and frontend via `tsc`, then runs `node scripts/fix-esm-extensions.mjs` to rewrite bare relative imports in `dist/` to `.js` extensions, then copies `public/` into `dist/public`. Running `tsc` directly without the `fix-esm` step produces broken ESM output.
+
+`bun run dev` runs the backend under `node --watch --import tsx` (not Bun runtime) and the Vite frontend dev server concurrently. Backend listens on port 8080; Vite proxies `/api` to `http://localhost:8080`. Both must be running for the dev dashboard to work.
+
+`bun run bump` uses `bumpp` to bump the version. The release workflow enforces that the git tag matches `package.json` version exactly.
 
 Before finishing meaningful changes, run:
 
@@ -112,6 +118,17 @@ bun run build
 ```
 
 If the change is very small and the user needs speed, run the smallest relevant subset first, but finish with the full suite before declaring production readiness.
+
+### Install
+
+Two separate installs are required — root and frontend:
+
+```bash
+bun install
+bun install --cwd frontend
+```
+
+CI runs them as separate steps. A single `bun install` at root does not install frontend dependencies; `bun run build` and `bun run types:check` (frontend half) will fail without it.
 
 ## Runtime Configuration
 
@@ -217,10 +234,18 @@ The suite currently has 99 tests across 23 test files. Important test areas:
 - `tests/frontend/messages.test.ts` - i18n parity and orphan UI keys.
 - `tests/frontend/frontend-smoke.test.ts` - dashboard smoke checks.
 
+Vitest config lives at `tests/vitest.config.ts`, not the repo root. The `@` alias in that config resolves to `../src`. Always run tests from the repo root (`bun run test`), not from inside `tests/` — `messages.test.ts` uses `process.cwd()` to locate `frontend/src` and will silently pass with zero orphan checks if run from the wrong directory.
+
+Tests use `pool: "forks"` (not threads) to support `process.chdir`. Do not assume thread-safe globals in new test files.
+
+New test files that touch the DB must call `resetDbForTests()` in `beforeEach`/`afterEach` to close the SQLite singleton and prevent cross-test state bleed.
+
+Test tokens must be at least 16 characters (`validToken` enforces `length >= 16`). Short stubs like `"test"` or `"abc123"` will fail validation.
+
 ## CI And Release
 
 - `.github/workflows/ci.yml` runs install, typecheck, lint, test, and build on PR/main.
-- `.github/workflows/release.yml` publishes to NPM on `v*` tags or manual workflow dispatch.
+- `.github/workflows/release.yml` publishes to NPM on `v*` tags or manual workflow dispatch. Also builds and pushes Docker images to GHCR and Docker Hub (requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets).
 - NPM publish requires the `NPM_TOKEN` repository secret.
 - Release tags use `vX.Y.Z` and must match `package.json` version.
 - Do not enable NPM provenance for private repositories unless explicitly requested.

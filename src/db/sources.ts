@@ -15,8 +15,8 @@ import { addEvent } from "./events";
 /**
  * Maps a SQLite database row to a SourceRecord object.
  *
- * @param {Record<string, unknown>} row - The raw database row.
- * @returns {SourceRecord} The strongly-typed SourceRecord.
+ * @param row - The raw database row.
+ * @returns The strongly typed source record.
  */
 function mapSourceRow(row: Record<string, unknown>): SourceRecord {
   return {
@@ -44,7 +44,7 @@ function mapSourceRow(row: Record<string, unknown>): SourceRecord {
 /**
  * Retrieves all stored stream sources, ordered by creation date descending.
  *
- * @returns {SourceRecord[]} An array of source records.
+ * @returns An array of source records.
  */
 export function listSources(): SourceRecord[] {
   const rows = getDb().query("SELECT * FROM sources ORDER BY created_at DESC").all() as Record<
@@ -57,8 +57,8 @@ export function listSources(): SourceRecord[] {
 /**
  * Retrieves a single stream source by its unique identifier.
  *
- * @param {string} id - The ID of the source.
- * @returns {SourceRecord | null} The matching source, or null if not found.
+ * @param id - The ID of the source.
+ * @returns The matching source, or null if not found.
  */
 export function getSource(id: string): SourceRecord | null {
   const row = getDb().query("SELECT * FROM sources WHERE id = ?").get(id) as
@@ -71,8 +71,8 @@ export function getSource(id: string): SourceRecord | null {
  * Creates a new stream source record in the database.
  * Supports direct URLs or Google Drive shared links.
  *
- * @param {SourceCreateInput & { filePath?: string | null }} input - The creation payload including the resolved file path if any.
- * @returns {SourceRecord} The newly created source record.
+ * @param input - The creation payload including the resolved file path, if any.
+ * @returns The newly created source record.
  */
 export function createSource(
   input: SourceCreateInput & { filePath?: string | null },
@@ -99,9 +99,9 @@ export function createSource(
 /**
  * Updates the ffprobe metadata and status of an existing source.
  *
- * @param {string} id - The source ID to update.
- * @param {Partial<Pick<SourceRecord, "status" | "invalidReason" | "durationSec" | "videoCodec" | "audioCodec" | "videoBitrate" | "width" | "height" | "fps" | "sha256" | "sizeBytes" | "filePath">>} data - The extracted probe metrics and resolution status.
- * @returns {SourceRecord | null} The updated source, or null if the original source was not found.
+ * @param id - The source ID to update.
+ * @param data - The extracted probe metrics and resolution status.
+ * @returns The updated source, or null if the original source was not found.
  */
 export function updateSourceProbe(
   id: string,
@@ -125,6 +125,15 @@ export function updateSourceProbe(
 ): SourceRecord | null {
   const existing = getSource(id);
   if (!existing) return null;
+  if (data.filePath && data.filePath !== existing.filePath && existing.filePath) {
+    try {
+      unlinkSync(existing.filePath);
+    } catch {
+      addEvent(null, "source_warning", `Old cache file could not be deleted for source ${id}`, {
+        sourceId: id,
+      });
+    }
+  }
   getDb()
     .query(
       "UPDATE sources SET status = ?, invalid_reason = ?, duration_sec = ?, video_codec = ?, audio_codec = ?, video_bitrate = ?, width = ?, height = ?, fps = ?, sha256 = ?, size_bytes = ?, file_path = ?, updated_at = ? WHERE id = ?",
@@ -149,11 +158,10 @@ export function updateSourceProbe(
 }
 
 /**
- * Deletes a source from the database.
- * Does not remove the underlying file from the filesystem.
+ * Deletes a source from the database and removes its cached file when present.
  *
- * @param {string} id - The ID of the source to delete.
- * @returns {boolean} True if a row was successfully deleted, otherwise false.
+ * @param id - The ID of the source to delete.
+ * @returns True if a row was successfully deleted, otherwise false.
  */
 export function deleteSource(id: string): boolean {
   const existing = getSource(id);
@@ -169,14 +177,14 @@ export function deleteSource(id: string): boolean {
     throw new Error(`Source is used by ${referenceCount} stream(s)`);
   }
   const deleted = getDb().query("DELETE FROM sources WHERE id = ?").run(id).changes > 0;
-  if (deleted && existing?.filePath) {
+  if (deleted && existing.filePath) {
     try {
       unlinkSync(existing.filePath);
     } catch {
       addEvent(
         null,
         "source_warning",
-        `Orphaned cache file could not be deleted: ${existing.filePath}`,
+        `Orphaned cache file could not be deleted for source ${id}`,
         {
           sourceId: id,
         },

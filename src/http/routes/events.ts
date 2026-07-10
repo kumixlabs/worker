@@ -1,3 +1,5 @@
+/** Event listing, export, signed URL, and SSE routes. */
+
 import type { Hono } from "hono";
 
 import { clearEvents, listEvents, onEvent } from "../../db/events";
@@ -7,6 +9,12 @@ import { onStreamEvent } from "../../services/stream-runner";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
+/**
+ * Formats recent events as a plain-text export body.
+ *
+ * @param streamId - Optional stream ID to scope the export.
+ * @returns Newline-separated event log text.
+ */
 function formatEventsText(streamId?: string) {
   return listEvents(streamId)
     .map((event) => {
@@ -16,6 +24,12 @@ function formatEventsText(streamId?: string) {
     .join("\n");
 }
 
+/**
+ * Checks whether an event export/SSE path may receive a signed browser URL.
+ *
+ * @param path - Requested path to sign.
+ * @returns True when the path is an allowed event endpoint.
+ */
 function allowedSignedPath(path: string): boolean {
   try {
     const url = new URL(path, "http://worker.local");
@@ -29,6 +43,12 @@ function allowedSignedPath(path: string): boolean {
   }
 }
 
+/**
+ * Creates a server-sent events stream for global or stream-specific events.
+ *
+ * @param streamId - Optional stream ID to scope events.
+ * @returns Readable stream that emits SSE frames.
+ */
 function sseResponse(streamId?: string) {
   let off: (() => void) | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;

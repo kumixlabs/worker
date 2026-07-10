@@ -19,8 +19,8 @@ import { getDb } from "./client";
 /**
  * Maps a SQLite database row to a TargetRecord object.
  *
- * @param {Record<string, unknown>} row - The raw database row.
- * @returns {TargetRecord} The strongly-typed TargetRecord.
+ * @param row - The raw database row.
+ * @returns The strongly typed target record.
  */
 function mapTargetRow(row: Record<string, unknown>): TargetRecord {
   return {
@@ -37,7 +37,7 @@ function mapTargetRow(row: Record<string, unknown>): TargetRecord {
  * Retrieves all stored stream targets, ordered by creation date descending.
  * Does not expose the encrypted stream key payload.
  *
- * @returns {TargetRecord[]} An array of target records.
+ * @returns An array of target records.
  */
 export function listTargets(): TargetRecord[] {
   const rows = getDb().query("SELECT * FROM targets ORDER BY created_at DESC").all() as Record<
@@ -50,8 +50,8 @@ export function listTargets(): TargetRecord[] {
 /**
  * Retrieves a single stream target by its unique identifier, including its ciphered stream key.
  *
- * @param {string} id - The ID of the target.
- * @returns {(TargetRecord & { streamKey: string }) | null} The matching target, or null if not found.
+ * @param id - The ID of the target.
+ * @returns The matching target with encrypted stream key payload, or null if not found.
  */
 export function getTarget(id: string): (TargetRecord & { streamKey: string }) | null {
   const row = getDb().query("SELECT * FROM targets WHERE id = ?").get(id) as
@@ -65,8 +65,8 @@ export function getTarget(id: string): (TargetRecord & { streamKey: string }) | 
  * Creates a new stream target in the database.
  * The stream key is encrypted at rest before insertion.
  *
- * @param {TargetCreateInput} input - The creation payload including the plaintext stream key.
- * @returns {TargetRecord} The newly created target record without the raw stream key.
+ * @param input - The creation payload including the plaintext stream key.
+ * @returns The newly created target record without the raw stream key.
  */
 export function createTarget(input: TargetCreateInput): TargetRecord {
   const id = `tgt_${nanoid(12)}`;
@@ -92,9 +92,9 @@ export function createTarget(input: TargetCreateInput): TargetRecord {
  * Updates an existing stream target.
  * Modifying the stream key triggers a new encryption process.
  *
- * @param {string} id - The target ID to update.
- * @param {TargetPatchInput} input - The modified properties to save.
- * @returns {TargetRecord | null} The updated target, or null if not found.
+ * @param id - The target ID to update.
+ * @param input - The modified properties to save.
+ * @returns The updated target, or null if not found.
  */
 export function patchTarget(id: string, input: TargetPatchInput): TargetRecord | null {
   const existing = getTarget(id);
@@ -119,8 +119,8 @@ export function patchTarget(id: string, input: TargetPatchInput): TargetRecord |
  * Deletes a target from the database.
  * Throws when any stream still references this target.
  *
- * @param {string} id - The ID of the target to delete.
- * @returns {boolean} True if a row was successfully deleted, otherwise false.
+ * @param id - The ID of the target to delete.
+ * @returns True if a row was successfully deleted, otherwise false.
  */
 export function deleteTarget(id: string): boolean {
   const row = getDb().query("SELECT COUNT(*) AS count FROM streams WHERE target_id = ?").get(id) as
@@ -165,8 +165,8 @@ export function reencryptTargetSecrets(oldToken: string, newToken: string): void
 /**
  * Strips the ciphered stream key payload from a target response and adds a masked preview.
  *
- * @param {TargetRecord & { streamKey?: string }} targetRecord - The target object.
- * @returns {TargetRecord & { streamKeyMasked?: string }} The safe target representation for clients.
+ * @param targetRecord - The target object.
+ * @returns The safe target representation for clients.
  */
 export function safeTarget(
   targetRecord: TargetRecord & { streamKey?: string },

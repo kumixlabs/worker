@@ -49,7 +49,11 @@ type RecurrenceRule = {
  */
 function recurrenceRule(value: unknown): RecurrenceRule {
   if (!value || typeof value !== "object") return {};
-  return value as RecurrenceRule;
+  const rule = value as RecurrenceRule;
+  return {
+    time: typeof rule.time === "string" ? rule.time : undefined,
+    weekdays: Array.isArray(rule.weekdays) ? rule.weekdays.filter(Number.isInteger) : undefined,
+  };
 }
 
 /**
@@ -71,7 +75,9 @@ function daysInMonth(year: number, month: number): number {
  * @returns True when the value exists and is at or before now.
  */
 function isDue(value: string | null, now: Date): boolean {
-  return !!value && new Date(value).getTime() <= now.getTime();
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time <= now.getTime();
 }
 
 /**
@@ -87,7 +93,8 @@ export function computeNextSchedule(stream: StreamRecord, now = new Date()): str
 
   const timezone = readSettings().timezone;
   const rule = recurrenceRule(stream.recurrenceRule);
-  const base = stream.scheduledFor ? new Date(stream.scheduledFor) : now;
+  const scheduledTime = stream.scheduledFor ? new Date(stream.scheduledFor).getTime() : NaN;
+  const base = Number.isFinite(scheduledTime) ? new Date(scheduledTime) : now;
   const parts = zonedParts(new Date(Math.max(base.getTime(), now.getTime())), timezone);
   const [ruleHour, ruleMinute] = rule.time?.split(":").map(Number) ?? [parts.hour, parts.minute];
   parts.hour = ruleHour;
@@ -158,7 +165,7 @@ export function collectDueActions(streams: StreamRecord[], now = new Date()): Sc
  * advances recurring schedules, and records the tick state.
  *
  * @param now - The reference time for evaluating due actions.
- * @returns The list of started and stopped stream ids.
+ * @returns The list of started and stopped stream IDs.
  */
 export async function tickScheduler(now = new Date()): Promise<SchedulerTickResult> {
   const result: SchedulerTickResult = { started: [], stopped: [] };

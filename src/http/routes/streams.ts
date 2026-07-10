@@ -1,3 +1,5 @@
+/** Stream CRUD, start/stop, and bulk delete routes. */
+
 import type { Hono } from "hono";
 import { z } from "zod";
 
@@ -11,6 +13,12 @@ import { doc } from "./common";
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(100) });
 
+/**
+ * Converts user-entered local datetimes into UTC ISO timestamps for persistence.
+ *
+ * @param input - Stream create or patch payload containing schedule fields.
+ * @returns Payload with normalized schedule fields.
+ */
 function normalizeStreamSchedule<
   T extends { scheduledFor?: string | null; autoStopAt?: string | null; stoppedAt?: string | null },
 >(input: T): T {

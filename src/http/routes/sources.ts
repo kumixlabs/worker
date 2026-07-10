@@ -1,3 +1,5 @@
+/** Source CRUD, download/probe, signed preview, and range streaming routes. */
+
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { extname } from "node:path";
@@ -33,6 +35,12 @@ const previewContentTypes: Record<string, string> = {
   ".ogv": "video/ogg",
 };
 
+/**
+ * Resolves a preview response content type from the cached file extension.
+ *
+ * @param filePath - Cached source file path.
+ * @returns MIME type for preview streaming.
+ */
 function previewContentType(filePath: string): string {
   return previewContentTypes[extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
@@ -157,7 +165,14 @@ export function registerSourceRoutes(app: Hono) {
       if (match) {
         const start = match[1] ? Number(match[1]) : 0;
         const end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1;
-        if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= total) {
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 0 ||
+          end < 0 ||
+          start > end ||
+          start >= total
+        ) {
           return new Response(null, {
             status: 416,
             headers: { "content-range": `bytes */${total}`, "accept-ranges": "bytes" },

@@ -1,3 +1,5 @@
+/** Dashboard-facing settings, stats, metrics, and health-detail routes. */
+
 import type { Hono } from "hono";
 
 import { stats } from "../../db/stats";

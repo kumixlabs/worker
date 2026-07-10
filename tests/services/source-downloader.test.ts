@@ -1,5 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { resetDbForTests } from "../../src/db/client";
+import { createSource, getSource } from "../../src/db/sources";
+import { writeSettings } from "../../src/runtime/config";
 import {
   extractGDriveFileId,
   isPrivateIp,
@@ -7,6 +14,28 @@ import {
   setFetchImplForTests,
   validateUrl,
 } from "../../src/services/source-downloader";
+
+let dataDir: string | null = null;
+
+beforeEach(() => {
+  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-downloader-"));
+  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
+  resetDbForTests();
+  writeSettings({
+    dataDir,
+    diskUsageLimitPercent: 90,
+    port: 8080,
+    timezone: "Asia/Jakarta",
+    token: "test-token-123456",
+  });
+});
+
+afterEach(() => {
+  resetDbForTests();
+  delete process.env.KUMIX_WORKER_DATA_DIR;
+  if (dataDir) rmSync(dataDir, { force: true, recursive: true });
+  dataDir = null;
+});
 
 describe("isPrivateIp", () => {
   it("flags private, loopback, and metadata ranges", () => {
@@ -126,5 +155,30 @@ describe("safeFetch", () => {
     await expect(safeFetch("https://8.8.8.8/video.mp4", undefined, 2)).rejects.toThrow(
       /Too many redirects/,
     );
+  });
+});
+
+describe("downloadAndProbeSource", () => {
+  afterEach(() => {
+    setFetchImplForTests(null);
+  });
+
+  it("uses the Google Drive confirmation flow for Drive URLs registered as url sources", async () => {
+    const source = createSource({
+      kind: "url",
+      name: "Drive URL",
+      url: "https://drive.google.com/file/d/ABC123_def-456/view",
+    });
+    const fetchMock = vi.fn(async () => new Response(null, { status: 403 }));
+    setFetchImplForTests(fetchMock);
+
+    const { downloadAndProbeSource } = await import("../../src/services/source-downloader");
+    await downloadAndProbeSource(source.id);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://drive.usercontent.google.com/download?id=ABC123_def-456&export=download",
+      expect.any(Object),
+    );
+    expect(getSource(source.id)?.invalidReason).toBe("Download failed with status 403");
   });
 });

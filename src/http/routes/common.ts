@@ -1,3 +1,5 @@
+/** OpenAPI metadata helpers shared by HTTP route modules. */
+
 import { describeRoute } from "hono-openapi";
 
 /**

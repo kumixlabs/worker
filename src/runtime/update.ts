@@ -71,6 +71,14 @@ function parseVersion(version: string): [number, number, number] | null {
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
+/**
+ * Compares two semver-like version strings.
+ * Falls back to lexical comparison when either value is not `x.y.z`.
+ *
+ * @param a - Left version.
+ * @param b - Right version.
+ * @returns Positive when `a` is newer, negative when `b` is newer, or zero when equal.
+ */
 function compareVersions(a: string, b: string): number {
   const left = parseVersion(a);
   const right = parseVersion(b);
@@ -82,6 +90,12 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * Waits for the local worker health endpoint to become healthy after a restart.
+ *
+ * @param port - Worker HTTP port.
+ * @param timeoutMs - Maximum time to wait in milliseconds.
+ */
 async function waitForHealth(port: number, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
@@ -192,7 +206,7 @@ export async function performSelfUpdate(args: {
   result.installed = true;
 
   if (args.restartMode === "never") {
-    result.restartSkippedReason = "restart disabled by --no-restart";
+    result.restartSkippedReason = "restart not requested (use --restart or --force)";
     return result;
   }
 

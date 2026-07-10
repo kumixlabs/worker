@@ -79,6 +79,13 @@ describe.skipIf(!hasSqlite())("DB integration", () => {
     expect(listEvents()).toHaveLength(0);
   });
 
+  it("persists falsy JSON event payloads", () => {
+    addEvent(null, "system", "Zero", 0);
+    addEvent(null, "system", "False", false);
+
+    expect(listEvents().map((event) => event.payload)).toEqual([false, 0]);
+  });
+
   it("blocks deleting sources and targets used by streams", () => {
     const source = createSource({
       kind: "url",

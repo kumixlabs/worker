@@ -17,8 +17,8 @@ let insertCount = 0;
  * Subscribes a listener function to incoming event records globally.
  * Returns an unsubscribe callback.
  *
- * @param {(event: EventRecord) => void} listener - The callback function to invoke on new events.
- * @returns {() => void} A function to cancel the subscription.
+ * @param listener - The callback function to invoke on new events.
+ * @returns A function to cancel the subscription.
  */
 export function onEvent(listener: (event: EventRecord) => void): () => void {
   eventListeners.add(listener);
@@ -29,10 +29,10 @@ export function onEvent(listener: (event: EventRecord) => void): () => void {
  * Creates an event entry in the log and emits it to all global subscribers.
  * Triggers a pruning sweep if the table row count exceeds the defined safety max (5000).
  *
- * @param {string | null} streamId - Optional stream ID associated with the event.
- * @param {string} kind - A short string denoting the event type (e.g. 'info', 'running').
- * @param {string} message - A descriptive message to log.
- * @param {unknown | null} payload - An optional JSON payload holding diagnostic details.
+ * @param streamId - Optional stream ID associated with the event.
+ * @param kind - A short string denoting the event type, such as `info` or `running`.
+ * @param message - A descriptive message to log.
+ * @param payload - Optional JSON payload holding diagnostic details.
  */
 export function addEvent(
   streamId: string | null,
@@ -45,7 +45,7 @@ export function addEvent(
   const db = getDb();
   db.query(
     "INSERT INTO events (id, stream_id, kind, message, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(id, streamId, kind, message, payload ? JSON.stringify(payload) : null, now);
+  ).run(id, streamId, kind, message, payload !== null ? JSON.stringify(payload) : null, now);
 
   const event: EventRecord = { id, streamId, kind, message, payload, createdAt: now };
   for (const listener of eventListeners) {
@@ -76,7 +76,7 @@ export function addEvent(
 /**
  * Clears all rows inside the events table.
  *
- * @returns {number} The count of deleted rows.
+ * @returns The count of deleted rows.
  */
 export function clearEvents(): number {
   return getDb().query("DELETE FROM events").run().changes;
@@ -85,8 +85,8 @@ export function clearEvents(): number {
 /**
  * Retrieves the most recent 200 events. If a streamId is provided, filters the result.
  *
- * @param {string} [streamId] - An optional stream ID to filter logs.
- * @returns {EventRecord[]} The chronological event slice ordered by creation date descending.
+ * @param streamId - Optional stream ID to filter logs.
+ * @returns The most recent event slice ordered by creation date descending.
  */
 export function listEvents(streamId?: string): EventRecord[] {
   const rows = streamId

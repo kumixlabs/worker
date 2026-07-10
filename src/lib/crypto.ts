@@ -68,6 +68,7 @@ export function decryptSecretWithToken(value: string, token?: string): string {
     const iv = Buffer.from(parts[2]!, "base64url");
     const tag = Buffer.from(parts[3]!, "base64url");
     const encrypted = Buffer.from(parts[4]!, "base64url");
+    if (iv.length !== 12 || tag.length !== 16 || encrypted.length === 0) return "";
     const decipher = createDecipheriv("aes-256-gcm", key(token), iv);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");

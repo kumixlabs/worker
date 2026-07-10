@@ -13,7 +13,7 @@ import { listTargets } from "./targets";
  * Gathers counts of streams, sources, targets, plus cache size and disk usage
  * from runtimeMetrics.
  *
- * @returns {WorkerStats} The summary counts and current system state details.
+ * @returns The summary counts and current system state details.
  */
 export function stats(): WorkerStats {
   const sources = listSources();

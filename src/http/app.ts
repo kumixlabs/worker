@@ -9,15 +9,15 @@ import { cors } from "hono/cors";
 import { openAPIRouteHandler } from "hono-openapi";
 
 import { allowedCorsOrigins, readSettings } from "../runtime/config";
-import { fail, ok, tokenAuth, webApiRateLimit } from "./middleware";
+import { fail, ok, publicApiRateLimit, tokenAuth } from "./middleware";
 import { registerAuthRoutes } from "./routes/auth";
 import { doc } from "./routes/common";
 import { registerEventRoutes } from "./routes/events";
+import { registerPublicRoutes } from "./routes/public";
 import { registerSourceRoutes } from "./routes/sources";
 import { registerStreamRoutes } from "./routes/streams";
 import { registerSystemRoutes } from "./routes/system";
 import { registerTargetRoutes } from "./routes/targets";
-import { registerWebRoutes } from "./routes/v1";
 import { findPublicDir, serveStatic } from "./static";
 
 /**
@@ -112,8 +112,8 @@ export function createApiApp() {
     }),
   );
   app.use("/api/v1/*", tokenAuth);
-  app.use("/api/v1/*", webApiRateLimit);
-  registerWebRoutes(app);
+  app.use("/api/v1/*", publicApiRateLimit);
+  registerPublicRoutes(app);
 
   app.use("/api/*", async (c, next) => {
     if (c.req.path.startsWith("/api/v1")) return await next();

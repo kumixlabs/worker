@@ -102,10 +102,24 @@ function parseTimezone(value: string): string {
   return value;
 }
 
+/**
+ * Parses and validates a token option.
+ *
+ * @param value - The raw CLI token value.
+ * @returns The validated token.
+ */
 function parseToken(value: string): string {
   return validToken(value);
 }
 
+/**
+ * Builds a dashboard URL for CLI output, optionally including the auth token.
+ *
+ * @param host - Bind host or display host.
+ * @param port - HTTP port.
+ * @param token - Optional token to embed in the auth query string.
+ * @returns Dashboard or auth URL.
+ */
 export function dashboardUrl(host: string, port: number, token?: string): string {
   const dashboardHost = host === "0.0.0.0" ? "localhost" : host;
   const base = `http://${dashboardHost}:${port}`;
@@ -346,8 +360,8 @@ export function createCliProgram(): Command {
 
       try {
         const health = runtimeHealthDetails();
-        console.log(`[ok] FFmpeg: ${health.ffmpeg.version ?? "available"}`);
-        console.log(`[ok] FFprobe: ${health.ffprobe.version ?? "available"}`);
+        console.log(`[ok] FFmpeg: ${health.ffmpeg.version}`);
+        console.log(`[ok] FFprobe: ${health.ffprobe.version}`);
       } catch (error) {
         ok = false;
         console.error(`[fail] ${error instanceof Error ? error.message : "FFmpeg unavailable"}`);
@@ -355,7 +369,7 @@ export function createCliProgram(): Command {
 
       console.log(`[ok] Config readable at ${settings.dataDir}`);
       console.log(
-        settings.token.length >= 12
+        settings.token.length >= 16
           ? "[ok] Token present"
           : "[warn] Token looks too short; run 'kumix-worker token --regenerate'",
       );

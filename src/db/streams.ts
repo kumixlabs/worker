@@ -13,8 +13,8 @@ import { getDb } from "./client";
 /**
  * Maps a SQLite database row to a StreamRecord object.
  *
- * @param {Record<string, unknown>} row - The raw database row.
- * @returns {StreamRecord} The strongly-typed StreamRecord.
+ * @param row - The raw database row.
+ * @returns The strongly typed stream record.
  */
 function mapStreamRow(row: Record<string, unknown>): StreamRecord {
   return {
@@ -42,7 +42,7 @@ function mapStreamRow(row: Record<string, unknown>): StreamRecord {
  * Retrieves all stored live streams, joining their respective source and target metadata,
  * ordered by creation date descending.
  *
- * @returns {StreamRecord[]} An array of stream records with source and target objects included.
+ * @returns An array of stream records with source and target objects included.
  */
 export function listStreams(): StreamRecord[] {
   const db = getDb();
@@ -86,8 +86,8 @@ export function listStreams(): StreamRecord[] {
  * Retrieves a single live stream by its unique identifier.
  * Does not automatically join source or target objects to keep operations lightweight.
  *
- * @param {string} id - The ID of the stream.
- * @returns {StreamRecord | null} The matching stream, or null if not found.
+ * @param id - The ID of the stream.
+ * @returns The matching stream, or null if not found.
  */
 export function getStream(id: string): StreamRecord | null {
   const row = getDb().query("SELECT * FROM streams WHERE id = ?").get(id) as
@@ -100,8 +100,8 @@ export function getStream(id: string): StreamRecord | null {
  * Creates a new live stream task in the database.
  * The job initializes in a 'pending' state and awaits scheduler pick up or manual start.
  *
- * @param {StreamCreateInput} input - The creation payload including source and target mappings.
- * @returns {StreamRecord} The newly created stream record.
+ * @param input - The creation payload including source and target mappings.
+ * @returns The newly created stream record.
  */
 export function createStream(input: StreamCreateInput): StreamRecord {
   const id = `stm_${nanoid(12)}`;
@@ -129,13 +129,16 @@ export function createStream(input: StreamCreateInput): StreamRecord {
 /**
  * Updates an existing live stream configuration.
  *
- * @param {string} id - The stream ID to update.
- * @param {StreamPatchInput} input - The modified properties to save.
- * @returns {StreamRecord | null} The updated stream, or null if not found.
+ * @param id - The stream ID to update.
+ * @param input - The modified properties to save.
+ * @returns The updated stream, or null if not found.
  */
 export function patchStream(id: string, input: StreamPatchInput): StreamRecord | null {
   const existing = getStream(id);
   if (!existing) return null;
+  if (existing.status === "running" || existing.status === "stopping") {
+    throw new Error("Cannot update a running or stopping stream");
+  }
   getDb()
     .query(
       "UPDATE streams SET title = ?, source_id = ?, target_id = ?, loop = ?, scheduled_for = ?, auto_stop_at = ?, recurrence = ?, recurrence_rule = ?, stopped_at = ?, updated_at = ? WHERE id = ?",
@@ -166,10 +169,10 @@ export function patchStream(id: string, input: StreamPatchInput): StreamRecord |
  * Updates the runtime status and process metadata of a live stream.
  * Automatically manages timestamps when transitioning states.
  *
- * @param {string} id - The stream ID to update.
- * @param {StreamRecord["status"]} status - The target state.
- * @param {Partial<Pick<StreamRecord, "pid" | "startedAt" | "stoppedAt" | "lastError" | "lastMetrics">>} data - Optional runtime details to update.
- * @returns {StreamRecord | null} The updated stream, or null if not found.
+ * @param id - The stream ID to update.
+ * @param status - The target state.
+ * @param data - Optional runtime details to update.
+ * @returns The updated stream, or null if not found.
  */
 export function setStreamStatus(
   id: string,
@@ -180,6 +183,16 @@ export function setStreamStatus(
 ): StreamRecord | null {
   const existing = getStream(id);
   if (!existing) return null;
+  const allowed: Record<StreamRecord["status"], StreamRecord["status"][]> = {
+    pending: ["running", "failed", "stopped"],
+    running: ["pending", "stopping", "stopped", "failed"],
+    stopping: ["stopped", "failed"],
+    stopped: ["pending", "running", "failed"],
+    failed: ["pending", "running", "stopped"],
+  };
+  if (existing.status !== status && !allowed[existing.status].includes(status)) {
+    throw new Error(`Invalid stream status transition: ${existing.status} -> ${status}`);
+  }
   getDb()
     .query(
       "UPDATE streams SET status = ?, started_at = ?, stopped_at = ?, pid = ?, last_error = ?, last_metrics = ?, updated_at = ? WHERE id = ?",
@@ -207,8 +220,8 @@ export function setStreamStatus(
  * Deletes a live stream from the database.
  * Refuses to delete a stream that is still running or stopping.
  *
- * @param {string} id - The ID of the stream to delete.
- * @returns {boolean} True if a row was successfully deleted, otherwise false.
+ * @param id - The ID of the stream to delete.
+ * @returns True if a row was successfully deleted, otherwise false.
  */
 export function deleteStream(id: string): boolean {
   const existing = getStream(id);

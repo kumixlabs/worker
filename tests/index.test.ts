@@ -19,7 +19,7 @@ describe("public package exports", () => {
     expect(maskToken("abcdef1234567890")).toBe("abcdef...7890");
   });
 
-  it("exports schemas needed by web consumers", () => {
+  it("exports schemas needed by public consumers", () => {
     expect(
       sourceCreateSchema.safeParse({ kind: "url", name: "Video", url: "https://example.com/a.mp4" })
         .success,

@@ -60,6 +60,7 @@ describe("scheduler", () => {
           stream({ id: "str_start", scheduledFor: "2026-01-01T11:59:00.000Z", status: "pending" }),
           stream({ autoStopAt: "2026-01-01T11:59:00.000Z", id: "str_stop", status: "running" }),
           stream({ id: "str_future", scheduledFor: "2026-01-01T12:01:00.000Z", status: "pending" }),
+          stream({ id: "str_invalid", scheduledFor: "not-a-date", status: "pending" }),
           stream({
             id: "str_recur",
             recurrence: "daily",
@@ -92,5 +93,16 @@ describe("scheduler", () => {
       ),
     ).toBe("2026-01-08T12:00:00.000Z");
     expect(computeNextSchedule(stream({ recurrence: "none" }), now)).toBeNull();
+  });
+
+  it("falls back to now when a recurring stream has an invalid scheduledFor", () => {
+    const now = new Date("2026-01-01T00:30:00.000Z");
+
+    expect(
+      computeNextSchedule(
+        stream({ recurrence: "daily", recurrenceRule: { time: "08:00" }, scheduledFor: "bad" }),
+        now,
+      ),
+    ).toBe("2026-01-01T01:00:00.000Z");
   });
 });

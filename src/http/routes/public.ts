@@ -1,3 +1,5 @@
+/** Core-facing `/api/v1/*` routes for health, stats, capabilities, and token rotation. */
+
 import type { Hono } from "hono";
 
 import { addEvent } from "../../db/events";
@@ -10,15 +12,24 @@ import { readSettings, writeSettings } from "../../runtime/config";
 import { runtimeHealthDetails, runtimeMetrics } from "../../runtime/metrics";
 import { schedulerState } from "../../runtime/scheduler";
 import { tokenRotateSchema } from "../../schemas/settings";
-import type { WebWorkerCapabilities, WebWorkerLinkInfo, WebWorkerStats } from "../../types/worker";
+import type {
+  PublicWorkerCapabilities,
+  PublicWorkerLinkInfo,
+  PublicWorkerStats,
+} from "../../types/worker";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
-const webStatsCacheTtlMs = 2_000;
+const publicStatsCacheTtlMs = 2_000;
 const bulkDeleteMaxIds = 100;
-let cachedWebStats: { expiresAt: number; value: WebWorkerStats } | null = null;
+let cachedPublicStats: { expiresAt: number; value: PublicWorkerStats } | null = null;
 
-function webCapabilities(): WebWorkerCapabilities {
+/**
+ * Builds the stable capability document for core integrations.
+ *
+ * @returns Public worker capabilities and safe settings.
+ */
+function publicCapabilities(): PublicWorkerCapabilities {
   const settings = readSettings();
   return {
     apiVersion: "v1",
@@ -36,7 +47,7 @@ function webCapabilities(): WebWorkerCapabilities {
     limits: {
       signedUrlTtlMs,
       bulkDeleteMaxIds,
-      webStatsCacheTtlMs,
+      publicStatsCacheTtlMs,
     },
     settings: {
       timezone: settings.timezone,
@@ -45,17 +56,27 @@ function webCapabilities(): WebWorkerCapabilities {
   };
 }
 
-function webLinkInfo(): WebWorkerLinkInfo {
+/**
+ * Builds link metadata used by external onboarding flows.
+ *
+ * @returns Public link metadata without exposing the raw token.
+ */
+function publicLinkInfo(): PublicWorkerLinkInfo {
   return {
     apiVersion: "v1",
     agentVersion: readPackageVersion(),
     dashboardPath: "/auth?token={token}",
     tokenLength: readSettings().token.length,
-    capabilities: webCapabilities(),
+    capabilities: publicCapabilities(),
   };
 }
 
-function computeWebStats(): WebWorkerStats {
+/**
+ * Aggregates fresh public monitoring stats from database and runtime state.
+ *
+ * @returns Public stats payload safe for core integrations.
+ */
+function computePublicStats(): PublicWorkerStats {
   const streams = listStreams();
   const sources = listSources();
   const targets = listTargets();
@@ -113,15 +134,25 @@ function computeWebStats(): WebWorkerStats {
   };
 }
 
-function webStats(): WebWorkerStats {
+/**
+ * Returns public stats, using a short in-memory cache to reduce polling cost.
+ *
+ * @returns Cached or freshly computed public stats.
+ */
+function publicStats(): PublicWorkerStats {
   const now = Date.now();
-  if (cachedWebStats && cachedWebStats.expiresAt > now) return cachedWebStats.value;
-  const value = computeWebStats();
-  cachedWebStats = { expiresAt: now + webStatsCacheTtlMs, value };
+  if (cachedPublicStats && cachedPublicStats.expiresAt > now) return cachedPublicStats.value;
+  const value = computePublicStats();
+  cachedPublicStats = { expiresAt: now + publicStatsCacheTtlMs, value };
   return value;
 }
 
-function webHealth() {
+/**
+ * Builds lightweight public health information.
+ *
+ * @returns Public health payload without local file paths or secrets.
+ */
+function publicHealth() {
   const streams = listStreams();
   const health = runtimeHealthDetails();
   return {
@@ -158,51 +189,55 @@ function rotateToken(token: string) {
 }
 
 /**
- * Registers web-facing health, stats, and token rotation routes.
+ * Registers public-facing health, stats, and token rotation routes.
  *
  * @param app - Hono app to attach routes to.
  */
-export function registerWebRoutes(app: Hono) {
+export function registerPublicRoutes(app: Hono) {
   app.get(
     "/api/v1/health",
-    doc("Web", "Read web health", "Returns lightweight worker health for external integrations."),
-    (c) => c.json(ok(webHealth())),
+    doc(
+      "Public",
+      "Read public health",
+      "Returns lightweight worker health for external integrations.",
+    ),
+    (c) => c.json(ok(publicHealth())),
   );
 
   app.get(
     "/api/v1/capabilities",
     doc(
-      "Web",
+      "Public",
       "Read worker capabilities",
       "Returns production API capabilities and safe runtime settings for external integrations.",
     ),
-    (c) => c.json(ok(webCapabilities())),
+    (c) => c.json(ok(publicCapabilities())),
   );
 
   app.get(
     "/api/v1/link",
     doc(
-      "Web",
+      "Public",
       "Read link metadata",
       "Returns worker link metadata for external integrations and onboarding flows.",
     ),
-    (c) => c.json(ok(webLinkInfo())),
+    (c) => c.json(ok(publicLinkInfo())),
   );
 
   app.get(
     "/api/v1/stats",
     doc(
-      "Web",
-      "Read web stats",
+      "Public",
+      "Read Public stats",
       "Returns read-only worker monitoring data for external integrations.",
     ),
-    (c) => c.json(ok(webStats())),
+    (c) => c.json(ok(publicStats())),
   );
 
   app.post(
     "/api/v1/settings/token",
     doc(
-      "Web",
+      "Public",
       "Rotate token",
       "Replaces the worker token after authenticating with the old token.",
     ),

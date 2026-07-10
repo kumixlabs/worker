@@ -6,7 +6,7 @@
  * Generates the current timestamp in ISO 8601 format.
  * Used for standardizing created_at and updated_at database fields.
  *
- * @returns {string} The current date and time as an ISO string.
+ * @returns The current date and time as an ISO string.
  */
 export function nowIso(): string {
   return new Date().toISOString();
@@ -16,9 +16,9 @@ export function nowIso(): string {
  * Safely parses a JSON string column into a typed object.
  * Returns null when the value is empty or cannot be parsed.
  *
- * @template T - The expected shape of the parsed value.
- * @param {string | null} value - The raw JSON string from the database.
- * @returns {T | null} The parsed object, or null on empty/invalid input.
+ * @template T - Expected shape of the parsed value.
+ * @param value - The raw JSON string from the database.
+ * @returns The parsed object, or null on empty/invalid input.
  */
 export function parseJson<T>(value: string | null): T | null {
   if (!value) return null;

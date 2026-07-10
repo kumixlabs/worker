@@ -1,3 +1,5 @@
+/** Dashboard authentication handoff and token verification routes. */
+
 import { randomBytes } from "node:crypto";
 
 import type { Hono } from "hono";

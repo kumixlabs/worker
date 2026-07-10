@@ -66,7 +66,7 @@ describe("config validation", () => {
 
 describe("resetWorkerData guard", () => {
   it("refuses to reset an unmarked directory", () => {
-    const bareDir = mkdtempSync(path.join(tmpdir(), "forge-bare-"));
+    const bareDir = mkdtempSync(path.join(tmpdir(), "kumix-bare-"));
     process.env.KUMIX_WORKER_DATA_DIR = bareDir;
     // Create the directory contents without the marker file.
     mkdirSync(path.join(bareDir, "cache"), { recursive: true });
