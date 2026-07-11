@@ -10,7 +10,7 @@ RUN apt-get update \
     && npm install --global bun@1.3.14
 
 COPY package.json bun.lock ./
-RUN npm install --ignore-scripts=false
+RUN npm install --ignore-scripts
 
 COPY frontend/package.json frontend/bun.lock ./frontend/
 RUN cd frontend && bun install --frozen-lockfile
