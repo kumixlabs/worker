@@ -1,11 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
-# ---- Builder: Bun (glibc) compiles TS + builds the Vite dashboard ----
-FROM oven/bun:1.3.14-debian AS builder
+# ---- Builder: Node + Bun compiles native dependencies and builds the dashboard ----
+FROM node:24-bookworm AS builder
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global bun@1.3.14
+
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN npm install --ignore-scripts=false
 
 COPY frontend/package.json frontend/bun.lock ./frontend/
 RUN cd frontend && bun install --frozen-lockfile
