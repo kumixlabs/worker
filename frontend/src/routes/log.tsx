@@ -121,9 +121,12 @@ export function LogPage() {
       let signed: { url: string };
       try {
         signed = await api.signedUrl(path);
-      } catch {
+      } catch (error) {
         setConnected(false);
-        window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
+        if (error instanceof Error && error.message.includes("401")) {
+          window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
+        }
+        scheduleReconnect();
         return;
       }
       if (cancelled) return;

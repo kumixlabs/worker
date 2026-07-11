@@ -83,6 +83,33 @@ describe("Kumix Worker HTTP app", () => {
     expect(body.error.code).toBe("RATE_LIMITED");
   });
 
+  it("rate limits repeated invalid auth verify attempts", async () => {
+    let response: Response;
+    for (let index = 0; index < 31; index += 1) {
+      response = await app.request("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": "10.0.0.2" },
+        body: JSON.stringify({ token: "wrong-token-value-here" }),
+      });
+    }
+
+    const body = await response!.json();
+
+    expect(response!.status).toBe(429);
+    expect(body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("rate limits repeated invalid auth handoff attempts", async () => {
+    let response: Response;
+    for (let index = 0; index < 31; index += 1) {
+      response = await app.request("/auth?token=wrong-token-value-here", {
+        headers: { "x-forwarded-for": "10.0.0.3" },
+      });
+    }
+
+    expect(response!.status).toBe(429);
+  });
+
   it("accepts bearer token authentication", async () => {
     const response = await app.request("/api/settings", {
       headers: {
@@ -120,8 +147,8 @@ describe("Kumix Worker HTTP app", () => {
     expect(blocked.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  it("blocks all CORS origins by default in production unless configured", async () => {
-    process.env.NODE_ENV = "production";
+  it("blocks all CORS origins by default regardless of environment", async () => {
+    delete process.env.NODE_ENV;
     app = createApiApp();
 
     const unconfigured = await app.request("/api/v1/stats", {

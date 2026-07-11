@@ -8,7 +8,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 
-import { updateSourceProbe } from "../db/sources";
+import { getSource, updateSourceProbe } from "../db/sources";
 import { getFfprobePath } from "../runtime/ffmpeg";
 
 /**
@@ -101,7 +101,7 @@ export function getInvalidProbeReason(probe: ProbeResult): string | null {
  * @returns The parsed probe result.
  * @throws If ffprobe exits non-zero or cannot be spawned.
  */
-export function ffprobe(filePath: string): Promise<ProbeResult> {
+export function ffprobe(filePath: string, signal?: AbortSignal): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(getFfprobePath(), [
       "-v",
@@ -115,6 +115,13 @@ export function ffprobe(filePath: string): Promise<ProbeResult> {
     let stdout = "";
     let stderr = "";
     let settled = false;
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error("ffprobe aborted"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -132,12 +139,14 @@ export function ffprobe(filePath: string): Promise<ProbeResult> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       reject(error);
     });
     child.on("close", (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       if (code !== 0) {
         reject(new Error(stderr || "ffprobe failed"));
         return;
@@ -157,6 +166,7 @@ export function ffprobe(filePath: string): Promise<ProbeResult> {
  */
 export async function probeAndUpdateSource(sourceId: string, filePath: string) {
   try {
+    if (!getSource(sourceId)) return null;
     updateSourceProbe(sourceId, { status: "probing", filePath });
     const [probe, fileStat, sha256] = await Promise.all([
       ffprobe(filePath),

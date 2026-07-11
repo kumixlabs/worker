@@ -65,7 +65,7 @@ function npmCommand(): string {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
-function parseVersion(version: string): [number, number, number] | null {
+export function parseVersion(version: string): [number, number, number] | null {
   const match = version.trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
@@ -79,7 +79,7 @@ function parseVersion(version: string): [number, number, number] | null {
  * @param b - Right version.
  * @returns Positive when `a` is newer, negative when `b` is newer, or zero when equal.
  */
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const left = parseVersion(a);
   const right = parseVersion(b);
   if (!left || !right) return a.localeCompare(b);

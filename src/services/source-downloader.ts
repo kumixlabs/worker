@@ -18,6 +18,7 @@ import { getSource, updateSourceProbe } from "../db/sources";
 import { safeFilenamePart } from "../lib/utils";
 import { getCacheDir, readSettings } from "../runtime/config";
 import { runtimeMetrics } from "../runtime/metrics";
+import type { SourceDownloadProgress } from "../types/source";
 import { probeAndUpdateSource } from "./probe";
 
 const DEFAULT_MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
@@ -27,6 +28,27 @@ const fetchTimeoutMs = 30_000;
 const downloadTimeoutMs = Number(process.env.KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS) || 60 * 60 * 1000; // 1 hour
 const kumixWorkerUserAgent = "Mozilla/5.0 (compatible; KumixWorker/1.0)";
 const gdriveFileIdPattern = /^[A-Za-z0-9_-]{10,128}$/;
+
+const contentTypeExtensions: Record<string, string> = {
+  "video/mp4": ".mp4",
+  "video/quicktime": ".mov",
+  "video/webm": ".webm",
+  "video/x-matroska": ".mkv",
+  "video/x-msvideo": ".avi",
+  "video/ogg": ".ogg",
+  "video/mpeg": ".mpg",
+  "application/octet-stream": ".mp4",
+};
+
+function extensionFromResponse(url: string, response: Response): string {
+  const urlExt = path.extname(new URL(url).pathname);
+  if (urlExt) return urlExt;
+  const contentType = (response.headers.get("content-type") ?? "")
+    .split(";")[0]
+    ?.trim()
+    .toLowerCase();
+  return contentTypeExtensions[contentType ?? ""] ?? ".mp4";
+}
 
 if (process.env.KUMIX_WORKER_IPV4_FIRST !== "0") {
   setDefaultResultOrder("ipv4first");
@@ -79,6 +101,18 @@ const defaultFetch: FetchLike = (url, init) =>
   } as Parameters<typeof undiciFetch>[1]) as unknown as Promise<Response>;
 
 let fetchImpl: FetchLike = defaultFetch;
+
+/**
+ * Tracks the abort controller for each in-flight source download, keyed by
+ * source ID, so a download can be cancelled from the dashboard.
+ */
+const sourceAborts = new Map<string, AbortController>();
+
+/**
+ * Tracks live download progress (bytes written vs total) keyed by source ID so
+ * the dashboard can show a percentage while a source is downloading.
+ */
+const sourceProgress = new Map<string, SourceDownloadProgress>();
 
 /**
  * Overrides the HTTP transport used by safeFetch. Intended for tests so they
@@ -261,7 +295,13 @@ function extractGDriveConfirmedUrl(
     const url = href.startsWith("http")
       ? new URL(href)
       : new URL(href, "https://drive.usercontent.google.com");
-    if (url.searchParams.get("id") === fileId && url.searchParams.has("confirm")) {
+    if (
+      url.protocol === "https:" &&
+      ["drive.google.com", "drive.usercontent.google.com"].includes(url.hostname) &&
+      url.pathname === "/download" &&
+      url.searchParams.get("id") === fileId &&
+      url.searchParams.has("confirm")
+    ) {
       return url.toString();
     }
   }
@@ -484,84 +524,133 @@ export async function downloadAndProbeSource(sourceId: string) {
 
   updateSourceProbe(sourceId, { status: "downloading" });
 
-  let downloadUrl = source.url;
-  let headers: Record<string, string> | undefined;
-  if (effectiveKind === "gdrive") {
-    const fileId = extractGDriveFileId(source.url);
-    if (!fileId) {
+  const controller = new AbortController();
+  sourceAborts.set(sourceId, controller);
+  const downloadTimeout = setTimeout(() => controller.abort(), downloadTimeoutMs);
+  try {
+    let downloadUrl = source.url;
+    let headers: Record<string, string> | undefined;
+    if (effectiveKind === "gdrive") {
+      const fileId = extractGDriveFileId(source.url);
+      if (!fileId) {
+        return updateSourceProbe(sourceId, {
+          status: "invalid",
+          invalidReason: "Invalid Google Drive link",
+        });
+      }
+      const resolved = await resolveGDriveDownload(fileId);
+      downloadUrl = resolved.url;
+      headers = resolved.headers;
+    }
+
+    let response: Response;
+    try {
+      const downloadInit: RequestInit = { signal: controller.signal };
+      if (headers) downloadInit.headers = headers;
+      response = await safeFetch(downloadUrl, downloadInit);
+    } catch (error) {
+      console.error(
+        `[worker] downloadAndProbeSource ${sourceId} (${effectiveKind}) failed:`,
+        error,
+      );
       return updateSourceProbe(sourceId, {
         status: "invalid",
-        invalidReason: "Invalid Google Drive link",
+        invalidReason: error instanceof Error ? error.message : "Download blocked",
       });
     }
-    const resolved = await resolveGDriveDownload(fileId);
-    downloadUrl = resolved.url;
-    headers = resolved.headers;
-  }
-
-  let response: Response;
-  try {
-    const downloadInit: RequestInit = { signal: AbortSignal.timeout(downloadTimeoutMs) };
-    if (headers) downloadInit.headers = headers;
-    response = await safeFetch(downloadUrl, downloadInit);
-  } catch (error) {
-    console.error(`[worker] downloadAndProbeSource ${sourceId} (${effectiveKind}) failed:`, error);
-    return updateSourceProbe(sourceId, {
-      status: "invalid",
-      invalidReason: error instanceof Error ? error.message : "Download blocked",
-    });
-  }
-  if (!response.ok || !response.body) {
-    return updateSourceProbe(sourceId, {
-      status: "invalid",
-      invalidReason: `Download failed with status ${response.status}`,
-    });
-  }
-
-  const contentLength = Number(response.headers.get("content-length") ?? 0);
-  const allowedBytes = allowedDownloadBytes();
-  if (contentLength > maxDownloadBytes || (contentLength > 0 && contentLength > allowedBytes)) {
-    return updateSourceProbe(sourceId, {
-      status: "invalid",
-      invalidReason: "Download exceeds storage limit",
-    });
-  }
-
-  const extension = path.extname(new URL(source.url).pathname) || ".mp4";
-  const target = path.join(
-    getCacheDir(),
-    `${Date.now()}-${safeFilenamePart(source.id)}${extension}`,
-  );
-  let bytesWritten = 0;
-  const limiter = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      bytesWritten += chunk.byteLength;
-      if (bytesWritten > maxDownloadBytes || bytesWritten > allowedBytes) {
-        controller.error(new Error("Download exceeds storage limit"));
-        return;
-      }
-      controller.enqueue(chunk);
-    },
-  });
-
-  try {
-    await pipeline(
-      Readable.fromWeb(response.body.pipeThrough(limiter)),
-      createWriteStream(target, { flags: "wx" }),
-    );
-    if (!getSource(sourceId)) {
-      await removeCacheFile(target);
-      return undefined;
+    if (!response.ok || !response.body) {
+      return updateSourceProbe(sourceId, {
+        status: "invalid",
+        invalidReason: `Download failed with status ${response.status}`,
+      });
     }
-    return await probeAndUpdateSource(sourceId, target);
-  } catch (error) {
-    await removeCacheFile(target);
-    if (!getSource(sourceId)) return undefined;
-    const message = error instanceof Error ? error.message : "Download failed";
-    addEvent(null, "source_download_failed", `Source download failed: ${source.name}`, {
-      sourceId,
-      message,
+
+    const contentLength = Number(response.headers.get("content-length") ?? 0);
+    const allowedBytes = allowedDownloadBytes();
+    if (contentLength > maxDownloadBytes || (contentLength > 0 && contentLength > allowedBytes)) {
+      return updateSourceProbe(sourceId, {
+        status: "invalid",
+        invalidReason: "Download exceeds storage limit",
+      });
+    }
+
+    sourceProgress.set(sourceId, { downloaded: 0, total: contentLength || null });
+
+    const extension = extensionFromResponse(downloadUrl, response);
+    const target = path.join(
+      getCacheDir(),
+      `${Date.now()}-${safeFilenamePart(source.id)}${extension}`,
+    );
+    let bytesWritten = 0;
+    const limiter = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytesWritten += chunk.byteLength;
+        if (bytesWritten > maxDownloadBytes || bytesWritten > allowedBytes) {
+          controller.error(new Error("Download exceeds storage limit"));
+          return;
+        }
+        const current = sourceProgress.get(sourceId);
+        if (current) current.downloaded = bytesWritten;
+        controller.enqueue(chunk);
+      },
     });
-    return updateSourceProbe(sourceId, { status: "invalid", invalidReason: message });
+
+    try {
+      await pipeline(
+        Readable.fromWeb(response.body.pipeThrough(limiter)),
+        createWriteStream(target, { flags: "wx" }),
+      );
+      if (!getSource(sourceId)) {
+        await removeCacheFile(target);
+        return undefined;
+      }
+      if (controller.signal.aborted) return undefined;
+      return await probeAndUpdateSource(sourceId, target);
+    } catch (error) {
+      await removeCacheFile(target);
+      if (!getSource(sourceId)) return undefined;
+      if (controller.signal.aborted) {
+        return updateSourceProbe(sourceId, {
+          status: "invalid",
+          invalidReason: "Download cancelled",
+        });
+      }
+      const message = error instanceof Error ? error.message : "Download failed";
+      addEvent(null, "source_download_failed", `Source download failed: ${source.name}`, {
+        sourceId,
+        message,
+      });
+      return updateSourceProbe(sourceId, { status: "invalid", invalidReason: message });
+    }
+  } finally {
+    clearTimeout(downloadTimeout);
+    sourceAborts.delete(sourceId);
+    sourceProgress.delete(sourceId);
   }
+}
+
+/**
+ * Returns live download progress for a source, or null when it is not actively
+ * downloading.
+ *
+ * @param sourceId - The source to query.
+ * @returns The current progress, or null.
+ */
+export function getSourceDownloadProgress(sourceId: string): SourceDownloadProgress | null {
+  return sourceProgress.get(sourceId) ?? null;
+}
+
+/**
+ * Aborts an in-progress download for a source without deleting its record.
+ *
+ * @param sourceId - The source whose download should be cancelled.
+ * @returns True when an active download was aborted.
+ */
+export function cancelSourceDownload(sourceId: string): boolean {
+  const controller = sourceAborts.get(sourceId);
+  if (!controller) return false;
+  controller.abort();
+  sourceAborts.delete(sourceId);
+  sourceProgress.delete(sourceId);
+  return true;
 }

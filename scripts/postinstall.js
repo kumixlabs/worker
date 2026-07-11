@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Postinstall script to ensure Kumix Worker public assets exist
- * This runs after package installation to handle edge cases where
- * the public directory is not extracted properly
+ * Postinstall script to ensure Kumix Worker public assets exist.
+ * The published package ships dist/public (copied during `bun run build`).
+ * For local dev without a build, the root public/ directory is also accepted.
  */
 
 import fs from "node:fs";
@@ -14,37 +14,31 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const packageRoot = path.resolve(__dirname, "..");
-const distDir = path.join(packageRoot, "dist");
-const publicInDist = path.join(distDir, "public");
-const publicInRoot = path.join(packageRoot, "public");
+const distPublic = path.join(packageRoot, "dist", "public");
+const rootPublic = path.join(packageRoot, "public");
 
-const hasPublicInDist =
-  fs.existsSync(publicInDist) && fs.existsSync(path.join(publicInDist, "index.html"));
-const hasPublicInRoot =
-  fs.existsSync(publicInRoot) && fs.existsSync(path.join(publicInRoot, "index.html"));
+const hasIndex = (dir) => fs.existsSync(dir) && fs.existsSync(path.join(dir, "index.html"));
 
-if (hasPublicInDist || hasPublicInRoot) {
-  if (hasPublicInRoot && !hasPublicInDist) {
-    try {
-      if (!fs.existsSync(distDir)) {
-        fs.mkdirSync(distDir, { recursive: true });
-      }
-      copyRecursive(publicInRoot, publicInDist);
-    } catch (err) {
-      console.warn("[kumix-worker] Warning: Could not copy to dist/public:", err.message);
-    }
-  } else if (hasPublicInDist && !hasPublicInRoot) {
-    try {
-      copyRecursive(publicInDist, publicInRoot);
-    } catch (err) {
-      console.warn("[kumix-worker] Warning: Could not copy to public:", err.message);
-    }
-  }
-} else {
-  console.warn(
-    "[kumix-worker] Warning: Public directory not found. Kumix Worker may not work correctly.",
-  );
+if (hasIndex(distPublic)) {
+  // Published package: dist/public is the source of truth.
+  process.exit(0);
 }
+
+if (hasIndex(rootPublic)) {
+  // Local dev without build: mirror root public/ into dist/public so the
+  // worker can serve the dashboard from the expected location.
+  try {
+    fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+    copyRecursive(rootPublic, distPublic);
+  } catch (err) {
+    console.warn("[kumix-worker] Warning: Could not copy public/ to dist/public:", err.message);
+  }
+  process.exit(0);
+}
+
+console.warn(
+  "[kumix-worker] Warning: Public directory not found. Kumix Worker may not work correctly.",
+);
 
 function copyRecursive(src, dest) {
   if (!fs.existsSync(dest)) {

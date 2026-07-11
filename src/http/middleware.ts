@@ -39,9 +39,14 @@ export function resetRateLimitsForTests(): void {
  * Whether forwarded client-IP headers should be trusted. Disabled by default
  * because the worker binds to localhost; spoofed headers would otherwise let a
  * caller evade or poison the rate-limit buckets. Enable only when running
- * behind a known reverse proxy that sets these headers.
+ * behind a known reverse proxy that sets these headers. Read on each call so
+ * tests and runtime toggles take effect without a module reload.
+ *
+ * @returns True when forwarded client-IP headers should be trusted.
  */
-const trustProxyHeaders = process.env.KUMIX_WORKER_TRUST_PROXY === "1";
+function isTrustProxyEnabled(): boolean {
+  return process.env.KUMIX_WORKER_TRUST_PROXY === "1";
+}
 
 /**
  * Derives a rate-limit bucket key from the request's socket address. When a
@@ -52,7 +57,7 @@ const trustProxyHeaders = process.env.KUMIX_WORKER_TRUST_PROXY === "1";
  */
 function requestKey(c: Context): string {
   const remote = c.env?.incoming?.socket?.remoteAddress ?? "local";
-  if (!trustProxyHeaders) return remote;
+  if (!isTrustProxyEnabled()) return remote;
   const xff = c.req.header("x-forwarded-for");
   const forwarded =
     c.req.header("x-real-ip") || xff?.split(",")[0]?.trim() || c.req.header("CF-Connecting-IP");
@@ -87,18 +92,58 @@ function signedRequest(c: Context): boolean {
   const signature = url.searchParams.get("sig");
   const expiresAt = url.searchParams.get("expires");
   const isSignablePath =
-    url.pathname.includes("/events") ||
+    /^\/api\/events\/(export|stream)$/.test(url.pathname) ||
+    /^\/api\/streams\/[A-Za-z0-9_-]+\/events\/(export|stream)$/.test(url.pathname) ||
     /^\/api\/sources\/[A-Za-z0-9_-]+\/preview$/.test(url.pathname);
   if (!signature || !expiresAt || !isSignablePath) return false;
-  url.searchParams.delete("expires");
-  url.searchParams.delete("sig");
-  const search = url.searchParams.toString();
-  return verifySignedUrl(
-    c.req.method,
-    `${url.pathname}${search ? `?${search}` : ""}`,
-    expiresAt,
-    signature,
-  );
+  return verifySignedUrl(c.req.method, url.pathname + url.search, expiresAt, signature);
+}
+
+/**
+ * Checks whether a client has exceeded the invalid-auth-attempt threshold.
+ * Intended for routes that validate tokens themselves (e.g. `/auth`,
+ * `/api/auth/verify`) and therefore bypass the full `tokenAuth` middleware.
+ *
+ * @param c - The Hono request context.
+ * @returns A 429 JSON Response when rate-limited, otherwise null.
+ */
+export function checkAuthRateLimit(c: Context): Response | null {
+  const key = requestKey(c);
+  const now = Date.now();
+  pruneExpiredBuckets(authFailures, now);
+  const current = authFailures.get(key);
+  if (current && current.resetAt > now && current.count >= authMaxFailures) {
+    return Response.json(
+      { ok: false, error: { code: "RATE_LIMITED", message: "Too many invalid token attempts" } },
+      { status: 429 },
+    );
+  }
+  return null;
+}
+
+/**
+ * Records an invalid auth attempt for a client. Pairs with checkAuthRateLimit
+ * for routes that do their own token validation.
+ *
+ * @param c - The Hono request context.
+ */
+export function recordAuthFailure(c: Context): void {
+  const key = requestKey(c);
+  const now = Date.now();
+  const current = authFailures.get(key);
+  const bucket =
+    current && current.resetAt > now ? current : { count: 0, resetAt: now + authWindowMs };
+  bucket.count += 1;
+  authFailures.set(key, bucket);
+}
+
+/**
+ * Clears the auth failure counter for a client after a successful auth.
+ *
+ * @param c - The Hono request context.
+ */
+export function clearAuthRateLimit(c: Context): void {
+  authFailures.delete(requestKey(c));
 }
 
 /**
@@ -111,28 +156,17 @@ function signedRequest(c: Context): boolean {
  * @returns A 401/429 JSON response on failure, otherwise passes control on.
  */
 export async function tokenAuth(c: Context, next: Next) {
-  const key = requestKey(c);
-  const now = Date.now();
-  pruneExpiredBuckets(authFailures, now);
-  const current = authFailures.get(key);
-  if (current && current.resetAt > now && current.count >= authMaxFailures) {
-    return c.json(
-      { ok: false, error: { code: "RATE_LIMITED", message: "Too many invalid token attempts" } },
-      429,
-    );
-  }
+  const limited = checkAuthRateLimit(c);
+  if (limited) return limited;
 
   if (!verifyToken(requestToken(c)) && !signedRequest(c)) {
-    const nextFailure =
-      current && current.resetAt > now ? current : { count: 0, resetAt: now + authWindowMs };
-    nextFailure.count += 1;
-    authFailures.set(key, nextFailure);
+    recordAuthFailure(c);
     return c.json(
       { ok: false, error: { code: "UNAUTHORIZED", message: "Invalid Kumix Worker token" } },
       401,
     );
   }
-  authFailures.delete(key);
+  clearAuthRateLimit(c);
   await next();
 }
 
@@ -160,6 +194,9 @@ export async function publicApiRateLimit(c: Context, next: Next) {
     );
   }
   await next();
+  // Drop the bucket once the window closes so idle clients don't linger in the
+  // map until the 1024-entry prune sweep triggers.
+  if (bucket.resetAt <= Date.now()) publicApiHits.delete(key);
 }
 
 /**

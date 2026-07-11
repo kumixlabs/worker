@@ -25,12 +25,16 @@ let dbInstance: SqliteDatabaseInstance | null = null;
  * Clears the database instance, forcing a re-initialization on the next getDb() call.
  * Primarily used for resetting state between tests.
  */
-export function resetDbForTests(): void {
+export function closeDb(): void {
   dbWrapper = null;
   if (dbInstance) {
     dbInstance.close();
     dbInstance = null;
   }
+}
+
+export function resetDbForTests(): void {
+  closeDb();
 }
 
 /**
@@ -43,24 +47,36 @@ export function resetDbForTests(): void {
 export function getDb(): SqliteDatabase {
   if (dbWrapper) return dbWrapper;
 
-  dbInstance = new Database(getDbPath());
-  dbInstance.pragma("journal_mode = WAL");
-  dbInstance.pragma("foreign_keys = ON");
+  let instance: SqliteDatabaseInstance | null = null;
+  try {
+    instance = new Database(getDbPath());
+    instance.pragma("journal_mode = WAL");
+    instance.pragma("foreign_keys = ON");
+    instance.pragma("wal_autocheckpoint = 1000");
 
-  dbWrapper = {
-    exec: (sql: string) => dbInstance!.exec(sql),
-    query: (sql: string) => {
-      const stmt = dbInstance!.prepare(sql);
-      return {
-        all: (...params: unknown[]) => stmt.all(...params),
-        get: (...params: unknown[]) => stmt.get(...params),
-        run: (...params: unknown[]) => stmt.run(...params),
-      };
-    },
-  };
-
-  ensureSchema(dbWrapper);
-  return dbWrapper;
+    const wrapper: SqliteDatabase = {
+      exec: (sql: string) => instance!.exec(sql),
+      query: (sql: string) => {
+        const stmt = instance!.prepare(sql);
+        return {
+          all: (...params: unknown[]) => stmt.all(...params),
+          get: (...params: unknown[]) => stmt.get(...params),
+          run: (...params: unknown[]) => stmt.run(...params),
+        };
+      },
+    };
+    ensureSchema(wrapper);
+    dbInstance = instance;
+    dbWrapper = wrapper;
+    return wrapper;
+  } catch (error) {
+    try {
+      instance?.close();
+    } catch {
+      throw getDbFailure(error);
+    }
+    throw getDbFailure(error);
+  }
 }
 
 /**
@@ -68,6 +84,10 @@ export function getDb(): SqliteDatabase {
  *
  * @param database - The SQLite database instance.
  */
+function getDbFailure(error: unknown): Error {
+  return new Error("Kumix Worker database initialization failed", { cause: error });
+}
+
 function ensureSchema(database: SqliteDatabase): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS sources (

@@ -201,7 +201,17 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       }),
       { stdio: ["ignore", "pipe", "pipe"] },
     );
-    if (!child.pid) throw new Error("Failed to spawn ffmpeg");
+    if (!child.pid) {
+      const message = "Failed to spawn ffmpeg";
+      setStreamStatus(streamId, "failed", {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: message,
+      });
+      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null);
+      emit(streamId, { type: "status", status: "failed" });
+      throw new Error(message);
+    }
     processes.set(streamId, child);
     writeTombstone({
       pid: child.pid,
@@ -235,38 +245,36 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       }
     });
 
-    child.on("error", (error) => {
-      processes.delete(streamId);
-      removeTombstone(streamId);
-      setStreamStatus(streamId, "failed", {
-        stoppedAt: new Date().toISOString(),
-        pid: null,
-        lastError: error.message,
-      });
-      addEvent(streamId, "failed", `FFmpeg failed: ${error.message}`, null);
-      emit(streamId, { type: "status", status: "failed" });
-    });
-    child.on("close", (code, signal) => {
+    let settled = false;
+    const settle = (status: "stopped" | "failed", message: string, payload: unknown) => {
+      if (settled) return;
+      settled = true;
       processes.delete(streamId);
       removeTombstone(streamId);
       const current = getStream(streamId);
       if (!current) return emit(streamId, { type: "status", status: "deleted" });
+      setStreamStatus(streamId, status, {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: status === "stopped" ? null : message,
+      });
+      addEvent(streamId, status, message, payload);
+      emit(streamId, { type: "status", status });
+    };
+    child.on("error", (error) => {
+      settle("failed", `FFmpeg failed: ${error.message}`, null);
+    });
+    child.on("close", (code, signal) => {
+      const current = getStream(streamId);
+      if (!current) return settle("failed", "FFmpeg stream deleted", { code, signal });
       const intentional =
         current.status === "stopping" || signal === "SIGTERM" || signal === "SIGKILL";
       const status = code === 0 || intentional ? "stopped" : "failed";
       const reason = signal ? `signal ${signal}` : `code ${code}`;
-      setStreamStatus(streamId, status, {
-        stoppedAt: new Date().toISOString(),
-        pid: null,
-        lastError: status === "stopped" ? null : `ffmpeg exited with ${reason}`,
+      settle(status, status === "stopped" ? "FFmpeg stopped" : `FFmpeg failed with ${reason}`, {
+        code,
+        signal,
       });
-      addEvent(
-        streamId,
-        status,
-        status === "stopped" ? "FFmpeg stopped" : `FFmpeg failed with ${reason}`,
-        { code, signal },
-      );
-      emit(streamId, { type: "status", status });
     });
     return getStream(streamId);
   } finally {

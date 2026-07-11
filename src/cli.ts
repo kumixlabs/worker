@@ -12,11 +12,13 @@ import { serve } from "@hono/node-server";
 import { Command } from "commander";
 
 import { cliHelpText } from "./cli-help";
+import { closeDb } from "./db/client";
 import { listStreams } from "./db/streams";
 import { reencryptTargetSecrets } from "./db/targets";
 import { createApiApp } from "./http/app";
 import { readPackageVersion } from "./lib/version";
 import {
+  allowedCorsOrigins,
   ensureDataDir,
   readSettings,
   resetWorkerData,
@@ -193,7 +195,7 @@ export function createCliProgram(): Command {
 
   // No subcommand: show a short hint instead of exiting silently.
   program.action(() => {
-    console.log("Kumix Worker - self-hosted live runner");
+    console.log("Kumix Worker - Self-hosted live streaming on autopilot.");
     console.log("");
     console.log("No command provided. Run 'kumix-worker --help' to see all commands.");
   });
@@ -299,6 +301,12 @@ export function createCliProgram(): Command {
       console.log(`Dashboard: ${dashboardUrl(opts.host, port)}`);
       if (opts.host === "0.0.0.0") {
         console.log("Warning: API is exposed on the network. Keep the worker token secret.");
+      }
+      if (process.env.NODE_ENV !== "production" && allowedCorsOrigins().length === 0) {
+        console.log(
+          "Warning: KUMIX_WORKER_CORS_ORIGINS is unset; cross-origin requests to the " +
+            "core-facing /api/v1/* API are blocked. Configure it when browser access is needed.",
+        );
       }
       console.log(`Data directory: ${ensureDataDir()}`);
       console.log(`Timezone: ${settings.timezone}`);
@@ -512,6 +520,7 @@ export function createCliProgram(): Command {
       }
 
       console.log(`Deleting worker data... ${opts.all ? "(factory reset)" : "(keeping config)"}`);
+      closeDb();
       resetWorkerData(Boolean(opts.all));
 
       console.log(`Reset complete. Data directory: ${ensureDataDir()}`);

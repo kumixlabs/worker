@@ -89,10 +89,6 @@ build
 # Nuxt.js build / generate output
 .nuxt
 dist
-!apps/api/dist
-!apps/api/dist/**
-# The committed apps/api/dist bundle is built with sourcemap:false (see
-# apps/api/build.js), so no .map files are produced or referenced.
 
 # Gatsby files
 .cache/

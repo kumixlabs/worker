@@ -40,11 +40,11 @@ function diskUsage(dir: string) {
  * @param dir - The directory to measure.
  * @returns The total size in bytes.
  */
-function directorySize(dir: string): number {
+function _directorySize(dir: string): number {
   try {
     return readdirSync(dir, { withFileTypes: true }).reduce((total, entry) => {
       const filePath = path.join(dir, entry.name);
-      if (entry.isDirectory()) return total + directorySize(filePath);
+      if (entry.isDirectory()) return total + _directorySize(filePath);
       if (entry.isFile()) return total + statSync(filePath).size;
       return total;
     }, 0);
@@ -106,7 +106,8 @@ let smoothedCpuUsagePercent = 0;
 /**
  * Returns cached storage metrics, refreshing the cache in the background to
  * avoid blocking the event loop on large cache directories. The first call
- * scans synchronously so an initial value is always available.
+ * returns immediately with a zero cache size and triggers an async scan so the
+ * next request within the TTL window has the real value.
  *
  * @param cacheDir - The cache directory to measure.
  * @returns Cache and disk usage metrics.
@@ -114,8 +115,22 @@ let smoothedCpuUsagePercent = 0;
 function storageMetrics(cacheDir: string) {
   const now = Date.now();
   if (!cachedStorage) {
-    const value = { cacheBytes: directorySize(cacheDir), disk: diskUsage(cacheDir) };
+    const value = { cacheBytes: 0, disk: diskUsage(cacheDir) };
     cachedStorage = { expiresAt: now + storageCacheTtlMs, value };
+    // Immediately kick off an async scan so the cache is populated without
+    // blocking the event loop on a potentially large directory.
+    storageRefreshInFlight = true;
+    void directorySizeAsync(cacheDir)
+      .then((cacheBytes) => {
+        cachedStorage = {
+          expiresAt: Date.now() + storageCacheTtlMs,
+          value: { cacheBytes, disk: diskUsage(cacheDir) },
+        };
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        storageRefreshInFlight = false;
+      });
     return value;
   }
   if (cachedStorage.expiresAt <= now && !storageRefreshInFlight) {

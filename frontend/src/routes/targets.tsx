@@ -36,7 +36,7 @@ export function TargetsPage() {
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [label, setLabel] = useState("");
-  const [ingestUrl, setIngestUrl] = useState("rtmps://a.rtmps.youtube.com/live2");
+  const [ingestUrl, setIngestUrl] = useState("rtmp://a.rtmp.youtube.com/live2");
   const [streamKey, setStreamKey] = useState("");
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });

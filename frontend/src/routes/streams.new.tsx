@@ -186,9 +186,7 @@ export function NewStreamPage() {
               <Select
                 value={stopMode}
                 onValueChange={(value) => {
-                  const next = value as "none" | "duration" | "datetime";
-                  setStopMode(next);
-                  if (next === "none") setRecurrence("none");
+                  setStopMode(value as "none" | "duration" | "datetime");
                 }}
               >
                 <SelectTrigger>

@@ -67,7 +67,13 @@ async function consumeHandoffCode(code: string) {
 }
 
 if (queryCode) {
-  window.history.replaceState(null, "", window.location.pathname);
+  queryParams.delete("code");
+  const nextQuery = queryParams.toString();
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`,
+  );
   void consumeHandoffCode(queryCode);
 }
 
@@ -120,6 +126,11 @@ export const api = {
   createSource: (body: { name: string; kind: "url" | "gdrive"; url: string }) =>
     request<SourceRecord>("/api/sources", { method: "POST", body: JSON.stringify(body) }),
   deleteSource: (id: string) => request<unknown>(`/api/sources/${id}`, { method: "DELETE" }),
+  cancelSource: (id: string) => request<unknown>(`/api/sources/${id}/cancel`, { method: "POST" }),
+  retrySource: (id: string) =>
+    request<SourceRecord>(`/api/sources/${id}/retry`, { method: "POST" }),
+  patchSource: (id: string, body: Partial<{ name: string }>) =>
+    request<SourceRecord>(`/api/sources/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   previewUrl: (id: string) =>
     request<{ url: string }>(`/api/sources/${id}/preview-url`, { method: "POST" }),
   deleteSources: (ids: string[]) =>
@@ -152,8 +163,17 @@ export const api = {
   }) => request<StreamRecord>("/api/streams", { method: "POST", body: JSON.stringify(body) }),
   startStream: (id: string) => request<unknown>(`/api/streams/${id}/start`, { method: "POST" }),
   stopStream: (id: string) => request<unknown>(`/api/streams/${id}/stop`, { method: "POST" }),
-  patchStream: (id: string, body: Partial<{ stoppedAt: string | null }>) =>
-    request<StreamRecord>(`/api/streams/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  patchStream: (
+    id: string,
+    body: Partial<{
+      title: string;
+      sourceId: string;
+      targetId: string;
+      scheduledFor: string | null;
+      autoStopAt: string | null;
+      stoppedAt: string | null;
+    }>,
+  ) => request<StreamRecord>(`/api/streams/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteStream: (id: string) => request<unknown>(`/api/streams/${id}`, { method: "DELETE" }),
   deleteStreams: (ids: string[]) =>
     request<{ deleted: string[]; failed: { id: string; message: string }[] }>("/api/streams", {

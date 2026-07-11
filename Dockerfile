@@ -18,7 +18,7 @@ RUN bun install --frozen-lockfile --production
 
 
 # ---- Runner: Node slim (glibc) runs the compiled worker ----
-FROM node:22-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 
 LABEL org.opencontainers.image.title="kumix-worker" \

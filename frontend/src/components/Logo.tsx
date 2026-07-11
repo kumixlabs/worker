@@ -11,7 +11,7 @@ export function Logo({ className }: { className?: string }) {
       height="512.000000pt"
       viewBox="0 0 512.000000 512.000000"
       preserveAspectRatio="xMidYMid meet"
-      className={cn("size-7 text-primary", className)}
+      className={cn("size-8 text-primary", className)}
     >
       <g
         transform="translate(0.000000,512.000000) scale(0.100000,-0.100000)"
@@ -31,7 +31,7 @@ export function LogoWithHref() {
     <Link to="/" className="flex items-center gap-1">
       <Logo />
       <span className="font-semibold text-lg text-mono">
-        Kumix <span className="text-primary">Worker</span>
+        Kumix<span className="font-bold text-primary">Worker</span>
       </span>
     </Link>
   );

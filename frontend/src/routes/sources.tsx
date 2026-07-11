@@ -7,9 +7,12 @@ import {
   Info,
   Link2,
   MoreHorizontal,
+  Pencil,
   Play,
   Plus,
+  RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
@@ -51,7 +54,7 @@ import {
   formatDurationClock as formatDuration,
   resolutionLabel,
 } from "@/lib/format";
-import type { SourceRecord } from "../../../src/types/source";
+import type { SourceDownloadProgress, SourceRecord } from "../../../src/types/source";
 
 function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -62,19 +65,51 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+function DownloadProgress({ progress }: { progress?: SourceDownloadProgress | null }) {
+  const downloaded = progress?.downloaded ?? 0;
+  const total = progress?.total ?? null;
+  const percent = total ? Math.min(100, Math.round((downloaded / total) * 100)) : null;
+  return (
+    <div className="space-y-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        {percent === null ? (
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+        ) : (
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${percent}%` }}
+          />
+        )}
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {total
+          ? `${percent}% · ${formatBytes(downloaded)} / ${formatBytes(total)}`
+          : `${formatBytes(downloaded)} …`}
+      </p>
+    </div>
+  );
+}
+
 export function SourcesPage() {
   const t = useTranslations("Sources");
   const common = useTranslations("Common");
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
+  const [cancelId, setCancelId] = useState<string | null>(null);
   const [infoSource, setInfoSource] = useState<SourceRecord | null>(null);
   const [previewSource, setPreviewSource] = useState<SourceRecord | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [kind, setKind] = useState<"url" | "gdrive">("url");
-  const sourcesQuery = useQuery<SourceRecord[]>({ queryKey: ["sources"], queryFn: api.sources });
+  const [kind, setKind] = useState<"url" | "gdrive">("gdrive");
+  const sourcesQuery = useQuery<SourceRecord[]>({
+    queryKey: ["sources"],
+    queryFn: api.sources,
+    refetchInterval: 5000,
+  });
   const statsQuery = useQuery({ queryKey: ["stats"], queryFn: api.stats });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
@@ -83,7 +118,7 @@ export function SourcesPage() {
     onSuccess: () => {
       setName("");
       setUrl("");
-      setKind("url");
+      setKind("gdrive");
       setOpen(false);
       AlertSuccess({ message: t("sourceCreated") });
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
@@ -110,6 +145,34 @@ export function SourcesPage() {
     },
     onError: (error) => AlertError({ message: error.message }),
   });
+  const cancelSource = useMutation({
+    mutationFn: api.cancelSource,
+    onSuccess: () => {
+      AlertSuccess({ message: t("sourceCancelled") });
+      void queryClient.invalidateQueries({ queryKey: ["sources"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+    onError: (error) => AlertError({ message: error.message }),
+  });
+  const retrySource = useMutation({
+    mutationFn: api.retrySource,
+    onSuccess: () => {
+      AlertSuccess({ message: t("sourceRetrying") });
+      void queryClient.invalidateQueries({ queryKey: ["sources"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+    onError: (error) => AlertError({ message: error.message }),
+  });
+  const patchSource = useMutation({
+    mutationFn: () => api.patchSource(editId ?? "", { name: editName.trim() }),
+    onSuccess: () => {
+      AlertSuccess({ message: t("sourceUpdated") });
+      setEditId(null);
+      setEditName("");
+      void queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+    onError: (error) => AlertError({ message: error.message }),
+  });
   const confirmDelete = () => {
     if (!deleteId) return;
     deleteSource.mutate(deleteId);
@@ -118,6 +181,11 @@ export function SourcesPage() {
   const confirmBulkDelete = () => {
     deleteSources.mutate(deleteIds);
     setDeleteIds([]);
+  };
+  const confirmCancel = () => {
+    if (!cancelId) return;
+    cancelSource.mutate(cancelId);
+    setCancelId(null);
   };
   const openPreview = useCallback(
     async (source: SourceRecord) => {
@@ -169,17 +237,23 @@ export function SourcesPage() {
         accessorKey: "status",
         header: common("status"),
         size: 260,
-        cell: ({ row }) => (
-          <div className="space-y-1">
-            <StatusBadge status={row.original.status} />
-            {row.original.status === "invalid" && row.original.invalidReason ? (
-              <p className="flex items-start gap-1 text-destructive text-xs">
-                <CircleAlert className="mt-0.5 h-3 w-3 shrink-0" />
-                {row.original.invalidReason}
-              </p>
-            ) : null}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const source = row.original;
+          return (
+            <div className="space-y-1">
+              <StatusBadge status={source.status} />
+              {source.status === "invalid" && source.invalidReason ? (
+                <p className="flex items-start gap-1 text-destructive text-xs">
+                  <CircleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+                  {source.invalidReason}
+                </p>
+              ) : null}
+              {source.status === "downloading" ? (
+                <DownloadProgress progress={source.progress} />
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "createdAt",
@@ -214,6 +288,31 @@ export function SourcesPage() {
                   {t("preview.action")}
                 </DropdownMenuItem>
               ) : null}
+              {row.original.status === "downloading" ? (
+                <DropdownMenuItem className="gap-2" onClick={() => setCancelId(row.original.id)}>
+                  <X className="size-4 text-destructive" />
+                  <span className="text-destructive">{t("cancelAction")}</span>
+                </DropdownMenuItem>
+              ) : null}
+              {row.original.status === "invalid" ? (
+                <DropdownMenuItem
+                  className="gap-2"
+                  onClick={() => retrySource.mutate(row.original.id)}
+                >
+                  <RotateCcw className="size-4 text-muted-foreground" />
+                  {t("retryAction")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                className="gap-2"
+                onClick={() => {
+                  setEditId(row.original.id);
+                  setEditName(row.original.name);
+                }}
+              >
+                <Pencil className="size-4 text-muted-foreground" />
+                {t("editAction")}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="gap-2" onClick={() => setDeleteId(row.original.id)}>
                 <Trash2 className="size-4 text-destructive" />
@@ -225,7 +324,7 @@ export function SourcesPage() {
         enableSorting: false,
       },
     ],
-    [common, dateTimeFormatter, openPreview, t],
+    [common, dateTimeFormatter, openPreview, t, retrySource.mutate],
   );
 
   return (
@@ -390,6 +489,40 @@ export function SourcesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={!!editId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditId(null);
+            setEditName("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("editTitle")}</DialogTitle>
+            <DialogDescription>{t("editDescription")}</DialogDescription>
+          </DialogHeader>
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium">{t("nameLabel")}</span>
+            <Input
+              value={editName}
+              placeholder={t("namePlaceholder")}
+              onChange={(event) => setEditName(event.target.value)}
+            />
+          </label>
+          <DialogFooter>
+            <Button
+              disabled={!editName.trim() || patchSource.isPending}
+              onClick={() => patchSource.mutate()}
+            >
+              <Pencil />
+              {t("saveChanges")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Card>
         <CardHeader className="min-h-0 py-4">
           <CardTitle className="flex items-center gap-2">
@@ -446,6 +579,15 @@ export function SourcesPage() {
         onConfirm={confirmDelete}
         title={t("deleteTitle")}
         description={t("deleteDescription")}
+        confirmText={common("confirm")}
+        cancelText={common("cancel")}
+      />
+      <ConfirmDialog
+        open={!!cancelId}
+        onOpenChange={(value) => !value && setCancelId(null)}
+        onConfirm={confirmCancel}
+        title={t("cancelTitle")}
+        description={t("cancelDescription")}
         confirmText={common("confirm")}
         cancelText={common("cancel")}
       />

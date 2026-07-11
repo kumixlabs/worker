@@ -1,5 +1,8 @@
 /** Core-facing `/api/v1/*` routes for health, stats, capabilities, and token rotation. */
 
+// "core" refers to the Kumix core integration API (/api/v1/*), not unauthenticated routes.
+// Every route in this file requires Bearer auth, applied by app.ts before registration.
+
 import type { Hono } from "hono";
 
 import { addEvent } from "../../db/events";
@@ -179,12 +182,15 @@ function rotateToken(token: string) {
   try {
     writeSettings({ ...current, token });
   } catch (error) {
-    // Roll back the secret re-encryption so config and ciphertext stay aligned.
     reencryptTargetSecrets(token, current.token);
     throw error;
   }
   const rotatedAt = new Date().toISOString();
-  addEvent(null, "token_rotated", "Worker token rotated", { rotatedAt });
+  try {
+    addEvent(null, "token_rotated", "Worker token rotated", { rotatedAt });
+  } catch (error) {
+    console.error("[worker] failed to record token rotation event:", error);
+  }
   return { rotatedAt, tokenLength: token.length };
 }
 
@@ -193,7 +199,7 @@ function rotateToken(token: string) {
  *
  * @param app - Hono app to attach routes to.
  */
-export function registerPublicRoutes(app: Hono) {
+export function registerCoreRoutes(app: Hono) {
   app.get(
     "/api/v1/health",
     doc(
@@ -249,11 +255,12 @@ export function registerPublicRoutes(app: Hono) {
       try {
         return c.json(ok(rotateToken(parsed.data.token)));
       } catch (error) {
-        return fail(
-          "CONFLICT",
-          error instanceof Error ? error.message : "Token rotation failed",
-          409,
-        );
+        const message = error instanceof Error ? error.message : "Token rotation failed";
+        if (message.includes("different from current") || message.includes("Unable to decrypt")) {
+          return fail("CONFLICT", message, 409);
+        }
+        console.error("[worker] token rotation failed:", error);
+        return fail("SERVICE_UNAVAILABLE", "Token rotation is temporarily unavailable", 503);
       }
     },
   );

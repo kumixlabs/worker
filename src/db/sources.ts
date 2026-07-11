@@ -7,7 +7,7 @@ import { unlinkSync } from "node:fs";
 import { nanoid } from "nanoid";
 
 import { nowIso } from "../lib/utils";
-import type { SourceCreateInput } from "../schemas/source";
+import type { SourceCreateInput, SourcePatchInput } from "../schemas/source";
 import type { SourceRecord } from "../types/source";
 import { getDb } from "./client";
 import { addEvent } from "./events";
@@ -158,15 +158,31 @@ export function updateSourceProbe(
 }
 
 /**
+ * Updates editable fields of an existing source (currently only the display name).
+ *
+ * @param id - The source ID to update.
+ * @param input - The patch payload.
+ * @returns The updated source, or null if not found.
+ */
+export function patchSource(id: string, input: SourcePatchInput): SourceRecord | null {
+  const existing = getSource(id);
+  if (!existing) return null;
+  getDb()
+    .query("UPDATE sources SET name = ?, updated_at = ? WHERE id = ?")
+    .run(input.name ?? existing.name, nowIso(), id);
+  return getSource(id);
+}
+
+/**
  * Deletes a source from the database and removes its cached file when present.
  *
  * @param id - The ID of the source to delete.
  * @returns True if a row was successfully deleted, otherwise false.
  */
-export function deleteSource(id: string): boolean {
+export function deleteSource(id: string, force = false): boolean {
   const existing = getSource(id);
   if (!existing) return false;
-  if (existing.status === "downloading" || existing.status === "probing") {
+  if (!force && (existing.status === "downloading" || existing.status === "probing")) {
     throw new Error("Cannot delete a source while it is being processed");
   }
   const row = getDb().query("SELECT COUNT(*) AS count FROM streams WHERE source_id = ?").get(id) as

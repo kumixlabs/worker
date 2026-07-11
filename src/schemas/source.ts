@@ -29,3 +29,16 @@ export const sourceCreateSchema = z.object({
  * Parsed source creation payload.
  */
 export type SourceCreateInput = z.infer<typeof sourceCreateSchema>;
+
+/**
+ * Payload to update an existing source. Only the display name is editable;
+ * changing the URL requires deleting and re-adding the source (or using retry).
+ */
+export const sourcePatchSchema = z.object({
+  name: z.string().min(1).max(160).optional(),
+});
+
+/**
+ * Parsed source patch payload.
+ */
+export type SourcePatchInput = z.infer<typeof sourcePatchSchema>;

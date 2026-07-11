@@ -48,45 +48,61 @@ export function AuthGate({ children, isHome = false }: { children: ReactNode; is
     }
   };
 
+  const loginCard = (
+    <div className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm">
+      <div className="text-center">
+        <h1 className="font-bold text-2xl tracking-tight">{t("loginTitle")}</h1>
+        <p className="mt-2 text-muted-foreground text-sm">{t("loginDescription")}</p>
+      </div>
+      <label htmlFor="worker-token" className="sr-only">
+        {t("tokenLabel")}
+      </label>
+      <Input
+        id="worker-token"
+        type="password"
+        autoComplete="current-password"
+        placeholder={t("tokenPlaceholder")}
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        disabled={submitting}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? "worker-token-error" : undefined}
+      />
+      {error ? (
+        <p id="worker-token-error" role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      ) : null}
+      <Button className="w-full" type="submit" disabled={!input || submitting}>
+        {t("loginSubmit")}
+      </Button>
+    </div>
+  );
+
   if (token) return children;
   if (isHome) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <form
-          className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
+          className="contents"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
-          <div className="text-center">
-            <h1 className="font-bold text-2xl tracking-tight">{t("loginTitle")}</h1>
-            <p className="mt-2 text-muted-foreground text-sm">{t("loginDescription")}</p>
-          </div>
-          <Input
-            type="password"
-            autoComplete="current-password"
-            placeholder={t("tokenPlaceholder")}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            disabled={submitting}
-          />
-          {error ? <p className="text-destructive text-sm">{error}</p> : null}
-          <Button className="w-full" type="submit" disabled={!input || submitting}>
-            {t("loginSubmit")}
-          </Button>
+          {loginCard}
         </form>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-center">
       <ShieldAlert className="h-16 w-16 text-destructive" />
-      <h1 className="mt-6 font-bold text-4xl text-foreground tracking-tight sm:text-5xl">
+      <h1 className="font-bold text-4xl text-foreground tracking-tight sm:text-5xl">
         {t("deniedTitle")}
       </h1>
-      <p className="mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
+      <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
         {t("deniedDescription")}
       </p>
     </div>

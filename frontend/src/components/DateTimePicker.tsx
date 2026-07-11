@@ -1,4 +1,5 @@
 import { Calendar as CalendarIcon, Clock, X } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import {
   Button,
@@ -72,7 +73,7 @@ export function DateTimePicker({
   value,
   onChange,
   disabled,
-  placeholder = "Pick date and time",
+  placeholder,
   min,
   max,
 }: {
@@ -83,6 +84,8 @@ export function DateTimePicker({
   min?: string;
   max?: string;
 }) {
+  const t = useTranslations("Common");
+  const resolvedPlaceholder = placeholder ?? t("pickDateTime");
   const selected = localInputToDate(value);
   const minDate = localInputToDate(min ?? "");
   const maxDate = localInputToDate(max ?? "");
@@ -111,7 +114,7 @@ export function DateTimePicker({
             )}
           >
             <CalendarIcon className="size-4" />
-            <span className="truncate">{formatValue(value, placeholder)}</span>
+            <span className="truncate">{formatValue(value, resolvedPlaceholder)}</span>
           </Button>
           {value ? (
             <Button
@@ -120,7 +123,7 @@ export function DateTimePicker({
               variant="ghost"
               size="sm"
               className="absolute inset-e-1 top-1/2 -translate-y-1/2"
-              aria-label="Clear date"
+              aria-label={t("clearDate")}
               disabled={disabled}
               onClick={(event) => {
                 event.preventDefault();

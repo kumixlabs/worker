@@ -12,8 +12,8 @@ import { allowedCorsOrigins, readSettings } from "../runtime/config";
 import { fail, ok, publicApiRateLimit, tokenAuth } from "./middleware";
 import { registerAuthRoutes } from "./routes/auth";
 import { doc } from "./routes/common";
+import { registerCoreRoutes } from "./routes/core";
 import { registerEventRoutes } from "./routes/events";
-import { registerPublicRoutes } from "./routes/public";
 import { registerSourceRoutes } from "./routes/sources";
 import { registerStreamRoutes } from "./routes/streams";
 import { registerSystemRoutes } from "./routes/system";
@@ -29,6 +29,14 @@ export function createApiApp() {
   const app = new Hono();
   const publicDir = findPublicDir();
 
+  app.onError((error, c) => {
+    console.error("[worker] HTTP request failed:", error);
+    return c.json(
+      { ok: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
+      500,
+    );
+  });
+
   app.use(
     "/api/v1/*",
     cors({
@@ -36,10 +44,6 @@ export function createApiApp() {
       allowMethods: ["GET", "POST", "OPTIONS"],
       origin: (origin) => {
         const allowed = allowedCorsOrigins();
-        if (allowed.length === 0) {
-          if (process.env.NODE_ENV !== "production") return origin || "*";
-          return origin && allowed.includes(origin) ? origin : "";
-        }
         return origin && allowed.includes(origin) ? origin : "";
       },
     }),
@@ -102,6 +106,8 @@ export function createApiApp() {
     },
   );
 
+  // Auth handoff routes are public by design (they validate a token or code
+  // themselves) and must be registered before the dashboard tokenAuth guard.
   registerAuthRoutes(app);
 
   app.use(
@@ -111,10 +117,15 @@ export function createApiApp() {
       onError: () => fail("payload_too_large", "Request body too large", 413),
     }),
   );
+
+  // Core-facing /api/v1/* routes: CORS + token auth + separate rate limit.
+  // The tokenAuth below is scoped to non-v1 paths, so /api/v1/* is guarded here.
   app.use("/api/v1/*", tokenAuth);
   app.use("/api/v1/*", publicApiRateLimit);
-  registerPublicRoutes(app);
+  registerCoreRoutes(app);
 
+  // Dashboard /api/* routes (excluding /api/v1/* and /api/auth/*, which are
+  // already registered above): require the worker token.
   app.use("/api/*", async (c, next) => {
     if (c.req.path.startsWith("/api/v1")) return await next();
     return await tokenAuth(c, next);

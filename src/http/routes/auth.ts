@@ -4,7 +4,14 @@ import { randomBytes } from "node:crypto";
 
 import type { Hono } from "hono";
 
-import { fail, ok, verifyToken } from "../middleware";
+import {
+  checkAuthRateLimit,
+  clearAuthRateLimit,
+  fail,
+  ok,
+  recordAuthFailure,
+  verifyToken,
+} from "../middleware";
 import { doc } from "./common";
 
 const sessionTtlMs = 7 * 24 * 60 * 60 * 1000;
@@ -30,6 +37,12 @@ function pruneHandoffCodes(now: number): void {
   }
 }
 
+// Sweep stale handoff codes on a timer so an idle worker does not let the map
+// grow unbounded between requests. Unref'd so it never keeps the event loop
+// alive on its own.
+const handoffPruneTimer = setInterval(() => pruneHandoffCodes(Date.now()), 5 * 60 * 1000);
+handoffPruneTimer.unref?.();
+
 /**
  * Registers dashboard token handoff and token verification routes.
  *
@@ -40,8 +53,14 @@ export function registerAuthRoutes(app: Hono) {
     "/auth",
     doc("Auth", "Open dashboard", "Validates a token and opens the dashboard."),
     (c) => {
+      const limited = checkAuthRateLimit(c);
+      if (limited) return limited;
       const token = new URL(c.req.url).searchParams.get("token") ?? "";
-      if (!verifyToken(token)) return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
+      if (!verifyToken(token)) {
+        recordAuthFailure(c);
+        return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
+      }
+      clearAuthRateLimit(c);
       const now = Date.now();
       pruneHandoffCodes(now);
       const code = randomBytes(32).toString("base64url");
@@ -58,6 +77,8 @@ export function registerAuthRoutes(app: Hono) {
       "Exchanges a short-lived single-use handoff code for the dashboard token.",
     ),
     async (c) => {
+      const limited = checkAuthRateLimit(c);
+      if (limited) return limited;
       const body = (await c.req.json().catch(() => null)) as { code?: unknown } | null;
       const code = typeof body?.code === "string" ? body.code : "";
       const now = Date.now();
@@ -65,8 +86,10 @@ export function registerAuthRoutes(app: Hono) {
       const entry = code ? handoffCodes.get(code) : undefined;
       if (!entry || entry.expiresAt <= now) {
         if (code) handoffCodes.delete(code);
+        recordAuthFailure(c);
         return fail("UNAUTHORIZED", "Invalid or expired handoff code", 401);
       }
+      clearAuthRateLimit(c);
       handoffCodes.delete(code);
       return c.json(
         ok({ token: entry.token, expiresAt: new Date(now + sessionTtlMs).toISOString() }),
@@ -78,9 +101,15 @@ export function registerAuthRoutes(app: Hono) {
     "/api/auth/verify",
     doc("Auth", "Verify token", "Validates a dashboard token and returns a session expiry."),
     async (c) => {
+      const limited = checkAuthRateLimit(c);
+      if (limited) return limited;
       const body = (await c.req.json().catch(() => null)) as { token?: unknown } | null;
       const token = typeof body?.token === "string" ? body.token : "";
-      if (!verifyToken(token)) return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
+      if (!verifyToken(token)) {
+        recordAuthFailure(c);
+        return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
+      }
+      clearAuthRateLimit(c);
       return c.json(ok({ expiresAt: new Date(Date.now() + sessionTtlMs).toISOString() }));
     },
   );

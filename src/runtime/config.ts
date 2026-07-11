@@ -62,7 +62,30 @@ function validTimezone(value: unknown): string {
 }
 
 /**
+ * Tokens so weak that they are effectively guessable. They are rejected even
+ * when length >= 16 to avoid shipping a worker whose secret derives from a
+ * trivially brute-forceable value (the token is the AES key for stream keys).
+ */
+const weakTokenPatterns = [
+  /^0+$/,
+  /^1+$/,
+  /^a+$/i,
+  /^(\d)\1{15,}$/, // a single digit repeated (e.g. 7777777777777777)
+  /^(?:password|kumix|secret|token|admin|worker)+[-_\d]*$/i,
+  /^(?:1234567890)+$/i,
+  /^(?:abcdef)+[-_\d]*$/i,
+];
+
+function isWeakToken(token: string): boolean {
+  if (weakTokenPatterns.some((pattern) => pattern.test(token))) return true;
+  // Fewer than 5 distinct characters across a 16+ char token is too low-entropy.
+  const distinct = new Set(token.toLowerCase()).size;
+  return distinct < 5;
+}
+
+/**
  * Validates a worker auth token from config, CLI, or API input.
+ * Rejects values that are too short, too long, or too weak to resist guessing.
  *
  * @param value - The raw value to validate.
  * @returns The validated token.
@@ -70,6 +93,11 @@ function validTimezone(value: unknown): string {
 export function validToken(value: unknown): string {
   if (typeof value !== "string" || value.length < 16 || value.length > 256) {
     throw new Error("Invalid Kumix Worker token. Expected 16-256 characters.");
+  }
+  if (isWeakToken(value)) {
+    throw new Error(
+      "Invalid Kumix Worker token. The token is too predictable; use a random value of at least 16 characters (e.g. from `kumix-worker token --regenerate`).",
+    );
   }
   return value;
 }

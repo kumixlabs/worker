@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Clock, HardDrive, Save } from "lucide-react";
+import { Clock, HardDrive, Save } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import {
@@ -10,16 +10,15 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
   Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
 } from "@kumix/ui";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
@@ -40,7 +39,6 @@ export function SettingsPage() {
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const [timezone, setTimezone] = useState("");
   const [diskLimit, setDiskLimit] = useState("");
-  const [timezoneOpen, setTimezoneOpen] = useState(false);
   const timezones = useMemo(supportedTimezones, []);
 
   const updateSettings = useMutation({
@@ -76,39 +74,30 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               <span className="mb-2 block font-medium text-sm">{t("timezoneLabel")}</span>
-              <Popover open={timezoneOpen} onOpenChange={setTimezoneOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">
-                    <span className="truncate">{timezone || t("selectTimezone")}</span>
-                    <ChevronsUpDown className="h-4 w-4 opacity-60" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder={t("searchTimezone")} />
-                    <CommandList>
-                      <CommandEmpty>{t("noTimezone")}</CommandEmpty>
-                      <CommandGroup>
-                        {timezones.map((zone) => (
-                          <CommandItem
-                            key={zone}
-                            value={zone}
-                            onSelect={() => {
-                              setTimezone(zone);
-                              setTimezoneOpen(false);
-                            }}
-                          >
-                            <span className="truncate">{zone}</span>
-                            {timezone === zone ? (
-                              <Check className="ms-auto h-4 w-4 text-primary" />
-                            ) : null}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <Combobox
+                items={timezones}
+                value={timezone}
+                onValueChange={(value) => setTimezone(typeof value === "string" ? value : "")}
+              >
+                <ComboboxTrigger
+                  render={
+                    <Button variant="outline" className="w-full justify-between font-normal">
+                      <ComboboxValue />
+                    </Button>
+                  }
+                />
+                <ComboboxContent>
+                  <ComboboxInput showTrigger={false} placeholder={t("searchTimezone")} />
+                  <ComboboxEmpty>{t("noTimezone")}</ComboboxEmpty>
+                  <ComboboxList>
+                    {(zone: string) => (
+                      <ComboboxItem key={zone} value={zone}>
+                        {zone}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </CardContent>
           </Card>
 

@@ -3,11 +3,11 @@
 
 /** Theme and custom color styles **/
 :root {
-  --primary: oklch(0.588 0.214 258);
+  --primary: oklch(0.586 0.253 17.585);
 }
 
 .dark {
-  --primary: oklch(0.738 0.148 255);
+  --primary: oklch(0.645 0.246 16.439);
 }
 
 /** Custom Font Size **/

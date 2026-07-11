@@ -17,6 +17,12 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@kumix/ui";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
@@ -34,10 +40,18 @@ export function StreamsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
   const [editStream, setEditStream] = useState<StreamRecord | null>(null);
-  const [stoppedAt, setStoppedAt] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editSourceId, setEditSourceId] = useState("");
+  const [editTargetId, setEditTargetId] = useState("");
+  const [editScheduledFor, setEditScheduledFor] = useState("");
+  const [editStoppedAt, setEditStoppedAt] = useState("");
   const streamsQuery = useQuery({ queryKey: ["streams"], queryFn: api.streams });
+  const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
+  const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
+  const sources = (sourcesQuery.data ?? []).filter((source) => source.status === "ready");
+  const targets = (targetsQuery.data ?? []).filter((target) => target.active);
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["streams"] });
     void queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -59,11 +73,17 @@ export function StreamsPage() {
     onError: (error) => AlertError({ message: error.message }),
   });
   const updateStream = useMutation({
-    mutationFn: () => api.patchStream(editStream?.id ?? "", { stoppedAt: stoppedAt || null }),
+    mutationFn: () =>
+      api.patchStream(editStream?.id ?? "", {
+        title: editTitle.trim(),
+        sourceId: editSourceId,
+        targetId: editTargetId,
+        scheduledFor: editScheduledFor || null,
+        stoppedAt: editStoppedAt || null,
+      }),
     onSuccess: () => {
       AlertSuccess({ message: t("updated") });
       setEditStream(null);
-      setStoppedAt("");
       refresh();
     },
     onError: (error) => AlertError({ message: error.message }),
@@ -97,7 +117,11 @@ export function StreamsPage() {
   const streams = streamsQuery.data ?? [];
   const openEdit = useCallback((stream: StreamRecord) => {
     setEditStream(stream);
-    setStoppedAt(stream.stoppedAt ? toLocalInput(new Date(stream.stoppedAt)) : "");
+    setEditTitle(stream.title);
+    setEditSourceId(stream.sourceId);
+    setEditTargetId(stream.targetId);
+    setEditScheduledFor(stream.scheduledFor ? toLocalInput(new Date(stream.scheduledFor)) : "");
+    setEditStoppedAt(stream.stoppedAt ? toLocalInput(new Date(stream.stoppedAt)) : "");
   }, []);
   const exportStreamLog = useCallback(
     async (id: string) => {
@@ -256,28 +280,76 @@ export function StreamsPage() {
       <Dialog
         open={!!editStream}
         onOpenChange={(open) => {
-          if (!open) {
-            setEditStream(null);
-            setStoppedAt("");
-          }
+          if (!open) setEditStream(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("editTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-4">
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("columns.title")}</span>
+              <Input
+                value={editTitle}
+                placeholder={t("columns.title")}
+                onChange={(event) => setEditTitle(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("columns.source")}</span>
+              <Select value={editSourceId} onValueChange={setEditSourceId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("columns.source")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {sources.map((source) => (
+                    <SelectItem key={source.id} value={source.id}>
+                      {source.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("columns.target")}</span>
+              <Select value={editTargetId} onValueChange={setEditTargetId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("columns.target")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {targets.map((target) => (
+                    <SelectItem key={target.id} value={target.id}>
+                      {target.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("editScheduledFor")}</span>
+              <DateTimePicker
+                value={editScheduledFor}
+                onChange={setEditScheduledFor}
+                placeholder={t("editScheduledFor")}
+              />
+            </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("columns.stoppedAt")}</span>
               <DateTimePicker
-                value={stoppedAt}
-                onChange={setStoppedAt}
+                value={editStoppedAt}
+                onChange={setEditStoppedAt}
                 placeholder={t("stoppedAtPlaceholder")}
               />
             </label>
           </div>
           <DialogFooter>
-            <Button disabled={updateStream.isPending} onClick={() => updateStream.mutate()}>
+            <Button
+              disabled={
+                !editTitle.trim() || !editSourceId || !editTargetId || updateStream.isPending
+              }
+              onClick={() => updateStream.mutate()}
+            >
               <Pencil />
               {t("saveChanges")}
             </Button>

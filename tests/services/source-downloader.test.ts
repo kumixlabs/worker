@@ -181,4 +181,49 @@ describe("downloadAndProbeSource", () => {
     );
     expect(getSource(source.id)?.invalidReason).toBe("Download failed with status 403");
   });
+
+  it("downloads a small file, probes it, and marks the source invalid when ffprobe rejects it", async () => {
+    const source = createSource({
+      kind: "url",
+      name: "Small File",
+      url: "https://example.com/small.mp4",
+    });
+    const fileBytes = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(fileBytes, {
+          status: 200,
+          headers: { "content-type": "video/mp4", "content-length": String(fileBytes.length) },
+        }),
+    );
+    setFetchImplForTests(fetchMock);
+
+    const { downloadAndProbeSource } = await import("../../src/services/source-downloader");
+    await downloadAndProbeSource(source.id);
+
+    const updated = getSource(source.id);
+    // The download succeeded and ffprobe ran. A non-video file is marked invalid,
+    // but it should NOT be "downloading" anymore.
+    expect(updated?.status).not.toBe("downloading");
+    expect(updated?.status).toBe("invalid");
+    expect(updated?.invalidReason).toBeTruthy();
+  });
+
+  it("rejects a source whose URL fails SSRF validation before downloading", async () => {
+    const source = createSource({
+      kind: "url",
+      name: "SSRF",
+      url: "http://169.254.169.254/latest/meta-data",
+    });
+    const fetchMock = vi.fn(async () => new Response("ok", { status: 200 }));
+    setFetchImplForTests(fetchMock);
+
+    const { downloadAndProbeSource } = await import("../../src/services/source-downloader");
+    await downloadAndProbeSource(source.id);
+
+    const updated = getSource(source.id);
+    expect(updated?.status).toBe("invalid");
+    expect(updated?.invalidReason).toContain("SSRF");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

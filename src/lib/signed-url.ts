@@ -15,6 +15,17 @@ function base64url(input: Buffer): string {
 }
 
 /** Signs the normalized request method, path, and expiration timestamp. */
+export function canonicalSignedPath(path: string): string {
+  const url = new URL(path, "http://kumix-worker.local");
+  const entries = [...url.searchParams.entries()]
+    .filter(([key]) => key !== "expires" && key !== "sig")
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
+      `${leftKey}\u0000${leftValue}`.localeCompare(`${rightKey}\u0000${rightValue}`),
+    );
+  const search = new URLSearchParams(entries).toString();
+  return `${url.pathname}${search ? `?${search}` : ""}`;
+}
+
 function signPayload(method: string, path: string, expiresAt: number): string {
   return base64url(
     createHmac("sha256", readSettings().token)
@@ -32,7 +43,7 @@ function signPayload(method: string, path: string, expiresAt: number): string {
  */
 export function createSignedUrl(path: string, method = "GET"): string {
   const expiresAt = Date.now() + signedUrlTtlMs;
-  const signature = signPayload(method, path, expiresAt);
+  const signature = signPayload(method, canonicalSignedPath(path), expiresAt);
   return `${path}${path.includes("?") ? "&" : "?"}expires=${expiresAt}&sig=${encodeURIComponent(signature)}`;
 }
 
@@ -53,7 +64,13 @@ export function verifySignedUrl(
 ): boolean {
   const expires = Number(expiresAt ?? "0");
   if (!Number.isSafeInteger(expires) || expires <= Date.now() || !signature) return false;
-  const expected = signPayload(method, path, expires);
+  let canonicalPath: string;
+  try {
+    canonicalPath = canonicalSignedPath(path);
+  } catch {
+    return false;
+  }
+  const expected = signPayload(method, canonicalPath, expires);
   const actualBuffer = Buffer.from(signature, "base64url");
   const expectedBuffer = Buffer.from(expected, "base64url");
   if (actualBuffer.length !== expectedBuffer.length) return false;

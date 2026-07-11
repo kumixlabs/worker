@@ -127,7 +127,10 @@ export function createStream(input: StreamCreateInput): StreamRecord {
 }
 
 /**
- * Updates an existing live stream configuration.
+ * Updates an existing live stream configuration. Only columns present in the
+ * patch input are written; existing values are preserved for the rest. Column
+ * names come from a fixed allowlist, so the generated SQL is injection-safe and
+ * all values still flow through prepared-statement placeholders.
  *
  * @param id - The stream ID to update.
  * @param input - The modified properties to save.
@@ -139,29 +142,28 @@ export function patchStream(id: string, input: StreamPatchInput): StreamRecord |
   if (existing.status === "running" || existing.status === "stopping") {
     throw new Error("Cannot update a running or stopping stream");
   }
+
+  const columns: { col: string; val: string | number | null }[] = [];
+  if (input.title !== undefined) columns.push({ col: "title", val: input.title });
+  if (input.sourceId !== undefined) columns.push({ col: "source_id", val: input.sourceId });
+  if (input.targetId !== undefined) columns.push({ col: "target_id", val: input.targetId });
+  if (input.loop !== undefined) columns.push({ col: "loop", val: input.loop ? 1 : 0 });
+  if (input.scheduledFor !== undefined)
+    columns.push({ col: "scheduled_for", val: input.scheduledFor });
+  if (input.autoStopAt !== undefined) columns.push({ col: "auto_stop_at", val: input.autoStopAt });
+  if (input.recurrence !== undefined) columns.push({ col: "recurrence", val: input.recurrence });
+  if (input.recurrenceRule !== undefined)
+    columns.push({
+      col: "recurrence_rule",
+      val: input.recurrenceRule ? JSON.stringify(input.recurrenceRule) : null,
+    });
+  if (input.stoppedAt !== undefined) columns.push({ col: "stopped_at", val: input.stoppedAt });
+  columns.push({ col: "updated_at", val: nowIso() });
+
+  const setClause = columns.map(({ col }) => `${col} = ?`).join(", ");
   getDb()
-    .query(
-      "UPDATE streams SET title = ?, source_id = ?, target_id = ?, loop = ?, scheduled_for = ?, auto_stop_at = ?, recurrence = ?, recurrence_rule = ?, stopped_at = ?, updated_at = ? WHERE id = ?",
-    )
-    .run(
-      input.title ?? existing.title,
-      input.sourceId ?? existing.sourceId,
-      input.targetId ?? existing.targetId,
-      input.loop !== undefined ? (input.loop ? 1 : 0) : existing.loop ? 1 : 0,
-      input.scheduledFor !== undefined ? input.scheduledFor : existing.scheduledFor,
-      input.autoStopAt !== undefined ? input.autoStopAt : existing.autoStopAt,
-      input.recurrence ?? existing.recurrence,
-      input.recurrenceRule !== undefined
-        ? input.recurrenceRule
-          ? JSON.stringify(input.recurrenceRule)
-          : null
-        : existing.recurrenceRule
-          ? JSON.stringify(existing.recurrenceRule)
-          : null,
-      input.stoppedAt !== undefined ? input.stoppedAt : existing.stoppedAt,
-      nowIso(),
-      id,
-    );
+    .query(`UPDATE streams SET ${setClause} WHERE id = ?`)
+    .run(...columns.map(({ val }) => val), id);
   return getStream(id);
 }
 

@@ -3,7 +3,6 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { extname } from "node:path";
-import { Readable } from "node:stream";
 
 import type { Hono } from "hono";
 import { z } from "zod";
@@ -14,12 +13,18 @@ import {
   deleteSource,
   getSource,
   listSources,
+  patchSource,
   updateSourceProbe,
 } from "../../db/sources";
 import { createSignedUrl } from "../../lib/signed-url";
-import { sourceCreateSchema } from "../../schemas/source";
+import { toWebStream } from "../../lib/utils";
+import { sourceCreateSchema, sourcePatchSchema } from "../../schemas/source";
 import { probeAndUpdateSource } from "../../services/probe";
-import { downloadAndProbeSource } from "../../services/source-downloader";
+import {
+  cancelSourceDownload,
+  downloadAndProbeSource,
+  getSourceDownloadProgress,
+} from "../../services/source-downloader";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
@@ -54,7 +59,14 @@ export function registerSourceRoutes(app: Hono) {
   app.get(
     "/api/sources",
     doc("Sources", "List sources", "Lists direct URL and Google Drive source records."),
-    (c) => c.json(ok(listSources())),
+    (c) => {
+      const sources = listSources().map((source) => {
+        const progress =
+          source.status === "downloading" ? getSourceDownloadProgress(source.id) : null;
+        return progress ? { ...source, progress } : source;
+      });
+      return c.json(ok(sources));
+    },
   );
 
   app.post(
@@ -110,6 +122,50 @@ export function registerSourceRoutes(app: Hono) {
         }
       }
       return c.json(ok({ deleted, failed }));
+    },
+  );
+
+  app.post(
+    "/api/sources/:id/cancel",
+    doc(
+      "Sources",
+      "Cancel source",
+      "Aborts an in-progress download and discards the source record.",
+    ),
+    (c) => {
+      const cancelled = cancelSourceDownload(c.req.param("id"));
+      if (!cancelled) return fail("NOT_FOUND", "No active download for this source", 404);
+      return c.json(ok({ cancelled: true }));
+    },
+  );
+
+  app.post(
+    "/api/sources/:id/retry",
+    doc("Sources", "Retry source", "Re-downloads and re-probes a failed or invalid source."),
+    async (c) => {
+      const source = getSource(c.req.param("id"));
+      if (!source) return fail("NOT_FOUND", "Source not found", 404);
+      if (source.status !== "invalid" && source.status !== "pending") {
+        return fail("CONFLICT", "Source is not in a retryable state", 409);
+      }
+      void downloadAndProbeSource(source.id).catch((error) => {
+        console.error(`[worker] Retry failed for source ${source.id}:`, error);
+      });
+      return c.json(ok(source), 202);
+    },
+  );
+
+  app.patch(
+    "/api/sources/:id",
+    doc("Sources", "Update source", "Updates the display name of a source."),
+    async (c) => {
+      const parsed = sourcePatchSchema.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) {
+        return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid source");
+      }
+      const updated = patchSource(c.req.param("id"), parsed.data);
+      if (!updated) return fail("NOT_FOUND", "Source not found", 404);
+      return c.json(ok(updated));
     },
   );
 
@@ -178,9 +234,7 @@ export function registerSourceRoutes(app: Hono) {
             headers: { "content-range": `bytes */${total}`, "accept-ranges": "bytes" },
           });
         }
-        const stream = Readable.toWeb(
-          createReadStream(source.filePath, { start, end }),
-        ) as unknown as ReadableStream;
+        const stream = toWebStream(createReadStream(source.filePath, { start, end }));
         return new Response(stream, {
           status: 206,
           headers: {
@@ -193,7 +247,7 @@ export function registerSourceRoutes(app: Hono) {
         });
       }
 
-      const stream = Readable.toWeb(createReadStream(source.filePath)) as unknown as ReadableStream;
+      const stream = toWebStream(createReadStream(source.filePath));
       return new Response(stream, {
         status: 200,
         headers: {

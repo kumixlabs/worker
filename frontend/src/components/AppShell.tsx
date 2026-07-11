@@ -95,7 +95,7 @@ export function AppShell({
               mode="icon"
               variant="ghost"
               className="lg:hidden"
-              aria-label="Toggle sidebar"
+              aria-label={t("toggleSidebar")}
               onClick={() => setSidebarOpen((value) => !value)}
             >
               {sidebarOpen ? <X className="size-4" /> : <PanelLeft className="size-4" />}

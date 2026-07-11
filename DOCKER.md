@@ -28,7 +28,17 @@ The worker listens on port `8080`. Open the dashboard URL printed in the contain
 docker logs kumix-worker
 ```
 
-Look for the `Auth URL:` line (run with `-e KUMIX_WORKER_DEV=1` or check the masked token) to open the authenticated dashboard.
+Look for the `Auth URL:` line to open the authenticated dashboard. By default the token is masked; to print the full auth URL, override the container command with `--dev`:
+
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -v "$HOME/.kumix-worker:/app/data" \
+  -e KUMIX_WORKER_DATA_DIR=/app/data \
+  --name kumix-worker \
+  kumix/worker:latest \
+  serve --host 0.0.0.0 --dev
+```
 
 ## Manage container
 
@@ -65,8 +75,9 @@ Container path: `/app/data/`
 ```yaml
 services:
   kumix-worker:
-    image: kumix/worker:latest
-    restart: always
+   container_name: kumix-worker
+     image: kumix/worker:latest
+     restart: always
     ports:
       - "8080:8080"
     volumes:
@@ -77,7 +88,8 @@ services:
       NODE_ENV: production
 
 volumes:
-  kumix-worker-data:
+   kumix-worker-data:
+     name: kumix-worker-data
 ```
 
 ```bash
@@ -103,11 +115,24 @@ See [README.md](./README.md#environment-variables) for the full list.
 
 ## Update to latest
 
+Docker deployments do not use `kumix-worker update`. Pull the latest image and recreate the container instead.
+
+**docker run:**
+
 ```bash
 docker pull kumix/worker:latest
 docker rm -f kumix-worker
-# re-run the quick start command
+# re-run your original docker run command
 ```
+
+**docker-compose:**
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Data persists across updates because it is stored in the mounted volume (`/app/data`), not in the container image.
 
 ---
 
@@ -126,9 +151,9 @@ docker run --rm -p 8080:8080 \
 
 ## Publish (automatic via CI)
 
-Push a git tag `v*` -> GitHub Actions builds and publishes:
+Push a git tag `vX.Y.Z` matching the version in `package.json` -> GitHub Actions builds and publishes:
 
-- **NPM**: `@kumix/worker@ vX.Y.Z`
+- **NPM**: `@kumix/worker@vX.Y.Z`
 - **Docker** (multi-platform amd64 + arm64):
   - `ghcr.io/kumixlabs/worker:vX.Y.Z` + `:latest`
   - `kumix/worker:vX.Y.Z` + `:latest`
@@ -137,7 +162,7 @@ Push a git tag `v*` -> GitHub Actions builds and publishes:
 git tag v1.2.3 && git push origin v1.2.3
 ```
 
-Workflow: `.github/workflows/release.yml`
+Workflow: `.github/workflows/release.yml`. Docker builds include provenance and SBOM metadata.
 
 Required repository secrets:
 

@@ -39,8 +39,4 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
-  // define: {
-  //   // Polyfill for process.env.NODE_ENV required by @kumix/utils
-  //   "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "development"),
-  // },
 });

@@ -1,5 +1,9 @@
 /**
  * Public package entry point for Kumix Worker runtime consumers.
+ *
+ * Everything exported below is part of the public API surface for external
+ * consumers (e.g. Kumix core). Renaming or removing any export is a breaking
+ * change and requires a major version bump. New exports may be added freely.
  */
 
 export { createCliProgram, dashboardUrl, maskToken } from "./cli";
@@ -20,8 +24,13 @@ export {
 } from "./schemas/public";
 export type { SettingsPatchInput } from "./schemas/settings";
 export { settingsPatchSchema, tokenRotateSchema } from "./schemas/settings";
-export type { SourceCreateInput } from "./schemas/source";
-export { sourceCreateSchema, sourceKindSchema, sourceStatusSchema } from "./schemas/source";
+export type { SourceCreateInput, SourcePatchInput } from "./schemas/source";
+export {
+  sourceCreateSchema,
+  sourceKindSchema,
+  sourcePatchSchema,
+  sourceStatusSchema,
+} from "./schemas/source";
 export type { StreamCreateInput, StreamPatchInput } from "./schemas/stream";
 export {
   recurrenceSchema,
