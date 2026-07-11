@@ -29,6 +29,10 @@ RUN bun install --frozen-lockfile --production
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 LABEL org.opencontainers.image.title="kumix-worker" \
       org.opencontainers.image.description="Kumix Worker self-hosted live runner" \
       org.opencontainers.image.source="https://github.com/kumixlabs/worker" \
@@ -36,7 +40,9 @@ LABEL org.opencontainers.image.title="kumix-worker" \
 
 ENV NODE_ENV=production \
     KUMIX_WORKER_DATA_DIR=/app/data \
-    KUMIX_WORKER_PORT=8080
+    KUMIX_WORKER_PORT=8080 \
+    KUMIX_WORKER_FFMPEG_PATH=/usr/bin/ffmpeg \
+    KUMIX_WORKER_FFPROBE_PATH=/usr/bin/ffprobe
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules

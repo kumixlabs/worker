@@ -2,6 +2,19 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.1.5] - 2026-07-11
+
+### Fixed
+
+- Docker images now include Debian system FFmpeg and FFprobe.
+- Docker runtime defaults to system FFmpeg/FFprobe to avoid bundled static binary crashes during RTMP output on some VPS environments.
+
+## [0.1.4] - 2026-07-11
+
+### Fixed
+
+- Ensured bundled FFmpeg and FFprobe binaries are included in Docker images.
+
 ## [0.1.3] - 2026-07-11
 
 ### Fixed
