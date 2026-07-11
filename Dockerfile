@@ -10,7 +10,7 @@ RUN apt-get update \
     && npm install --global bun@1.3.14
 
 COPY package.json bun.lock ./
-# Run install scripts (not --ignore-scripts) so ffmpeg-static downloads its binary.
+COPY scripts/postinstall.js ./scripts/postinstall.js
 RUN npm install \
     && test -x node_modules/ffmpeg-static/ffmpeg \
     && test -x node_modules/ffprobe-static/bin/linux/x64/ffprobe
