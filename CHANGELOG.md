@@ -2,6 +2,24 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.1.3] - 2026-07-11
+
+### Fixed
+
+- Fixed Docker builds failing to include the bundled `ffmpeg-static` and `ffprobe-static` binaries.
+- Added Python, Make, and G++ to the Docker builder for native `better-sqlite3` compilation.
+- Enabled dependency install scripts during the Docker build so FFmpeg binaries are downloaded.
+- Added Docker build-time verification for both FFmpeg and FFprobe binaries, preventing broken images from being published.
+- Updated the Docker builder and runtime images to Node.js 24.
+
+## [0.1.2] - 2026-07-11
+
+nothing
+
+## [0.1.1] - 2026-07-11
+
+nothing
+
 ## [0.1.0] - 2026-07-11
 
 Initial public release of Kumix Worker, the self-hosted Kumix live-stream runner.
@@ -122,7 +140,7 @@ Initial public release of Kumix Worker, the self-hosted Kumix live-stream runner
 
 - Docker image published to Docker Hub (`kumix/worker`) and GHCR (`ghcr.io/kumixlabs/worker`).
 - Multi-platform support: `linux/amd64` + `linux/arm64`.
-- Dockerfile multi-stage build: Bun builder (glibc) compiles TypeScript and builds the Vite dashboard; Node slim runner serves the compiled worker as non-root user.
+- Dockerfile multi-stage build: Node.js 24 builder with Bun and native build tools compiles dependencies, TypeScript, and the Vite dashboard; Node.js 24 slim runner serves the compiled worker as a non-root user.
 - Built-in healthcheck polling `/health` every 30 seconds.
 - `docker-compose.yml` with restart policy and named volume.
 - NPM package (`@kumix/worker`) with global install and postinstall asset verification.

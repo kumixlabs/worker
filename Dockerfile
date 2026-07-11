@@ -10,7 +10,10 @@ RUN apt-get update \
     && npm install --global bun@1.3.14
 
 COPY package.json bun.lock ./
-RUN npm install --ignore-scripts
+# Run install scripts (not --ignore-scripts) so ffmpeg-static downloads its binary.
+RUN npm install \
+    && test -x node_modules/ffmpeg-static/ffmpeg \
+    && test -x node_modules/ffprobe-static/bin/linux/x64/ffprobe
 
 COPY frontend/package.json frontend/bun.lock ./frontend/
 RUN cd frontend && bun install --frozen-lockfile
