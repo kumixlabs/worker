@@ -121,7 +121,7 @@ export function redactFfmpegLog(line: string): string {
 
 /**
  * Builds the FFmpeg argument list to remux a local file to an RTMP destination.
- * Uses stream copy (no transcode) and optional infinite looping.
+ * Copies video while re-encoding audio for reliable AAC/FLV output.
  *
  * @param input - The source path, ingest URL, loop flag, and stream key.
  * @returns The ordered FFmpeg CLI arguments.
@@ -139,10 +139,16 @@ export function buildFfmpegArgs(input: {
     "-re",
     "-i",
     input.filePath,
-    "-c",
+    "-c:v",
     "copy",
-    "-bsf:a",
-    "aac_adtstoasc",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ar",
+    "48000",
+    "-af",
+    "aresample=async=1:first_pts=0",
     "-f",
     "flv",
     output,
