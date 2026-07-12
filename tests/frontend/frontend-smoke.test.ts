@@ -22,6 +22,13 @@ describe("frontend smoke", () => {
     expect(shell).toContain(" - Kumix Worker`");
   });
 
+  it("supports paginated event loading", () => {
+    const api = read("frontend/src/lib/api.ts");
+    const log = read("frontend/src/routes/log.tsx");
+    expect(api).toContain("before=");
+    expect(log).toContain("loadOlderEvents");
+  });
+
   it("uses starter Checkbox for selectable tables", () => {
     const table = read("frontend/src/components/DataTable.tsx");
     expect(table).toContain("Checkbox");

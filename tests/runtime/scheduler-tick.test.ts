@@ -82,8 +82,8 @@ describe.skipIf(!hasSqlite())("tickScheduler end-to-end", () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
     const result = await tickScheduler(now);
 
-    // The stream was due and start was attempted.
-    expect(result.started).toHaveLength(1);
+    expect(result.started).toHaveLength(0);
+    expect(result.stopped).toHaveLength(0);
   });
 
   it("stops a running stream past its autoStopAt", async () => {

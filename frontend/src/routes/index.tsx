@@ -21,7 +21,7 @@ export function Dashboard() {
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const eventsQuery = useQuery({
     queryKey: ["events"],
-    queryFn: api.events,
+    queryFn: () => api.events(),
     refetchInterval: 5000,
   });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
@@ -48,7 +48,10 @@ export function Dashboard() {
     [streams],
   );
   const recentEvents = events.slice(0, 8);
-  const attentionCount = failedStreams.length + invalidSources.length;
+  const recentFailures = events.filter(
+    (event) => event.kind === "failed" || event.kind === "restart_failed",
+  );
+  const attentionCount = failedStreams.length + invalidSources.length + recentFailures.length;
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["streams"] });
@@ -109,6 +112,20 @@ export function Dashboard() {
       }
     >
       <div className="space-y-5">
+        {recentFailures.length > 0 ? (
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle>{t("failureAlert")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {recentFailures.slice(0, 3).map((event) => (
+                <div key={event.id} className="text-sm">
+                  {event.message}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
         <section className="grid gap-5 sm:grid-cols-3">
           {statusCards.map(({ key, label, value, icon: Icon, to, tone }) => (
             <Link key={key} to={to}>

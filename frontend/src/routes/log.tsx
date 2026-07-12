@@ -84,6 +84,7 @@ export function LogPage() {
   const [connected, setConnected] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [liveEvents, setLiveEvents] = useState<EventRecord[]>([]);
+  const [olderEvents, setOlderEvents] = useState<EventRecord[]>([]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
   const t = useTranslations("Log");
@@ -95,8 +96,18 @@ export function LogPage() {
   const selectedStream = streams.find((stream) => stream.id === streamId);
   const eventsQuery = useQuery({
     queryKey: ["events"],
-    queryFn: api.events,
+    queryFn: () => api.events(),
   });
+  const loadOlderEvents = async () => {
+    const oldest = [...(eventsQuery.data ?? []), ...olderEvents].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+        a.id.localeCompare(b.id),
+    )[0];
+    if (!oldest) return;
+    const older = await api.events({ createdAt: oldest.createdAt, id: oldest.id });
+    setOlderEvents((current) => uniqueEvents([...current, ...older]));
+  };
 
   useEffect(() => {
     if (paused) {
@@ -153,7 +164,9 @@ export function LogPage() {
         setLiveEvents((current) =>
           uniqueEvents([
             {
-              id: event.id ?? `${Date.now()}`,
+              id:
+                event.id ??
+                `${event.type ?? "event"}_${event.createdAt ?? Date.now()}_${event.message ?? ""}`,
               streamId: event.streamId ?? streamId,
               kind: event.kind ?? event.type ?? "event",
               message: event.message ?? JSON.stringify(event),
@@ -177,6 +190,7 @@ export function LogPage() {
     mutationFn: api.clearEvents,
     onSuccess: (result) => {
       setLiveEvents([]);
+      setOlderEvents([]);
       AlertSuccess({ message: t("cleared", { count: result.deleted }) });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
     },
@@ -187,8 +201,8 @@ export function LogPage() {
     setConfirmClear(false);
   };
   const allEvents = useMemo(
-    () => uniqueEvents([...(eventsQuery.data ?? []), ...liveEvents]),
-    [eventsQuery.data, liveEvents],
+    () => uniqueEvents([...(eventsQuery.data ?? []), ...olderEvents, ...liveEvents]),
+    [eventsQuery.data, olderEvents, liveEvents],
   );
   const kindOptions = useMemo(
     () => Array.from(new Set(allEvents.map((event) => event.kind))).sort(),
@@ -438,6 +452,9 @@ export function LogPage() {
               ) : null}
 
               <div className="ms-auto flex items-center gap-2">
+                <Button variant="outline" onClick={() => void loadOlderEvents()}>
+                  {t("loadMore")}
+                </Button>
                 <Button variant="outline" onClick={refresh} disabled={eventsQuery.isFetching}>
                   <RefreshCw
                     className={eventsQuery.isFetching ? "size-4 animate-spin" : "size-4"}

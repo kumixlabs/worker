@@ -9,6 +9,21 @@ import { onStreamEvent } from "../../services/stream-runner";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
+function parseCursor(value: string | undefined): { createdAt: string; id: string } | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      createdAt?: string;
+      id?: string;
+    };
+    return parsed.createdAt && parsed.id
+      ? { createdAt: parsed.createdAt, id: parsed.id }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Formats recent events as a plain-text export body.
  *
@@ -63,6 +78,7 @@ function sseResponse(streamId?: string) {
           off = null;
         }
       };
+      for (const event of listEvents(streamId, 200).reverse()) send(event);
       send({ type: "hello", ...(streamId ? { streamId } : {}) });
       off = streamId ? onStreamEvent(streamId, send) : onEvent(send);
       heartbeat = setInterval(() => {
@@ -108,7 +124,11 @@ export function registerEventRoutes(app: Hono) {
   app.get(
     "/api/streams/:id/events",
     doc("Events", "List stream events", "Lists events for one stream."),
-    (c) => c.json(ok(listEvents(c.req.param("id")))),
+    (c) => {
+      const limit = Number(c.req.query("limit") ?? 200);
+      const before = parseCursor(c.req.query("before"));
+      return c.json(ok(listEvents(c.req.param("id"), limit, before)));
+    },
   );
 
   app.get(
@@ -136,9 +156,11 @@ export function registerEventRoutes(app: Hono) {
       }),
   );
 
-  app.get("/api/events", doc("Events", "List events", "Lists recent worker events."), (c) =>
-    c.json(ok(listEvents())),
-  );
+  app.get("/api/events", doc("Events", "List events", "Lists recent worker events."), (c) => {
+    const limit = Number(c.req.query("limit") ?? 200);
+    const before = parseCursor(c.req.query("before"));
+    return c.json(ok(listEvents(undefined, limit, before)));
+  });
 
   app.delete(
     "/api/events",

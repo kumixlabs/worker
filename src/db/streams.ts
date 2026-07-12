@@ -195,9 +195,9 @@ export function setStreamStatus(
   if (existing.status !== status && !allowed[existing.status].includes(status)) {
     throw new Error(`Invalid stream status transition: ${existing.status} -> ${status}`);
   }
-  getDb()
+  const result = getDb()
     .query(
-      "UPDATE streams SET status = ?, started_at = ?, stopped_at = ?, pid = ?, last_error = ?, last_metrics = ?, updated_at = ? WHERE id = ?",
+      "UPDATE streams SET status = ?, started_at = ?, stopped_at = ?, pid = ?, last_error = ?, last_metrics = ?, updated_at = ? WHERE id = ? AND status = ?",
     )
     .run(
       status,
@@ -214,7 +214,9 @@ export function setStreamStatus(
           : null,
       nowIso(),
       id,
+      existing.status,
     );
+  if (result.changes === 0) return getStream(id);
   return getStream(id);
 }
 

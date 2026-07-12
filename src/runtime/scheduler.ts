@@ -2,6 +2,7 @@
  * Scheduler loop for starting due streams and stopping elapsed streams.
  */
 
+import { addEvent } from "../db/events";
 import { listStreams, patchStream } from "../db/streams";
 import { fromZonedParts, zonedParts, zonedWeekday } from "../lib/timezone";
 import { startStream, stopStream } from "../services/stream-runner";
@@ -173,34 +174,44 @@ export async function tickScheduler(now = new Date()): Promise<SchedulerTickResu
   const result: SchedulerTickResult = { started: [], stopped: [] };
 
   for (const action of collectDueActions(listStreams(), now)) {
-    if (action.type === "start") {
-      const started = await startStream(action.streamId);
-      if (started) {
-        result.started.push(action.streamId);
-        if (started.recurrence !== "none" && !started.autoStopAt) {
-          const nextSchedule = computeNextSchedule(started, now);
-          if (nextSchedule) patchStream(action.streamId, { scheduledFor: nextSchedule });
+    try {
+      if (action.type === "start") {
+        const started = await startStream(action.streamId);
+        if (started) {
+          result.started.push(action.streamId);
+          if (started.recurrence !== "none" && !started.autoStopAt) {
+            const nextSchedule = computeNextSchedule(started, now);
+            if (nextSchedule) patchStream(action.streamId, { scheduledFor: nextSchedule });
+          }
         }
-      }
-    } else {
-      const stopped = stopStream(action.streamId);
-      if (stopped) {
-        result.stopped.push(action.streamId);
-        if (stopped.recurrence !== "none") {
-          const nextSchedule = computeNextSchedule(stopped, now);
-          if (nextSchedule) {
-            const windowMs =
-              stopped.autoStopAt && stopped.scheduledFor
-                ? new Date(stopped.autoStopAt).getTime() - new Date(stopped.scheduledFor).getTime()
-                : 0;
-            const autoStopAt =
-              windowMs > 0
-                ? new Date(new Date(nextSchedule).getTime() + windowMs).toISOString()
-                : null;
-            patchStream(action.streamId, { scheduledFor: nextSchedule, autoStopAt });
+      } else {
+        const stopped = stopStream(action.streamId);
+        if (stopped) {
+          result.stopped.push(action.streamId);
+          if (stopped.recurrence !== "none") {
+            const nextSchedule = computeNextSchedule(stopped, now);
+            if (nextSchedule) {
+              const windowMs =
+                stopped.autoStopAt && stopped.scheduledFor
+                  ? new Date(stopped.autoStopAt).getTime() -
+                    new Date(stopped.scheduledFor).getTime()
+                  : 0;
+              const autoStopAt =
+                windowMs > 0
+                  ? new Date(new Date(nextSchedule).getTime() + windowMs).toISOString()
+                  : null;
+              patchStream(action.streamId, { scheduledFor: nextSchedule, autoStopAt });
+            }
           }
         }
       }
+    } catch (error) {
+      addEvent(
+        action.streamId,
+        "error",
+        `Scheduler ${action.type} failed: ${error instanceof Error ? error.message : String(error)}`,
+        { action: action.type },
+      );
     }
   }
 

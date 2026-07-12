@@ -15,6 +15,10 @@ import type { StreamMetrics, StreamRecord } from "../types/stream";
 
 const processes = new Map<string, ChildProcess>();
 const startingStreams = new Set<string>();
+const stopRequested = new Set<string>();
+const restartTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const restartAttempts = new Map<string, number>();
+const maxRestartAttempts = 3;
 const listeners = new Map<string, Set<(event: unknown) => void>>();
 
 /**
@@ -219,12 +223,26 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       throw new Error(message);
     }
     processes.set(streamId, child);
-    writeTombstone({
-      pid: child.pid,
-      status: "running",
-      streamId,
-      writtenAt: new Date().toISOString(),
-    });
+    try {
+      writeTombstone({
+        pid: child.pid,
+        status: "running",
+        streamId,
+        writtenAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      processes.delete(streamId);
+      killChildProcess(child, "SIGKILL");
+      const message =
+        error instanceof Error ? error.message : "Failed to initialize stream recovery";
+      setStreamStatus(streamId, "failed", {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: message,
+      });
+      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null);
+      throw error;
+    }
     setStreamStatus(streamId, "running", {
       startedAt: new Date().toISOString(),
       pid: child.pid,
@@ -235,9 +253,25 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
 
     let lastMetrics: StreamMetrics | null = null;
     let lastMetricsPersistAt = 0;
+    const diagnosticLines: string[] = [];
+    let stderrBuffer = "";
     child.stderr.on("data", (chunk) => {
-      for (const line of chunk.toString().split(/\r?\n/).filter(Boolean)) {
-        emit(streamId, { type: "log", line: redactFfmpegLog(line) });
+      stderrBuffer += chunk.toString();
+      const lines = stderrBuffer.split(/\r?\n/);
+      stderrBuffer = lines.pop() ?? "";
+      for (const line of lines.filter(Boolean)) {
+        const safeLine = redactFfmpegLog(line);
+        diagnosticLines.push(safeLine);
+        if (diagnosticLines.length > 50) diagnosticLines.shift();
+        const event = {
+          id: `live_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          streamId,
+          kind: "ffmpeg_log",
+          message: safeLine,
+          payload: null,
+          createdAt: new Date().toISOString(),
+        };
+        emit(streamId, { type: "log", line: safeLine, ...event });
         const metrics = parseMetrics(line, lastMetrics);
         if (metrics && metrics !== lastMetrics) {
           lastMetrics = metrics;
@@ -256,14 +290,23 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       if (settled) return;
       settled = true;
       processes.delete(streamId);
+      stopRequested.delete(streamId);
+      if (status === "stopped") restartAttempts.delete(streamId);
       removeTombstone(streamId);
       const current = getStream(streamId);
       if (!current) return emit(streamId, { type: "status", status: "deleted" });
+      const diagnostic = diagnosticLines.slice(-20).join("\n");
+      const failureMessage =
+        status === "failed" && diagnostic ? `${message}\n${diagnostic}` : message;
       setStreamStatus(streamId, status, {
         stoppedAt: new Date().toISOString(),
         pid: null,
-        lastError: status === "stopped" ? null : message,
+        lastError: status === "stopped" ? null : failureMessage,
       });
+      if (status === "failed" && restartTimers.has(streamId))
+        emit(streamId, { type: "status", status: "restarting" });
+      if (status === "failed" && diagnostic)
+        addEvent(streamId, "ffmpeg_error", diagnostic, payload);
       addEvent(streamId, status, message, payload);
       emit(streamId, { type: "status", status });
     };
@@ -271,12 +314,44 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       settle("failed", `FFmpeg failed: ${error.message}`, null);
     });
     child.on("close", (code, signal) => {
+      if (stderrBuffer) {
+        const safeLine = redactFfmpegLog(stderrBuffer);
+        diagnosticLines.push(safeLine);
+        if (diagnosticLines.length > 50) diagnosticLines.shift();
+      }
       const current = getStream(streamId);
       if (!current) return settle("failed", "FFmpeg stream deleted", { code, signal });
-      const intentional =
-        current.status === "stopping" || signal === "SIGTERM" || signal === "SIGKILL";
+      const intentional = stopRequested.has(streamId);
       const status = code === 0 || intentional ? "stopped" : "failed";
       const reason = signal ? `signal ${signal}` : `code ${code}`;
+      if (status === "failed" && (restartAttempts.get(streamId) ?? 0) < maxRestartAttempts) {
+        const attempt = (restartAttempts.get(streamId) ?? 0) + 1;
+        restartAttempts.set(streamId, attempt);
+        const delay = Math.min(30_000, 2_000 * 2 ** (attempt - 1));
+        addEvent(streamId, "restart_scheduled", `FFmpeg restart scheduled in ${delay}ms`, {
+          attempt,
+          delay,
+          code,
+          signal,
+        });
+        restartTimers.set(
+          streamId,
+          setTimeout(() => {
+            restartTimers.delete(streamId);
+            void startStream(streamId).catch((error) =>
+              addEvent(
+                streamId,
+                "restart_failed",
+                error instanceof Error ? error.message : String(error),
+              ),
+            );
+          }, delay),
+        );
+      } else if (status === "stopped") {
+        restartAttempts.delete(streamId);
+        restartTimers.get(streamId) && clearTimeout(restartTimers.get(streamId));
+        restartTimers.delete(streamId);
+      }
       settle(status, status === "stopped" ? "FFmpeg stopped" : `FFmpeg failed with ${reason}`, {
         code,
         signal,
@@ -301,14 +376,28 @@ export function stopStream(streamId: string) {
   if (!stream) return stream;
   if (stream.status !== "running" && stream.status !== "stopping") return stream;
   const child = processes.get(streamId);
+  const restartTimer = restartTimers.get(streamId);
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimers.delete(streamId);
+  }
+  restartAttempts.delete(streamId);
+  stopRequested.add(streamId);
   setStreamStatus(streamId, "stopping");
   addEvent(streamId, "stopping", "Stop requested", null);
   if (!child) {
-    return setStreamStatus(streamId, "stopped", { stoppedAt: new Date().toISOString(), pid: null });
+    const stopped = setStreamStatus(streamId, "stopped", {
+      stoppedAt: new Date().toISOString(),
+      pid: null,
+    });
+    stopRequested.delete(streamId);
+    addEvent(streamId, "stopped", "FFmpeg stopped", null);
+    emit(streamId, { type: "status", status: "stopped" });
+    return stopped;
   }
   killChildProcess(child, "SIGTERM");
   setTimeout(() => {
-    if (processes.has(streamId)) killChildProcess(child, "SIGKILL");
+    if (processes.get(streamId) === child) killChildProcess(child, "SIGKILL");
   }, 10_000).unref?.();
   return getStream(streamId);
 }

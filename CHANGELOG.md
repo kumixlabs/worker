@@ -2,6 +2,21 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.1.7] - 2026-07-12
+
+### Added
+
+- Persistent FFmpeg failure diagnostics with redacted logs and stream-specific replay.
+- Bounded FFmpeg auto-restart with exponential backoff.
+- Dashboard failure alerts and older event log pagination.
+
+### Fixed
+
+- Stream lifecycle races, partial FFmpeg stderr chunks, orphan process cleanup, and duplicate recovery reconciliation.
+- Scheduler isolation so one failed stream action does not abort the remaining tick.
+- Stable event ordering and cursor pagination using timestamp plus event ID.
+- Safer stop handling and atomic stream status updates.
+
 ## [0.1.6] - 2026-07-11
 
 ### Fixed

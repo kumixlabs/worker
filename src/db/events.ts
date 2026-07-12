@@ -88,15 +88,33 @@ export function clearEvents(): number {
  * @param streamId - Optional stream ID to filter logs.
  * @returns The most recent event slice ordered by creation date descending.
  */
-export function listEvents(streamId?: string): EventRecord[] {
+export function listEvents(
+  streamId?: string,
+  limit = 200,
+  before?: { createdAt: string; id: string },
+): EventRecord[] {
+  const safeLimit = Math.min(Math.max(limit, 1), 500);
   const rows = streamId
     ? (getDb()
-        .query("SELECT * FROM events WHERE stream_id = ? ORDER BY created_at DESC LIMIT 200")
-        .all(streamId) as Record<string, unknown>[])
-    : (getDb().query("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all() as Record<
-        string,
-        unknown
-      >[]);
+        .query(
+          before
+            ? "SELECT * FROM events WHERE stream_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?"
+            : "SELECT * FROM events WHERE stream_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+        )
+        .all(
+          ...(before
+            ? [streamId, before.createdAt, before.createdAt, before.id, safeLimit]
+            : [streamId, safeLimit]),
+        ) as Record<string, unknown>[])
+    : (getDb()
+        .query(
+          before
+            ? "SELECT * FROM events WHERE (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?"
+            : "SELECT * FROM events ORDER BY created_at DESC, id DESC LIMIT ?",
+        )
+        .all(
+          ...(before ? [before.createdAt, before.createdAt, before.id, safeLimit] : [safeLimit]),
+        ) as Record<string, unknown>[]);
   return rows.map((row) => ({
     id: row.id as string,
     streamId: (row.stream_id as string | null) ?? null,

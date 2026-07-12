@@ -235,10 +235,13 @@ export function listTombstones(): TombstoneRecord[] {
 export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamRecord[] {
   const skip = new Set(skipStreamIds);
   const recovered: StreamRecord[] = [];
+  const reconciled = new Set<string>();
 
   const reconcile = (streamId: string, pid: number | null = null, writtenAt?: string) => {
-    removeTombstone(streamId);
+    if (reconciled.has(streamId)) return;
+    reconciled.add(streamId);
     if (skip.has(streamId)) {
+      removeTombstone(streamId);
       setStreamStatus(streamId, "pending", { pid: null, lastError: null });
       return;
     }
@@ -254,6 +257,7 @@ export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamR
       stoppedAt: new Date().toISOString(),
     });
     if (!stream) return;
+    removeTombstone(streamId);
     addEvent(streamId, "failed", message, { orphanPid: pid, orphanAlive });
     recovered.push(stream);
   };

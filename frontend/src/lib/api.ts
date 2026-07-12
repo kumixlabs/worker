@@ -180,7 +180,12 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ ids }),
     }),
-  events: () => request<EventRecord[]>("/api/events"),
+  events: (before?: { createdAt: string; id: string }) => {
+    const cursor = before
+      ? btoa(JSON.stringify(before)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+      : "";
+    return request<EventRecord[]>(`/api/events?limit=200${cursor ? `&before=${cursor}` : ""}`);
+  },
   clearEvents: () => request<{ deleted: number }>("/api/events", { method: "DELETE" }),
   signedUrl: (path: string) =>
     request<{ url: string }>("/api/events/signed-url", {
