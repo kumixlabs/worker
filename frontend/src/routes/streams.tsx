@@ -7,6 +7,7 @@ import { useTranslations } from "use-intl";
 
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -45,6 +46,7 @@ export function StreamsPage() {
   const [editTargetId, setEditTargetId] = useState("");
   const [editScheduledFor, setEditScheduledFor] = useState("");
   const [editStoppedAt, setEditStoppedAt] = useState("");
+  const [editLoop, setEditLoop] = useState(false);
   const streamsQuery = useQuery({ queryKey: ["streams"], queryFn: api.streams });
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
@@ -78,6 +80,7 @@ export function StreamsPage() {
         title: editTitle.trim(),
         sourceId: editSourceId,
         targetId: editTargetId,
+        loop: editLoop,
         scheduledFor: editScheduledFor || null,
         stoppedAt: editStoppedAt || null,
       }),
@@ -122,6 +125,7 @@ export function StreamsPage() {
     setEditTargetId(stream.targetId);
     setEditScheduledFor(stream.scheduledFor ? toLocalInput(new Date(stream.scheduledFor)) : "");
     setEditStoppedAt(stream.stoppedAt ? toLocalInput(new Date(stream.stoppedAt)) : "");
+    setEditLoop(stream.loop);
   }, []);
   const exportStreamLog = useCallback(
     async (id: string) => {
@@ -325,6 +329,13 @@ export function StreamsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={editLoop}
+                onCheckedChange={(checked) => setEditLoop(checked === true)}
+              />
+              <span className="font-medium">{t("loop")}</span>
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("editScheduledFor")}</span>

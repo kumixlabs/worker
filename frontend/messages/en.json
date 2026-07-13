@@ -300,6 +300,7 @@
     "edit": "Edit",
     "editTitle": "Edit Stream",
     "editScheduledFor": "Scheduled Start",
+    "loop": "Loop source video",
     "saveChanges": "Save Changes",
     "stoppedAtPlaceholder": "Select stopped time",
     "start": "Start",

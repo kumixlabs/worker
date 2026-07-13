@@ -169,6 +169,7 @@ export const api = {
       title: string;
       sourceId: string;
       targetId: string;
+      loop: boolean;
       scheduledFor: string | null;
       autoStopAt: string | null;
       stoppedAt: string | null;

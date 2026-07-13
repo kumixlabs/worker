@@ -125,7 +125,8 @@ export function registerEventRoutes(app: Hono) {
     "/api/streams/:id/events",
     doc("Events", "List stream events", "Lists events for one stream."),
     (c) => {
-      const limit = Number(c.req.query("limit") ?? 200);
+      const rawLimit = Number(c.req.query("limit") ?? 200);
+      const limit = Number.isFinite(rawLimit) ? rawLimit : 200;
       const before = parseCursor(c.req.query("before"));
       return c.json(ok(listEvents(c.req.param("id"), limit, before)));
     },

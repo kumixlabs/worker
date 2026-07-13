@@ -509,6 +509,7 @@ export async function resolveGDriveDownload(
  * @returns The updated source record after download and probe.
  */
 export async function downloadAndProbeSource(sourceId: string) {
+  if (sourceAborts.has(sourceId)) return getSource(sourceId);
   const source = getSource(sourceId);
   if (!source?.url) return source;
 
@@ -638,6 +639,10 @@ export async function downloadAndProbeSource(sourceId: string) {
  */
 export function getSourceDownloadProgress(sourceId: string): SourceDownloadProgress | null {
   return sourceProgress.get(sourceId) ?? null;
+}
+
+export function isSourceDownloadActive(sourceId: string): boolean {
+  return sourceAborts.has(sourceId);
 }
 
 /**

@@ -216,7 +216,12 @@ export function setStreamStatus(
       id,
       existing.status,
     );
-  if (result.changes === 0) return getStream(id);
+  if (result.changes === 0) {
+    const current = getStream(id);
+    throw new Error(
+      `Stream status changed concurrently: expected ${existing.status}, got ${current?.status ?? "deleted"}`,
+    );
+  }
   return getStream(id);
 }
 

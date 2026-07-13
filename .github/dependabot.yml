@@ -1,0 +1,58 @@
+version: 2
+updates:
+  # Root npm/bun dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      production:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    labels:
+      - "dependencies"
+
+  # Frontend dashboard dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      frontend-runtime:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-dev:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions — keeps action versions pinned & current
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - "dependencies"

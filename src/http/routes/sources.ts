@@ -24,6 +24,7 @@ import {
   cancelSourceDownload,
   downloadAndProbeSource,
   getSourceDownloadProgress,
+  isSourceDownloadActive,
 } from "../../services/source-downloader";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
@@ -148,6 +149,9 @@ export function registerSourceRoutes(app: Hono) {
       if (source.status !== "invalid" && source.status !== "pending") {
         return fail("CONFLICT", "Source is not in a retryable state", 409);
       }
+      if (isSourceDownloadActive(source.id)) {
+        return fail("CONFLICT", "Source download already in progress", 409);
+      }
       void downloadAndProbeSource(source.id).catch((error) => {
         console.error(`[worker] Retry failed for source ${source.id}:`, error);
       });
@@ -179,6 +183,9 @@ export function registerSourceRoutes(app: Hono) {
     async (c) => {
       const source = getSource(c.req.param("id"));
       if (!source?.filePath) return fail("NOT_FOUND", "Source file not found", 404);
+      if (isSourceDownloadActive(source.id)) {
+        return fail("CONFLICT", "Source download in progress", 409);
+      }
       return c.json(ok(await probeAndUpdateSource(source.id, source.filePath)));
     },
   );

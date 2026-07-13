@@ -1,0 +1,5 @@
+# These users will be automatically requested as reviewers on PRs touching
+# the paths below. Update the @handle below to your GitHub team/user.
+# Docs: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @kumixlabs

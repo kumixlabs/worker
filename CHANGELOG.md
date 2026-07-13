@@ -2,6 +2,30 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.1.8] - 2026-07-13
+
+### Added
+
+- Edit stream dialog now exposes the loop toggle.
+- `isSourceDownloadActive` guard prevents concurrent retry/probe on the same source.
+
+### Fixed
+
+- Added `-fflags +genpts` to prevent non-monotonous DTS crashes at loop boundaries.
+- Added `-probesize 32 -analyzeduration 0` to skip redundant probe for cached validated files.
+- Added `-timeout 30000000` output option so FFmpeg exits instead of hanging on dropped RTMP connections.
+- Restart loop race: `stopRequested` now set before clearing the restart timer so a concurrent `close` event cannot schedule a restart after a manual stop.
+- Restart scheduling guards against `stopRequested` in the `close` handler.
+- `setStreamStatus` now throws on optimistic concurrency miss instead of silently returning stale state; `settle()` handles this gracefully.
+- `downloadAndProbeSource` returns early when a download is already active for the source.
+- Events `limit` query param now falls back to 200 on NaN input instead of returning empty results.
+- Probe route returns 409 when a download is active instead of spawning a concurrent ffprobe.
+- Windows SIGKILL fallback reduced from 10s to 2s since SIGTERM has no effect on Windows FFmpeg.
+
+### Chore
+
+- Updated `.github` files to match standalone worker repo structure.
+
 ## [0.1.7] - 2026-07-12
 
 ### Added

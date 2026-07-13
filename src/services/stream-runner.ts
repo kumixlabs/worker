@@ -140,6 +140,12 @@ export function buildFfmpegArgs(input: {
   const args = ["-hide_banner", "-loglevel", "info"];
   if (input.loop) args.push("-stream_loop", "-1");
   args.push(
+    "-fflags",
+    "+genpts",
+    "-probesize",
+    "32",
+    "-analyzeduration",
+    "0",
     "-re",
     "-i",
     input.filePath,
@@ -155,6 +161,8 @@ export function buildFfmpegArgs(input: {
     "aresample=async=1:first_pts=0",
     "-f",
     "flv",
+    "-timeout",
+    "30000000",
     output,
   );
   return args;
@@ -298,11 +306,15 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       const diagnostic = diagnosticLines.slice(-20).join("\n");
       const failureMessage =
         status === "failed" && diagnostic ? `${message}\n${diagnostic}` : message;
-      setStreamStatus(streamId, status, {
-        stoppedAt: new Date().toISOString(),
-        pid: null,
-        lastError: status === "stopped" ? null : failureMessage,
-      });
+      try {
+        setStreamStatus(streamId, status, {
+          stoppedAt: new Date().toISOString(),
+          pid: null,
+          lastError: status === "stopped" ? null : failureMessage,
+        });
+      } catch {
+        return emit(streamId, { type: "status", status: getStream(streamId)?.status ?? "deleted" });
+      }
       if (status === "failed" && restartTimers.has(streamId))
         emit(streamId, { type: "status", status: "restarting" });
       if (status === "failed" && diagnostic)
@@ -324,7 +336,11 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       const intentional = stopRequested.has(streamId);
       const status = code === 0 || intentional ? "stopped" : "failed";
       const reason = signal ? `signal ${signal}` : `code ${code}`;
-      if (status === "failed" && (restartAttempts.get(streamId) ?? 0) < maxRestartAttempts) {
+      if (
+        status === "failed" &&
+        !stopRequested.has(streamId) &&
+        (restartAttempts.get(streamId) ?? 0) < maxRestartAttempts
+      ) {
         const attempt = (restartAttempts.get(streamId) ?? 0) + 1;
         restartAttempts.set(streamId, attempt);
         const delay = Math.min(30_000, 2_000 * 2 ** (attempt - 1));
@@ -376,13 +392,13 @@ export function stopStream(streamId: string) {
   if (!stream) return stream;
   if (stream.status !== "running" && stream.status !== "stopping") return stream;
   const child = processes.get(streamId);
+  stopRequested.add(streamId);
   const restartTimer = restartTimers.get(streamId);
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimers.delete(streamId);
   }
   restartAttempts.delete(streamId);
-  stopRequested.add(streamId);
   setStreamStatus(streamId, "stopping");
   addEvent(streamId, "stopping", "Stop requested", null);
   if (!child) {
@@ -396,9 +412,12 @@ export function stopStream(streamId: string) {
     return stopped;
   }
   killChildProcess(child, "SIGTERM");
-  setTimeout(() => {
-    if (processes.get(streamId) === child) killChildProcess(child, "SIGKILL");
-  }, 10_000).unref?.();
+  setTimeout(
+    () => {
+      if (processes.get(streamId) === child) killChildProcess(child, "SIGKILL");
+    },
+    process.platform === "win32" ? 2_000 : 10_000,
+  ).unref?.();
   return getStream(streamId);
 }
 

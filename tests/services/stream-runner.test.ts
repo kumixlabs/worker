@@ -31,6 +31,12 @@ describe("FFmpeg runner helpers", () => {
       "info",
       "-stream_loop",
       "-1",
+      "-fflags",
+      "+genpts",
+      "-probesize",
+      "32",
+      "-analyzeduration",
+      "0",
       "-re",
       "-i",
       "/video.mp4",
@@ -46,6 +52,8 @@ describe("FFmpeg runner helpers", () => {
       "aresample=async=1:first_pts=0",
       "-f",
       "flv",
+      "-timeout",
+      "30000000",
       "rtmp://a.rtmp.youtube.com/live2/secret-key",
     ]);
   });
