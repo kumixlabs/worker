@@ -27,6 +27,7 @@ const timezoneSchema = z
 export const settingsPatchSchema = z.object({
   diskUsageLimitPercent: z.number().int().min(50).max(99).optional(),
   timezone: timezoneSchema.optional(),
+  youtubeApiKey: z.string().max(256).optional(),
 });
 
 /**

@@ -66,6 +66,7 @@ export function getDb(): SqliteDatabase {
       },
     };
     ensureSchema(wrapper);
+    tryColumnMigration(wrapper, "streams", "youtube_live_url", "TEXT");
     dbInstance = instance;
     dbWrapper = wrapper;
     return wrapper;
@@ -86,6 +87,13 @@ export function getDb(): SqliteDatabase {
  */
 function getDbFailure(error: unknown): Error {
   return new Error("Kumix Worker database initialization failed", { cause: error });
+}
+
+function tryColumnMigration(db: SqliteDatabase, table: string, column: string, type: string): void {
+  const cols = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
 
 function ensureSchema(database: SqliteDatabase): void {
@@ -128,6 +136,7 @@ function ensureSchema(database: SqliteDatabase): void {
       target_id TEXT NOT NULL REFERENCES targets(id) ON DELETE RESTRICT,
       status TEXT NOT NULL DEFAULT 'pending',
       loop INTEGER NOT NULL DEFAULT 1,
+      youtube_live_url TEXT,
       scheduled_for TEXT,
       auto_stop_at TEXT,
       recurrence TEXT NOT NULL DEFAULT 'none',

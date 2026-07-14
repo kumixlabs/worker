@@ -129,6 +129,7 @@ function normalizeSettings(
       parsed.diskUsageLimitPercent ?? process.env.KUMIX_WORKER_DISK_LIMIT_PERCENT ?? 90,
     ),
     timezone: validTimezone(parsed.timezone ?? process.env.KUMIX_WORKER_TIMEZONE ?? "Asia/Jakarta"),
+    youtubeApiKey: parsed.youtubeApiKey ?? "",
     dataDir: ensureDataDir(),
   };
 }

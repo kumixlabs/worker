@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 
+import type { YouTubeAnalytics } from "../../../src/services/youtube";
 import type { EventRecord } from "../../../src/types/event";
 import type { SourceRecord } from "../../../src/types/source";
 import type { StreamRecord } from "../../../src/types/stream";
@@ -156,6 +157,7 @@ export const api = {
     title: string;
     sourceId: string;
     targetId: string;
+    youtubeLiveUrl?: string | null;
     scheduledFor?: string | null;
     autoStopAt?: string | null;
     recurrence: "none" | "daily" | "weekly" | "monthly";
@@ -170,6 +172,7 @@ export const api = {
       sourceId: string;
       targetId: string;
       loop: boolean;
+      youtubeLiveUrl: string | null;
       scheduledFor: string | null;
       autoStopAt: string | null;
       stoppedAt: string | null;
@@ -197,4 +200,5 @@ export const api = {
   streamEventsExportPath: (id: string) => `/api/streams/${id}/events/export`,
   eventsStreamPath: () => "/api/events/stream",
   streamEventsPath: (id: string) => `/api/streams/${id}/events/stream`,
+  streamAnalytics: (id: string) => request<YouTubeAnalytics>(`/api/streams/${id}/analytics`),
 };

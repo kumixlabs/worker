@@ -1,7 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Download, Eye, MoreHorizontal, Pencil, Play, Plus, Square, Trash2 } from "lucide-react";
+import {
+  BarChart3,
+  Download,
+  Eye,
+  MoreHorizontal,
+  Pencil,
+  Play,
+  Plus,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
@@ -47,6 +57,7 @@ export function StreamsPage() {
   const [editScheduledFor, setEditScheduledFor] = useState("");
   const [editStoppedAt, setEditStoppedAt] = useState("");
   const [editLoop, setEditLoop] = useState(false);
+  const [editYoutubeLiveUrl, setEditYoutubeLiveUrl] = useState("");
   const streamsQuery = useQuery({ queryKey: ["streams"], queryFn: api.streams });
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
@@ -75,15 +86,21 @@ export function StreamsPage() {
     onError: (error) => AlertError({ message: error.message }),
   });
   const updateStream = useMutation({
-    mutationFn: () =>
-      api.patchStream(editStream?.id ?? "", {
-        title: editTitle.trim(),
-        sourceId: editSourceId,
-        targetId: editTargetId,
-        loop: editLoop,
-        scheduledFor: editScheduledFor || null,
-        stoppedAt: editStoppedAt || null,
-      }),
+    mutationFn: () => {
+      const isRunning = editStream?.status === "running" || editStream?.status === "stopping";
+      const body = isRunning
+        ? { youtubeLiveUrl: editYoutubeLiveUrl || null }
+        : {
+            title: editTitle.trim(),
+            sourceId: editSourceId,
+            targetId: editTargetId,
+            loop: editLoop,
+            youtubeLiveUrl: editYoutubeLiveUrl || null,
+            scheduledFor: editScheduledFor || null,
+            stoppedAt: editStoppedAt || null,
+          };
+      return api.patchStream(editStream?.id ?? "", body);
+    },
     onSuccess: () => {
       AlertSuccess({ message: t("updated") });
       setEditStream(null);
@@ -126,6 +143,7 @@ export function StreamsPage() {
     setEditScheduledFor(stream.scheduledFor ? toLocalInput(new Date(stream.scheduledFor)) : "");
     setEditStoppedAt(stream.stoppedAt ? toLocalInput(new Date(stream.stoppedAt)) : "");
     setEditLoop(stream.loop);
+    setEditYoutubeLiveUrl(stream.youtubeLiveUrl ?? "");
   }, []);
   const exportStreamLog = useCallback(
     async (id: string) => {
@@ -231,18 +249,24 @@ export function StreamsPage() {
                   {t("start")}
                 </DropdownMenuItem>
               ) : null}
-              {row.original.status === "pending" || row.original.status === "failed" ? (
-                <DropdownMenuItem className="gap-2" onClick={() => openEdit(row.original)}>
-                  <Pencil className="size-4 text-muted-foreground" />
-                  {t("edit")}
-                </DropdownMenuItem>
-              ) : null}
+              <DropdownMenuItem className="gap-2" onClick={() => openEdit(row.original)}>
+                <Pencil className="size-4 text-muted-foreground" />
+                {t("edit")}
+              </DropdownMenuItem>
               <DropdownMenuItem asChild className="gap-2">
                 <Link to={`/log?q=${encodeURIComponent(row.original.id)}`}>
                   <Eye className="size-4 text-muted-foreground" />
                   {t("viewLog")}
                 </Link>
               </DropdownMenuItem>
+              {row.original.youtubeLiveUrl ? (
+                <DropdownMenuItem asChild className="gap-2">
+                  <Link to={`/streams/${encodeURIComponent(row.original.id)}`}>
+                    <BarChart3 className="size-4 text-muted-foreground" />
+                    {t("analytics")}
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 className="gap-2"
                 onClick={() => void exportStreamLog(row.original.id)}
@@ -297,12 +321,17 @@ export function StreamsPage() {
               <Input
                 value={editTitle}
                 placeholder={t("columns.title")}
+                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
                 onChange={(event) => setEditTitle(event.target.value)}
               />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("columns.source")}</span>
-              <Select value={editSourceId} onValueChange={setEditSourceId}>
+              <Select
+                value={editSourceId}
+                onValueChange={setEditSourceId}
+                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder={t("columns.source")} />
                 </SelectTrigger>
@@ -317,7 +346,11 @@ export function StreamsPage() {
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("columns.target")}</span>
-              <Select value={editTargetId} onValueChange={setEditTargetId}>
+              <Select
+                value={editTargetId}
+                onValueChange={setEditTargetId}
+                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder={t("columns.target")} />
                 </SelectTrigger>
@@ -333,15 +366,25 @@ export function StreamsPage() {
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={editLoop}
+                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
                 onCheckedChange={(checked) => setEditLoop(checked === true)}
               />
               <span className="font-medium">{t("loop")}</span>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("youtubeLiveUrl")}</span>
+              <Input
+                value={editYoutubeLiveUrl}
+                placeholder={t("youtubeLiveUrlPlaceholder")}
+                onChange={(event) => setEditYoutubeLiveUrl(event.target.value)}
+              />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("editScheduledFor")}</span>
               <DateTimePicker
                 value={editScheduledFor}
                 onChange={setEditScheduledFor}
+                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
                 placeholder={t("editScheduledFor")}
               />
             </label>
@@ -350,6 +393,7 @@ export function StreamsPage() {
               <DateTimePicker
                 value={editStoppedAt}
                 onChange={setEditStoppedAt}
+                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
                 placeholder={t("stoppedAtPlaceholder")}
               />
             </label>

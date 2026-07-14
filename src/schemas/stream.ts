@@ -22,6 +22,7 @@ export const streamCreateSchema = z.object({
   sourceId: z.string().min(1).max(64),
   targetId: z.string().min(1).max(64),
   loop: z.boolean().default(true),
+  youtubeLiveUrl: z.string().max(512).nullable().optional(),
   scheduledFor: z.string().min(1).max(64).nullable().optional(),
   autoStopAt: z.string().min(1).max(64).nullable().optional(),
   recurrence: recurrenceSchema.default("none"),

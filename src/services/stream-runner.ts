@@ -161,8 +161,6 @@ export function buildFfmpegArgs(input: {
     "aresample=async=1:first_pts=0",
     "-f",
     "flv",
-    "-timeout",
-    "30000000",
     output,
   );
   return args;

@@ -2,6 +2,22 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.2.0] - 2026-07-15
+
+### Added
+
+- YouTube Live Analytics: concurrent viewers, total views, likes, and comments on a dedicated `/streams/:id` page with 30-second auto-refresh.
+- YouTube Data API v3 key configuration in Settings.
+- YouTube live URL field in Create Stream and Edit Stream dialogs.
+- Analytics action in stream dropdown menu (visible when YouTube live URL is set).
+- Edit Stream dialog now allows editing the YouTube live URL while a stream is running; all other fields are disabled during run.
+- `youtube_live_url` column added to streams table with automatic `ALTER TABLE` migration for existing databases.
+- `extractVideoId` supports `youtube.com/watch`, `youtu.be`, `/live/`, `/embed/`, `/shorts/` URLs, and raw 11-character video IDs.
+
+### Fixed
+
+- Removed `-timeout 30000000` from FFmpeg args that caused integer overflow in the RTMP handler and prevented TCP connection to YouTube ingest servers.
+
 ## [0.1.8] - 2026-07-13
 
 ### Added

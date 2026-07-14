@@ -38,6 +38,7 @@ describe("Kumix Worker config", () => {
       port: 9090,
       timezone: "UTC",
       token: "test-token-123456",
+      youtubeApiKey: "",
     });
 
     expect(readSettings()).toEqual({
@@ -46,6 +47,7 @@ describe("Kumix Worker config", () => {
       port: 9090,
       timezone: "UTC",
       token: "test-token-123456",
+      youtubeApiKey: "",
     });
   });
 });

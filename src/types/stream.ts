@@ -31,6 +31,7 @@ export interface StreamRecord {
   targetId: string;
   status: StreamStatus;
   loop: boolean;
+  youtubeLiveUrl: string | null;
   scheduledFor: string | null;
   autoStopAt: string | null;
   recurrence: StreamRecurrence;

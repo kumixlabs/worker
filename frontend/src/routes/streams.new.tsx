@@ -49,6 +49,7 @@ export function NewStreamPage() {
   const [title, setTitle] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [targetId, setTargetId] = useState("");
+  const [youtubeLiveUrl, setYoutubeLiveUrl] = useState("");
   const [startAt, setStartAt] = useState("");
   const [stopMode, setStopMode] = useState<"none" | "duration" | "datetime">("none");
   const [stopAt, setStopAt] = useState("");
@@ -71,6 +72,7 @@ export function NewStreamPage() {
         title,
         sourceId,
         targetId,
+        youtubeLiveUrl: youtubeLiveUrl || null,
         scheduledFor: toSchedule(
           startAt || (recurrence !== "none" ? toLocalInput(new Date()) : ""),
         ),
@@ -161,6 +163,14 @@ export function NewStreamPage() {
                     ))}
                 </SelectContent>
               </Select>
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("youtubeLiveUrlLabel")}</span>
+              <Input
+                value={youtubeLiveUrl}
+                placeholder={t("youtubeLiveUrlPlaceholder")}
+                onChange={(event) => setYoutubeLiveUrl(event.target.value)}
+              />
             </label>
           </CardContent>
         </Card>

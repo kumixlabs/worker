@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Clock, HardDrive, Save } from "lucide-react";
+import { Clock, HardDrive, Key, Save } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import {
@@ -39,10 +39,16 @@ export function SettingsPage() {
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const [timezone, setTimezone] = useState("");
   const [diskLimit, setDiskLimit] = useState("");
+  const [youtubeApiKey, setYoutubeApiKey] = useState("");
   const timezones = useMemo(supportedTimezones, []);
 
   const updateSettings = useMutation({
-    mutationFn: () => api.patchSettings({ timezone, diskUsageLimitPercent: Number(diskLimit) }),
+    mutationFn: () =>
+      api.patchSettings({
+        timezone,
+        diskUsageLimitPercent: Number(diskLimit),
+        youtubeApiKey,
+      }),
     onSuccess: () => {
       AlertSuccess({ message: t("saved") });
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
@@ -54,6 +60,7 @@ export function SettingsPage() {
     if (!settingsQuery.data) return;
     setTimezone(settingsQuery.data.timezone);
     setDiskLimit(String(settingsQuery.data.diskUsageLimitPercent));
+    setYoutubeApiKey(settingsQuery.data.youtubeApiKey ?? "");
   }, [settingsQuery.data]);
 
   const diskValue = Number(diskLimit);
@@ -125,6 +132,24 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader className="min-h-0 flex-col items-start py-4">
+            <CardTitle className="flex items-center gap-2">
+              <Key className="h-4 w-4" />
+              {t("youtubeApiKey")}
+            </CardTitle>
+            <CardDescription>{t("youtubeApiKeyDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Input
+              type="password"
+              value={youtubeApiKey}
+              placeholder={t("youtubeApiKeyPlaceholder")}
+              onChange={(event) => setYoutubeApiKey(event.target.value)}
+            />
+          </CardContent>
+        </Card>
 
         <div className="flex justify-end">
           <Button disabled={!canSave} onClick={() => updateSettings.mutate()}>

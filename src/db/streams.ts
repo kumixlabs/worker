@@ -24,6 +24,7 @@ function mapStreamRow(row: Record<string, unknown>): StreamRecord {
     targetId: row.target_id as string,
     status: row.status as StreamRecord["status"],
     loop: Boolean(row.loop),
+    youtubeLiveUrl: (row.youtube_live_url as string | null) ?? null,
     scheduledFor: (row.scheduled_for as string | null) ?? null,
     autoStopAt: (row.auto_stop_at as string | null) ?? null,
     recurrence: row.recurrence as StreamRecord["recurrence"],
@@ -108,7 +109,7 @@ export function createStream(input: StreamCreateInput): StreamRecord {
   const now = nowIso();
   getDb()
     .query(
-      "INSERT INTO streams (id, title, source_id, target_id, loop, scheduled_for, auto_stop_at, recurrence, recurrence_rule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO streams (id, title, source_id, target_id, loop, youtube_live_url, scheduled_for, auto_stop_at, recurrence, recurrence_rule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       id,
@@ -116,6 +117,7 @@ export function createStream(input: StreamCreateInput): StreamRecord {
       input.sourceId,
       input.targetId,
       input.loop ? 1 : 0,
+      input.youtubeLiveUrl ?? null,
       input.scheduledFor ?? null,
       input.autoStopAt ?? null,
       input.recurrence ?? "none",
@@ -139,15 +141,14 @@ export function createStream(input: StreamCreateInput): StreamRecord {
 export function patchStream(id: string, input: StreamPatchInput): StreamRecord | null {
   const existing = getStream(id);
   if (!existing) return null;
-  if (existing.status === "running" || existing.status === "stopping") {
-    throw new Error("Cannot update a running or stopping stream");
-  }
 
   const columns: { col: string; val: string | number | null }[] = [];
   if (input.title !== undefined) columns.push({ col: "title", val: input.title });
   if (input.sourceId !== undefined) columns.push({ col: "source_id", val: input.sourceId });
   if (input.targetId !== undefined) columns.push({ col: "target_id", val: input.targetId });
   if (input.loop !== undefined) columns.push({ col: "loop", val: input.loop ? 1 : 0 });
+  if (input.youtubeLiveUrl !== undefined)
+    columns.push({ col: "youtube_live_url", val: input.youtubeLiveUrl });
   if (input.scheduledFor !== undefined)
     columns.push({ col: "scheduled_for", val: input.scheduledFor });
   if (input.autoStopAt !== undefined) columns.push({ col: "auto_stop_at", val: input.autoStopAt });

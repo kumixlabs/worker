@@ -126,6 +126,8 @@
     "selectSource": "Pilih sumber",
     "targetLabel": "Target Stream",
     "selectTarget": "Pilih target",
+    "youtubeLiveUrlLabel": "URL Live YouTube",
+    "youtubeLiveUrlPlaceholder": "https://youtube.com/watch?v=... (opsional)",
     "targetNamePlaceholder": "Nama target",
     "ingestUrlPlaceholder": "URL ingest RTMP",
     "ingestUrlNote": "RTMP memakai port 1935. Jika server Anda memblokir port keluar 1935, gunakan URL RTMPS di port 443, mis. rtmps://a.rtmps.youtube.com/live2.",
@@ -301,6 +303,9 @@
     "editTitle": "Edit Stream",
     "editScheduledFor": "Jadwal Mulai",
     "loop": "Ulang video sumber",
+    "youtubeLiveUrl": "URL Live YouTube",
+    "youtubeLiveUrlPlaceholder": "https://youtube.com/watch?v=...",
+    "analytics": "Analitik",
     "saveChanges": "Simpan Perubahan",
     "stoppedAtPlaceholder": "Pilih waktu berhenti",
     "start": "Mulai",
@@ -357,6 +362,25 @@
     "diskLimit": "Batas Penggunaan Disk",
     "diskLimitDescription": "Tolak unduhan sumber baru saat penggunaan disk mencapai persentase ini.",
     "diskLimitLabel": "Batas (50-99%)",
-    "diskLimitInvalid": "Masukkan angka bulat antara 50 dan 99."
+    "diskLimitInvalid": "Masukkan angka bulat antara 50 dan 99.",
+    "youtubeApiKey": "Kunci API Data YouTube",
+    "youtubeApiKeyDescription": "Diperlukan untuk analitik live stream. Dapatkan kunci dari Google Cloud Console.",
+    "youtubeApiKeyPlaceholder": "AIza..."
+  },
+  "Analytics": {
+    "title": "Analitik Stream",
+    "description": "Statistik live stream YouTube.",
+    "concurrentViewers": "Penonton Aktif",
+    "totalViews": "Total Tayangan",
+    "likes": "Suka",
+    "comments": "Komentar",
+    "live": "Live",
+    "upcoming": "Akan Datang",
+    "ended": "Selesai",
+    "loadingAnalytics": "Memuat analitik...",
+    "noData": "Tidak ada data analitik.",
+    "backToStreams": "Kembali ke Stream",
+    "streamNotFound": "Stream tidak ditemukan.",
+    "scheduledFor": "Dijadwalkan pada"
   }
 }

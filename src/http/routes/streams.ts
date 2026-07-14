@@ -8,6 +8,7 @@ import { parseUserDateTime } from "../../lib/timezone";
 import { readSettings } from "../../runtime/config";
 import { streamCreateSchema, streamPatchSchema } from "../../schemas/stream";
 import { startStream, stopStream } from "../../services/stream-runner";
+import { extractVideoId, fetchYouTubeAnalytics } from "../../services/youtube";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
@@ -93,6 +94,39 @@ export function registerStreamRoutes(app: Hono) {
     return c.json(ok(stream));
   });
 
+  app.get(
+    "/api/streams/:id/analytics",
+    doc(
+      "Streams",
+      "Stream analytics",
+      "Returns YouTube live stream analytics (concurrent viewers, views, likes).",
+    ),
+    async (c) => {
+      const stream = getStream(c.req.param("id"));
+      if (!stream) return fail("NOT_FOUND", "Stream not found", 404);
+      if (!stream.youtubeLiveUrl) {
+        return fail("BAD_REQUEST", "This stream has no YouTube live URL configured");
+      }
+      const videoId = extractVideoId(stream.youtubeLiveUrl);
+      if (!videoId) {
+        return fail("BAD_REQUEST", "Could not extract a valid YouTube video ID from the URL");
+      }
+      const apiKey = readSettings().youtubeApiKey;
+      if (!apiKey) {
+        return fail("BAD_REQUEST", "YouTube Data API key is not configured. Add it in Settings.");
+      }
+      try {
+        const analytics = await fetchYouTubeAnalytics(videoId, apiKey);
+        return c.json(ok(analytics));
+      } catch (error) {
+        return fail(
+          "BAD_REQUEST",
+          error instanceof Error ? error.message : "Failed to fetch YouTube analytics",
+        );
+      }
+    },
+  );
+
   app.patch(
     "/api/streams/:id",
     doc(
@@ -101,13 +135,18 @@ export function registerStreamRoutes(app: Hono) {
       "Updates stream title, source, target, recurrence, or schedule.",
     ),
     async (c) => {
-      const parsed = streamPatchSchema.safeParse(await c.req.json().catch(() => null));
+      const raw = await c.req.json().catch(() => null);
+      const parsed = streamPatchSchema.safeParse(raw);
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid stream");
       }
       const current = getStream(c.req.param("id"));
       if (!current) return fail("NOT_FOUND", "Stream not found", 404);
-      if (current.status === "running" || current.status === "stopping") {
+      const isRunning = current.status === "running" || current.status === "stopping";
+      const sentKeys = new Set(Object.keys(raw ?? {}));
+      const onlyYoutubeUrl =
+        sentKeys.size > 0 && [...sentKeys].every((k) => k === "youtubeLiveUrl");
+      if (isRunning && !onlyYoutubeUrl) {
         return fail("CONFLICT", "Cannot update a running or stopping stream", 409);
       }
       let updated;
