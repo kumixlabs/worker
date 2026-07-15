@@ -58,8 +58,8 @@
     "live-streaming"
   ],
   "dependencies": {
-    "@hono/node-server": "^2.0.8",
-    "@hono/standard-validator": "^0.2.3",
+    "@hono/node-server": "^2.0.9",
+    "@hono/standard-validator": "^0.3.0",
     "@scalar/hono-api-reference": "^0.11.9",
     "better-sqlite3": "^12.11.1",
     "commander": "^15.0.0",
@@ -72,7 +72,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.3",
+    "@biomejs/biome": "^2.5.4",
     "@kumix/biome-config": "^0.1.0",
     "@kumix/tsconfig": "^0.1.0",
     "@types/better-sqlite3": "^7.6.13",
