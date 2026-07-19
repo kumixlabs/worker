@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFfmpegArgs, parseMetrics, redactFfmpegLog } from "../../src/services/stream-runner";
+import {
+  buildFfmpegArgs,
+  isFfmpegProgressLine,
+  parseMetrics,
+  redactFfmpegLog,
+} from "../../src/services/stream-runner";
 
 describe("FFmpeg runner helpers", () => {
   it("parses ffmpeg metrics incrementally", () => {
@@ -9,6 +14,12 @@ describe("FFmpeg runner helpers", () => {
 
     const second = parseMetrics("frame=11 fps=30.01", first);
     expect(second).toEqual({ bitrateKbps: 2500.5, droppedFrames: 2, fps: 30.01 });
+  });
+
+  it("detects progress lines so they are never stored as events", () => {
+    expect(isFfmpegProgressLine("frame=489364 fps= 30 q=-1.0 size=19816332kB")).toBe(true);
+    expect(isFfmpegProgressLine("  fps=30 bitrate=9952.1kbits/s")).toBe(true);
+    expect(isFfmpegProgressLine("Non-monotonous DTS in output stream 0:0")).toBe(false);
   });
 
   it("redacts stream keys from ffmpeg logs", () => {

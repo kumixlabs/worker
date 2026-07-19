@@ -3,14 +3,17 @@
  */
 
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 
+import { getDb } from "../db/client";
 import { addEvent } from "../db/events";
 import { getSource } from "../db/sources";
-import { getStream, setStreamStatus } from "../db/streams";
+import { getStream, listStreams, setStreamStatus } from "../db/streams";
 import { getTarget } from "../db/targets";
 import { decryptSecret } from "../lib/crypto";
+import { nowIso } from "../lib/utils";
 import { getFfmpegPath } from "../runtime/ffmpeg";
-import { removeTombstone, writeTombstone } from "../runtime/recovery";
+import { getTombstonePath, removeTombstone, writeTombstone } from "../runtime/recovery";
 import type { StreamMetrics, StreamRecord } from "../types/stream";
 
 const processes = new Map<string, ChildProcess>();
@@ -20,6 +23,55 @@ const restartTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const restartAttempts = new Map<string, number>();
 const maxRestartAttempts = 3;
 const listeners = new Map<string, Set<(event: unknown) => void>>();
+
+function isPidAlive(pid: number | null): boolean {
+  if (!pid || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function forceSetStreamStatus(
+  id: string,
+  status: StreamRecord["status"],
+  data: Partial<
+    Pick<StreamRecord, "pid" | "startedAt" | "stoppedAt" | "lastError" | "lastMetrics">
+  > = {},
+): void {
+  const existing = getStream(id);
+  if (!existing) return;
+  try {
+    setStreamStatus(id, status, data);
+    return;
+  } catch {
+    const db = getDb();
+    try {
+      db.query(
+        "UPDATE streams SET status = ?, started_at = ?, stopped_at = ?, pid = ?, last_error = ?, last_metrics = ?, updated_at = ? WHERE id = ?",
+      ).run(
+        status,
+        data.startedAt !== undefined ? data.startedAt : existing.startedAt,
+        data.stoppedAt !== undefined ? data.stoppedAt : existing.stoppedAt,
+        data.pid !== undefined ? data.pid : existing.pid,
+        data.lastError !== undefined ? data.lastError : existing.lastError,
+        data.lastMetrics !== undefined
+          ? data.lastMetrics
+            ? JSON.stringify(data.lastMetrics)
+            : null
+          : existing.lastMetrics
+            ? JSON.stringify(existing.lastMetrics)
+            : null,
+        nowIso(),
+        id,
+      );
+    } catch {
+      return;
+    }
+  }
+}
 
 /**
  * Summary of a best-effort stop request for all tracked stream processes.
@@ -111,6 +163,16 @@ export function parseMetrics(line: string, previous: StreamMetrics | null): Stre
     bitrateKbps: bitrate ? Number(bitrate) : (previous?.bitrateKbps ?? null),
     droppedFrames: dropped ? Number(dropped) : (previous?.droppedFrames ?? null),
   };
+}
+
+/** FFmpeg progress stats use CR updates; treat as noise for logs/diagnostics. */
+export function isFfmpegProgressLine(line: string): boolean {
+  return /(?:^|\s)frame=\s*\d+/.test(line) || /(?:^|\s)fps=\s*[\d.]+/.test(line);
+}
+
+function splitFfmpegOutput(buffer: string): { lines: string[]; rest: string } {
+  const parts = buffer.split(/\r|\n/);
+  return { lines: parts.slice(0, -1), rest: parts.at(-1) ?? "" };
 }
 
 /**
@@ -261,23 +323,19 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
     let lastMetricsPersistAt = 0;
     const diagnosticLines: string[] = [];
     let stderrBuffer = "";
+    const rememberDiagnostic = (line: string) => {
+      const safeLine = redactFfmpegLog(line).trim();
+      if (!safeLine || isFfmpegProgressLine(safeLine)) return;
+      diagnosticLines.push(safeLine.slice(0, 500));
+      if (diagnosticLines.length > 10) diagnosticLines.shift();
+    };
+    child.stdout?.on("data", () => undefined);
     child.stderr.on("data", (chunk) => {
       stderrBuffer += chunk.toString();
-      const lines = stderrBuffer.split(/\r?\n/);
-      stderrBuffer = lines.pop() ?? "";
-      for (const line of lines.filter(Boolean)) {
-        const safeLine = redactFfmpegLog(line);
-        diagnosticLines.push(safeLine);
-        if (diagnosticLines.length > 50) diagnosticLines.shift();
-        const event = {
-          id: `live_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-          streamId,
-          kind: "ffmpeg_log",
-          message: safeLine,
-          payload: null,
-          createdAt: new Date().toISOString(),
-        };
-        emit(streamId, { type: "log", line: safeLine, ...event });
+      const { lines, rest } = splitFfmpegOutput(stderrBuffer);
+      stderrBuffer = rest;
+      for (const line of lines) {
+        if (!line.trim()) continue;
         const metrics = parseMetrics(line, lastMetrics);
         if (metrics && metrics !== lastMetrics) {
           lastMetrics = metrics;
@@ -285,9 +343,14 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
           if (Date.now() - lastMetricsPersistAt >= 5_000) {
             lastMetricsPersistAt = Date.now();
             if (getStream(streamId)?.status === "running")
-              setStreamStatus(streamId, "running", { lastMetrics: metrics });
+              try {
+                setStreamStatus(streamId, "running", { lastMetrics: metrics });
+              } catch {
+                // ignore concurrent status mutation
+              }
           }
         }
+        rememberDiagnostic(line);
       }
     });
 
@@ -298,37 +361,31 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       processes.delete(streamId);
       stopRequested.delete(streamId);
       if (status === "stopped") restartAttempts.delete(streamId);
-      removeTombstone(streamId);
+      try {
+        removeTombstone(streamId);
+      } catch {
+        // ignore
+      }
       const current = getStream(streamId);
       if (!current) return emit(streamId, { type: "status", status: "deleted" });
-      const diagnostic = diagnosticLines.slice(-20).join("\n");
+      const diagnostic = diagnosticLines.slice(-5).join(" | ").slice(0, 1_000);
       const failureMessage =
-        status === "failed" && diagnostic ? `${message}\n${diagnostic}` : message;
-      try {
-        setStreamStatus(streamId, status, {
-          stoppedAt: new Date().toISOString(),
-          pid: null,
-          lastError: status === "stopped" ? null : failureMessage,
-        });
-      } catch {
-        return emit(streamId, { type: "status", status: getStream(streamId)?.status ?? "deleted" });
-      }
+        status === "failed" && diagnostic ? `${message}: ${diagnostic}` : message;
+      forceSetStreamStatus(streamId, status, {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: status === "stopped" ? null : failureMessage,
+      });
       if (status === "failed" && restartTimers.has(streamId))
         emit(streamId, { type: "status", status: "restarting" });
-      if (status === "failed" && diagnostic)
-        addEvent(streamId, "ffmpeg_error", diagnostic, payload);
-      addEvent(streamId, status, message, payload);
+      addEvent(streamId, status, failureMessage, payload);
       emit(streamId, { type: "status", status });
     };
     child.on("error", (error) => {
       settle("failed", `FFmpeg failed: ${error.message}`, null);
     });
-    child.on("close", (code, signal) => {
-      if (stderrBuffer) {
-        const safeLine = redactFfmpegLog(stderrBuffer);
-        diagnosticLines.push(safeLine);
-        if (diagnosticLines.length > 50) diagnosticLines.shift();
-      }
+    const onFinished = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (stderrBuffer.trim()) rememberDiagnostic(stderrBuffer);
       const current = getStream(streamId);
       if (!current) return settle("failed", "FFmpeg stream deleted", { code, signal });
       const intentional = stopRequested.has(streamId);
@@ -370,6 +427,10 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
         code,
         signal,
       });
+    };
+    child.on("close", onFinished);
+    child.on("exit", (code, signal) => {
+      if (!settled) onFinished(code, signal);
     });
     return getStream(streamId);
   } finally {
@@ -426,4 +487,34 @@ export function stopStream(streamId: string) {
  */
 export function runningStreamIds(): string[] {
   return Array.from(processes.keys());
+}
+
+export function reconcileOrphanedDbStreams(): number {
+  let healed = 0;
+  const tracked = new Set(runningStreamIds());
+  for (const stream of listStreams()) {
+    if ((stream.status === "running" || stream.status === "stopping") && !tracked.has(stream.id)) {
+      if (stream.pid && isPidAlive(stream.pid)) continue;
+      let tombstoneExists = false;
+      try {
+        tombstoneExists = existsSync(getTombstonePath(stream.id));
+      } catch {
+        tombstoneExists = false;
+      }
+      if (tombstoneExists) continue;
+      forceSetStreamStatus(stream.id, "failed", {
+        stoppedAt: new Date().toISOString(),
+        pid: null,
+        lastError: "Kumix Worker detected FFmpeg process no longer tracked; marked as failed",
+      });
+      addEvent(stream.id, "failed", "FFmpeg process no longer tracked; marked as failed", null);
+      try {
+        removeTombstone(stream.id);
+      } catch {
+        // ignore
+      }
+      healed += 1;
+    }
+  }
+  return healed;
 }

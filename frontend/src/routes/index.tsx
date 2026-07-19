@@ -268,7 +268,7 @@ export function Dashboard() {
                 recentEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center gap-3 border-border border-b pb-2 text-sm last:border-0 last:pb-0"
+                    className="flex items-center gap-3 border-border border-b pb-2 text-sm last:border-0"
                   >
                     <span className="shrink-0 text-muted-foreground text-xs">
                       {timeFormatter.format(new Date(event.createdAt))}

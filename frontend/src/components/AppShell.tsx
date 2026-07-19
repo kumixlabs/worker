@@ -67,8 +67,8 @@ export function AppShell({
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-50 w-full border-border border-b bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/60">
+    <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
+      <header className="z-50 w-full shrink-0 border-border border-b bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/60">
         <div className="relative flex h-14 w-full min-w-0 items-center justify-between gap-2 px-3 sm:px-5">
           <LogoWithHref />
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
@@ -104,7 +104,7 @@ export function AppShell({
         </div>
       </header>
 
-      <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      <div className="flex min-h-0 flex-1">
         <button
           type="button"
           aria-label={t("closeSidebar")}
@@ -116,11 +116,11 @@ export function AppShell({
         />
         <aside
           className={cn(
-            "fixed inset-y-14 left-0 z-40 flex h-[calc(100vh-3.5rem)] w-64 shrink-0 flex-col border-border border-e bg-sidebar text-sidebar-foreground shadow-xl transition-transform duration-300 ease-out will-change-transform lg:static lg:translate-x-0 lg:shadow-none",
+            "fixed inset-y-14 left-0 z-40 flex w-64 shrink-0 flex-col border-border border-e bg-sidebar text-sidebar-foreground shadow-xl transition-transform duration-300 ease-out will-change-transform lg:static lg:translate-x-0 lg:shadow-none",
             sidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <nav className="flex flex-1 flex-col gap-1 p-3">
+          <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
             <div className="px-3 font-medium text-muted-foreground text-xs">
               {tNav("dashboard")}
             </div>
@@ -169,7 +169,7 @@ export function AppShell({
               );
             })}
           </nav>
-          <div className="flex items-center justify-between gap-2 px-3 pb-4 text-muted-foreground text-xs">
+          <div className="mt-auto flex shrink-0 items-center justify-between gap-2 border-border border-t px-3 py-3 text-muted-foreground text-xs">
             <EngineStatus />
             <Badge variant="primary" shape="circle" className="font-normal">
               v{packageJson.version}
@@ -177,7 +177,7 @@ export function AppShell({
           </div>
         </aside>
 
-        <main className="no-scrollbar flex flex-1 flex-col overflow-y-auto bg-background p-6">
+        <main className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto bg-background p-6">
           <MaxWidthWrapper className="flex flex-col gap-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>

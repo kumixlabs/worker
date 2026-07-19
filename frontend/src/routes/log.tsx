@@ -49,8 +49,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  ScrollArea,
-  ScrollBar,
   Select,
   SelectContent,
   SelectItem,
@@ -118,6 +116,8 @@ export function LogPage() {
     let cancelled = false;
     let failCount = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const pendingEvents: Array<Partial<EventRecord> & { type?: string }> = [];
+    let flushTimer: ReturnType<typeof setInterval> | null = null;
     const scheduleReconnect = () => {
       if (cancelled || reconnectTimer) return;
       // Exponential backoff capped at 30s so a transient drop self-heals.
@@ -161,28 +161,38 @@ export function LogPage() {
           return;
         }
         if (!event.id && event.type === "hello") return;
-        setLiveEvents((current) =>
-          uniqueEvents([
-            {
-              id:
-                event.id ??
-                `${event.type ?? "event"}_${event.createdAt ?? Date.now()}_${event.message ?? ""}`,
-              streamId: event.streamId ?? streamId,
-              kind: event.kind ?? event.type ?? "event",
-              message: event.message ?? JSON.stringify(event),
-              payload: event.payload ?? null,
-              createdAt: event.createdAt ?? new Date().toISOString(),
-            },
-            ...current,
-          ]).slice(0, 200),
-        );
+        if (event.type === "metrics") return;
+        pendingEvents.push(event);
       };
     };
+    flushTimer = setInterval(() => {
+      if (pendingEvents.length === 0) return;
+      const batch = pendingEvents.splice(0, pendingEvents.length);
+      setLiveEvents((current) =>
+        uniqueEvents([
+          ...batch.map((event) => ({
+            id:
+              event.id ??
+              `${event.type ?? "event"}_${event.createdAt ?? Date.now()}_${event.message ?? ""}`,
+            streamId: event.streamId ?? streamId,
+            kind: event.kind ?? event.type ?? "event",
+            message: event.message ?? JSON.stringify(event),
+            payload: event.payload ?? null,
+            createdAt: event.createdAt ?? new Date().toISOString(),
+          })),
+          ...current,
+        ]).slice(0, 200),
+      );
+    }, 250);
     void openSource().catch(() => setConnected(false));
     return () => {
       cancelled = true;
       setConnected(false);
       source?.close();
+      if (flushTimer) {
+        clearInterval(flushTimer);
+        flushTimer = null;
+      }
     };
   }, [paused, streamId]);
 
@@ -463,11 +473,8 @@ export function LogPage() {
                 </Button>
               </div>
             </div>
-            <CardTable>
-              <ScrollArea>
-                <DataGridTable />
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+            <CardTable className="overflow-x-auto">
+              <DataGridTable />
             </CardTable>
             <CardFooter>
               <DataGridPagination />

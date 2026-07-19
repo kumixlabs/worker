@@ -18,6 +18,14 @@ import { useTranslations } from "use-intl";
 import {
   Button,
   Checkbox,
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -29,11 +37,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@kumix/ui";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
@@ -44,6 +47,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
 import type { StreamRecord } from "../../../src/types/stream";
+
+type SourceOption = { id: string; name: string };
+type TargetOption = { id: string; label: string };
 
 export function StreamsPage() {
   const t = useTranslations("Streams");
@@ -63,8 +69,15 @@ export function StreamsPage() {
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
-  const sources = (sourcesQuery.data ?? []).filter((source) => source.status === "ready");
-  const targets = (targetsQuery.data ?? []).filter((target) => target.active);
+  const sources: SourceOption[] = (sourcesQuery.data ?? [])
+    .filter((source) => source.status === "ready")
+    .map((source) => ({ id: source.id, name: source.name }));
+  const targets: TargetOption[] = (targetsQuery.data ?? [])
+    .filter((target) => target.active)
+    .map((target) => ({ id: target.id, label: target.label }));
+  const selectedEditSource = sources.find((source) => source.id === editSourceId) ?? null;
+  const selectedEditTarget = targets.find((target) => target.id === editTargetId) ?? null;
+  const streamLocked = editStream?.status === "running" || editStream?.status === "stopping";
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["streams"] });
     void queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -321,52 +334,86 @@ export function StreamsPage() {
               <Input
                 value={editTitle}
                 placeholder={t("columns.title")}
-                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+                disabled={streamLocked}
                 onChange={(event) => setEditTitle(event.target.value)}
               />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("columns.source")}</span>
-              <Select
-                value={editSourceId}
-                onValueChange={setEditSourceId}
-                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+              <Combobox
+                items={sources}
+                value={selectedEditSource}
+                onValueChange={(value) =>
+                  setEditSourceId(value && typeof value === "object" ? value.id : "")
+                }
+                itemToStringLabel={(item) => item.name}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+                disabled={streamLocked}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={t("columns.source")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {sources.map((source) => (
-                    <SelectItem key={source.id} value={source.id}>
-                      {source.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <ComboboxTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between font-normal"
+                      disabled={streamLocked}
+                    >
+                      <ComboboxValue placeholder={t("columns.source")} />
+                    </Button>
+                  }
+                />
+                <ComboboxContent>
+                  <ComboboxInput showTrigger={false} placeholder={t("searchSource")} />
+                  <ComboboxEmpty>{t("emptySources")}</ComboboxEmpty>
+                  <ComboboxList>
+                    {(source: SourceOption) => (
+                      <ComboboxItem key={source.id} value={source}>
+                        {source.name}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("columns.target")}</span>
-              <Select
-                value={editTargetId}
-                onValueChange={setEditTargetId}
-                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+              <Combobox
+                items={targets}
+                value={selectedEditTarget}
+                onValueChange={(value) =>
+                  setEditTargetId(value && typeof value === "object" ? value.id : "")
+                }
+                itemToStringLabel={(item) => item.label}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+                disabled={streamLocked}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={t("columns.target")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {targets.map((target) => (
-                    <SelectItem key={target.id} value={target.id}>
-                      {target.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <ComboboxTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between font-normal"
+                      disabled={streamLocked}
+                    >
+                      <ComboboxValue placeholder={t("columns.target")} />
+                    </Button>
+                  }
+                />
+                <ComboboxContent>
+                  <ComboboxInput showTrigger={false} placeholder={t("searchTarget")} />
+                  <ComboboxEmpty>{t("emptyTargets")}</ComboboxEmpty>
+                  <ComboboxList>
+                    {(target: TargetOption) => (
+                      <ComboboxItem key={target.id} value={target}>
+                        {target.label}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </label>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={editLoop}
-                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+                disabled={streamLocked}
                 onCheckedChange={(checked) => setEditLoop(checked === true)}
               />
               <span className="font-medium">{t("loop")}</span>
@@ -384,7 +431,7 @@ export function StreamsPage() {
               <DateTimePicker
                 value={editScheduledFor}
                 onChange={setEditScheduledFor}
-                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+                disabled={streamLocked}
                 placeholder={t("editScheduledFor")}
               />
             </label>
@@ -393,7 +440,7 @@ export function StreamsPage() {
               <DateTimePicker
                 value={editStoppedAt}
                 onChange={setEditStoppedAt}
-                disabled={editStream?.status === "running" || editStream?.status === "stopping"}
+                disabled={streamLocked}
                 placeholder={t("stoppedAtPlaceholder")}
               />
             </label>

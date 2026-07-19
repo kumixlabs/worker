@@ -5,7 +5,7 @@
 import { addEvent } from "../db/events";
 import { listStreams, patchStream } from "../db/streams";
 import { fromZonedParts, zonedParts, zonedWeekday } from "../lib/timezone";
-import { startStream, stopStream } from "../services/stream-runner";
+import { reconcileOrphanedDbStreams, startStream, stopStream } from "../services/stream-runner";
 import type { StreamRecord } from "../types/stream";
 import { readSettings } from "./config";
 
@@ -173,7 +173,21 @@ export function collectDueActions(streams: StreamRecord[], now = new Date()): Sc
 export async function tickScheduler(now = new Date()): Promise<SchedulerTickResult> {
   const result: SchedulerTickResult = { started: [], stopped: [] };
 
-  for (const action of collectDueActions(listStreams(), now)) {
+  const dueActions = collectDueActions(listStreams(), now);
+  if (dueActions.length === 0) {
+    try {
+      const healed = reconcileOrphanedDbStreams();
+      if (healed > 0) {
+        addEvent(null, "reconciled", `Reconciled ${healed} orphaned running stream(s)`, {
+          healed,
+        });
+      }
+    } catch {
+      // ignore reconciliation errors
+    }
+  }
+
+  for (const action of dueActions) {
     try {
       if (action.type === "start") {
         const started = await startStream(action.streamId);

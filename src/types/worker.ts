@@ -13,7 +13,7 @@ export interface WorkerSettings {
   /** IANA timezone used to resolve recurring stream schedules (default "Asia/Jakarta"). */
   timezone: string;
   /** YouTube Data API v3 key for live stream analytics (empty string when unset). */
-  youtubeApiKey: string;
+  youtubeApiKey?: string;
   dataDir: string;
 }
 

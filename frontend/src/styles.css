@@ -18,6 +18,13 @@
   --text-2sm--line-height: calc(1.075 / 0.8125);
 }
 
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
 /** Smooth scroll **/
 @media (prefers-reduced-motion: no-preference) {
   html {

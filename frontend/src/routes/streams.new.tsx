@@ -10,6 +10,14 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
   Input,
   Select,
   SelectContent,
@@ -21,6 +29,9 @@ import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { DateTimePicker, toLocalInput } from "@/components/DateTimePicker";
 import { api, queryClient } from "@/lib/api";
+
+type SourceOption = { id: string; name: string };
+type TargetOption = { id: string; label: string };
 
 function toSchedule(value: string) {
   return value ? value : null;
@@ -105,8 +116,14 @@ export function NewStreamPage() {
     },
     onError: (error) => AlertError({ message: error.message }),
   });
-  const sources = sourcesQuery.data ?? [];
-  const targets = targetsQuery.data ?? [];
+  const readySources: SourceOption[] = (sourcesQuery.data ?? [])
+    .filter((source) => source.status === "ready")
+    .map((source) => ({ id: source.id, name: source.name }));
+  const activeTargets: TargetOption[] = (targetsQuery.data ?? [])
+    .filter((target) => target.active)
+    .map((target) => ({ id: target.id, label: target.label }));
+  const selectedSource = readySources.find((source) => source.id === sourceId) ?? null;
+  const selectedTarget = activeTargets.find((target) => target.id === targetId) ?? null;
   const hasValidStop = stopMode !== "duration" || Boolean(effectiveStopAt);
   const hasValidWeekdays = recurrence !== "weekly" || weekdays.length > 0;
   const canSubmit = title && sourceId && targetId && hasValidStop && hasValidWeekdays;
@@ -132,37 +149,65 @@ export function NewStreamPage() {
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("sourceLabel")}</span>
-              <Select value={sourceId} onValueChange={setSourceId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t("selectSource")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {sources
-                    .filter((source) => source.status === "ready")
-                    .map((source) => (
-                      <SelectItem key={source.id} value={source.id}>
+              <Combobox
+                items={readySources}
+                value={selectedSource}
+                onValueChange={(value) =>
+                  setSourceId(value && typeof value === "object" ? value.id : "")
+                }
+                itemToStringLabel={(item) => item.name}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+              >
+                <ComboboxTrigger
+                  render={
+                    <Button variant="outline" className="w-full justify-between font-normal">
+                      <ComboboxValue placeholder={t("selectSource")} />
+                    </Button>
+                  }
+                />
+                <ComboboxContent>
+                  <ComboboxInput showTrigger={false} placeholder={t("searchSource")} />
+                  <ComboboxEmpty>{t("emptySources")}</ComboboxEmpty>
+                  <ComboboxList>
+                    {(source: SourceOption) => (
+                      <ComboboxItem key={source.id} value={source}>
                         {source.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("targetLabel")}</span>
-              <Select value={targetId} onValueChange={setTargetId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t("selectTarget")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {targets
-                    .filter((target) => target.active)
-                    .map((target) => (
-                      <SelectItem key={target.id} value={target.id}>
+              <Combobox
+                items={activeTargets}
+                value={selectedTarget}
+                onValueChange={(value) =>
+                  setTargetId(value && typeof value === "object" ? value.id : "")
+                }
+                itemToStringLabel={(item) => item.label}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+              >
+                <ComboboxTrigger
+                  render={
+                    <Button variant="outline" className="w-full justify-between font-normal">
+                      <ComboboxValue placeholder={t("selectTarget")} />
+                    </Button>
+                  }
+                />
+                <ComboboxContent>
+                  <ComboboxInput showTrigger={false} placeholder={t("searchTarget")} />
+                  <ComboboxEmpty>{t("emptyTargets")}</ComboboxEmpty>
+                  <ComboboxList>
+                    {(target: TargetOption) => (
+                      <ComboboxItem key={target.id} value={target}>
                         {target.label}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("youtubeLiveUrlLabel")}</span>

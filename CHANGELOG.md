@@ -2,6 +2,28 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.2.1] - 2026-07-19
+
+### Added
+
+- Searchable Combobox for Video Source and Stream Target on Create Live Task and Edit Stream dialogs.
+- Idle scheduler tick reconciles orphaned DB streams stuck in `running`/`stopping` when FFmpeg is no longer tracked.
+- `isFfmpegProgressLine` helper and progress-line filtering so FFmpeg `frame=`/`fps=` noise never becomes events.
+
+### Fixed
+
+- Streams stuck in `running` after FFmpeg exit: concurrent `setStreamStatus` transition failures no longer leave the process map empty while DB stays `running`; settle now force-writes status via raw SQL fallback.
+- Settle listens for both process `close` and `exit` so status always finalizes.
+- FFmpeg progress output split on `\r` and `\n` (progress used CR-only updates), preventing multi-megabyte single-line events and hung Log page / export.
+- Dropped live `ffmpeg_log` / `ffmpeg_error` event spam; fail messages keep only a short non-progress diagnostic tail (max 5 lines, 1KB).
+- Log page SSE: skip `metrics` payloads and batch live event UI updates every 250ms to avoid freezes under high event volume.
+- Dashboard shell layout: lock document scroll (`html`/`body`/`#root`), pin sidebar with sticky engine/version footer, single scroll owner on main content.
+- `youtubeApiKey` optional on `WorkerSettings` so tests and partial settings payloads typecheck cleanly.
+
+### Changed
+
+- FFmpeg diagnostic buffer capped at 10 lines × 500 chars (non-progress only); metrics still parsed for Monitoring.
+
 ## [0.2.0] - 2026-07-15
 
 ### Added
