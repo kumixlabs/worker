@@ -6,7 +6,7 @@ function formatBytes(bytes = 0) {
 }
 
 function formatBytesCompact(bytes: number | null): string {
-  if (!bytes) return "-";
+  if (bytes == null) return "-";
   return formatBytes(bytes);
 }
 

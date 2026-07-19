@@ -13,11 +13,8 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <I18nProvider messages={{ en, id }}>
       <ThemeProvider>
-        <AuthGate isHome={window.location.pathname === "/"}>
-          {/* Main Content */}
+        <AuthGate>
           <Suspense>{children}</Suspense>
-
-          {/* Toasts */}
           <Sonner position="top-center" />
         </AuthGate>
       </ThemeProvider>

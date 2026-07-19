@@ -6,23 +6,46 @@ All notable changes to Kumix Worker will be documented in this file.
 
 ### Added
 
+- Auto-resume active streams after graceful restart (Docker stop / compose recreate / SIGTERM): writes auto-start marker on shutdown, starts those streams again on boot. Disable with `KUMIX_WORKER_AUTO_RESUME=0`.
 - Searchable Combobox for Video Source and Stream Target on Create Live Task and Edit Stream dialogs.
-- Idle scheduler tick reconciles orphaned DB streams stuck in `running`/`stopping` when FFmpeg is no longer tracked.
+- Scheduler always reconciles orphaned DB streams stuck in `running`/`stopping` when FFmpeg is no longer tracked (including stale tombstones with dead PIDs).
 - `isFfmpegProgressLine` helper and progress-line filtering so FFmpeg `frame=`/`fps=` noise never becomes events.
+- Dashboard stats include `stopping` stream count; event badges for `restart_scheduled`, `restart_failed`, `reconciled`.
 
 ### Fixed
 
-- Streams stuck in `running` after FFmpeg exit: concurrent `setStreamStatus` transition failures no longer leave the process map empty while DB stays `running`; settle now force-writes status via raw SQL fallback.
+- Streams stuck in `running` after FFmpeg exit: concurrent `setStreamStatus` transition failures no longer leave the process map empty while DB stays `running`; settle now force-writes status via raw SQL fallback and keeps the tombstone when the write fails.
+- Start path: if post-spawn status write fails, kill FFmpeg, clear process map/tombstone, mark failed.
+- Stop during in-flight start: `stopStream` honors `startingStreams` / process map even while status is still `pending`.
 - Settle listens for both process `close` and `exit` so status always finalizes.
 - FFmpeg progress output split on `\r` and `\n` (progress used CR-only updates), preventing multi-megabyte single-line events and hung Log page / export.
 - Dropped live `ffmpeg_log` / `ffmpeg_error` event spam; fail messages keep only a short non-progress diagnostic tail (max 5 lines, 1KB).
-- Log page SSE: skip `metrics` payloads and batch live event UI updates every 250ms to avoid freezes under high event volume.
+- Log page SSE: skip `metrics` payloads, batch live event UI updates every 250ms, clear reconnect timer on unmount.
 - Dashboard shell layout: lock document scroll (`html`/`body`/`#root`), pin sidebar with sticky engine/version footer, single scroll owner on main content.
+- YouTube API key never returned from settings (`hasYoutubeApiKey` only); blank PATCH keeps existing key.
+- Token rotation requires the same strength rules as CLI tokens (`validToken`).
+- Auth body limit applied before public auth routes; login form shown on all routes (not only `/`).
+- Bulk delete reports missing IDs as failed instead of deleted; invalid schedule strings return 400.
+- Source download cancel no longer races retry (abort map cleared only in download `finally`).
+- HTTP Range suffix form `bytes=-N` serves the last N bytes.
+- Streams list polls every 5s; create stream validates source/target existence.
+- OpenAPI version matches package version; Docker install uses bun lockfile; CI pins Bun 1.3.14.
 - `youtubeApiKey` optional on `WorkerSettings` so tests and partial settings payloads typecheck cleanly.
 
 ### Changed
 
+- Source video always loops (`-stream_loop -1`); schedule/auto-stop controls duration. Loop checkbox removed from Create/Edit.
+- FFmpeg reconnect: unexpected exit keeps stream `running`, auto-restarts up to 12 times (budget resets after 10 minutes healthy), then fails; scheduler ignores reconnect window.
+- FFmpeg FLV output uses `-flvflags no_duration_filesize` for more reliable RTMP ingest.
 - FFmpeg diagnostic buffer capped at 10 lines × 500 chars (non-progress only); metrics still parsed for Monitoring.
+- Edit stream available on all statuses (YouTube Live URL editable while running/stopping; other fields locked).
+- Edit stream uses auto-stop schedule field instead of historical stopped-at time.
+- Date/time pickers emit wall-clock values in the worker timezone (not browser local).
+- Auth handoff uses `#code=` fragment; query `?code=` still accepted for older links.
+- Recurrence UI no longer requires an auto-stop mode on Create Live Task.
+- Public client skips retries on 4xx responses.
+- Dashboard attention count uses failed streams + invalid sources only (no event double-count).
+- Docker release job verifies git tag matches `package.json` version.
 
 ## [0.2.0] - 2026-07-15
 

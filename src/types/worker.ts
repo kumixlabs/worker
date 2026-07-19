@@ -23,7 +23,14 @@ export interface WorkerSettings {
 export interface WorkerStats {
   sources: { total: number; ready: number; invalid: number };
   targets: { total: number; active: number };
-  streams: { total: number; running: number; pending: number; stopped: number; failed: number };
+  streams: {
+    total: number;
+    running: number;
+    pending: number;
+    stopping: number;
+    stopped: number;
+    failed: number;
+  };
   storage: {
     cacheBytes: number;
     disk?: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };

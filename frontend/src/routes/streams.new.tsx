@@ -27,7 +27,7 @@ import {
 } from "@kumix/ui";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
-import { DateTimePicker, toLocalInput } from "@/components/DateTimePicker";
+import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
 import { api, queryClient } from "@/lib/api";
 
 type SourceOption = { id: string; name: string };
@@ -37,11 +37,20 @@ function toSchedule(value: string) {
   return value ? value : null;
 }
 
-function durationStopAt(startAt: string, hours: string, minutes: string) {
+function durationStopAt(startAt: string, hours: string, minutes: string, timeZone?: string) {
   const totalMinutes = Number(hours || 0) * 60 + Number(minutes || 0);
   if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return null;
-  const base = startAt ? new Date(startAt) : new Date();
-  return toLocalInput(new Date(base.getTime() + totalMinutes * 60_000));
+  const match = startAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = Number(match[4]);
+    const minute = Number(match[5]);
+    const base = new Date(year, month - 1, day, hour, minute);
+    return toWallClockInput(new Date(base.getTime() + totalMinutes * 60_000));
+  }
+  return toWallClockInput(new Date(Date.now() + totalMinutes * 60_000), timeZone);
 }
 
 const WEEKDAYS = [
@@ -71,11 +80,14 @@ export function NewStreamPage() {
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
+  const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const workerTimezone = settingsQuery.data?.timezone;
+  const nowWallClock = () => toWallClockInput(new Date(), workerTimezone);
   const effectiveStopAt =
     stopMode === "datetime"
       ? stopAt
       : stopMode === "duration"
-        ? durationStopAt(startAt, durationHours, durationMinutes)
+        ? durationStopAt(startAt, durationHours, durationMinutes, workerTimezone)
         : null;
   const createStream = useMutation({
     mutationFn: () =>
@@ -84,9 +96,7 @@ export function NewStreamPage() {
         sourceId,
         targetId,
         youtubeLiveUrl: youtubeLiveUrl || null,
-        scheduledFor: toSchedule(
-          startAt || (recurrence !== "none" ? toLocalInput(new Date()) : ""),
-        ),
+        scheduledFor: toSchedule(startAt || (recurrence !== "none" ? nowWallClock() : "")),
         autoStopAt: effectiveStopAt,
         recurrence,
         recurrenceRule:
@@ -232,7 +242,7 @@ export function NewStreamPage() {
               <DateTimePicker
                 value={startAt}
                 onChange={setStartAt}
-                min={toLocalInput(new Date())}
+                min={nowWallClock()}
                 placeholder={t("startAt")}
               />
             </label>
@@ -283,33 +293,31 @@ export function NewStreamPage() {
                 <DateTimePicker
                   value={stopAt}
                   onChange={setStopAt}
-                  min={startAt || toLocalInput(new Date())}
+                  min={startAt || nowWallClock()}
                   placeholder={t("stopAt")}
                 />
               </label>
             ) : null}
-            {stopMode !== "none" ? (
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">{t("recurrence")}</span>
-                <Select
-                  value={recurrence}
-                  onValueChange={(value) =>
-                    setRecurrence(value as "none" | "daily" | "weekly" | "monthly")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t("manual")}</SelectItem>
-                    <SelectItem value="daily">{t("daily")}</SelectItem>
-                    <SelectItem value="weekly">{t("weekly")}</SelectItem>
-                    <SelectItem value="monthly">{t("monthly")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </label>
-            ) : null}
-            {stopMode !== "none" && recurrence !== "none" ? (
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">{t("recurrence")}</span>
+              <Select
+                value={recurrence}
+                onValueChange={(value) =>
+                  setRecurrence(value as "none" | "daily" | "weekly" | "monthly")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("manual")}</SelectItem>
+                  <SelectItem value="daily">{t("daily")}</SelectItem>
+                  <SelectItem value="weekly">{t("weekly")}</SelectItem>
+                  <SelectItem value="monthly">{t("monthly")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+            {recurrence !== "none" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">{t("recurrenceTime")}</span>
                 <Input

@@ -6,7 +6,7 @@
 [![Docker](https://img.shields.io/docker/v/kumix/worker?logo=docker)](https://hub.docker.com/r/kumix/worker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Kumix Worker is a self-hosted live-stream runner that supports scheduling, optional looping, and broadcasting video sources to RTMP/RTMPS platforms with monitoring, crash recovery, and a local dashboard.
+Kumix Worker is a self-hosted live-stream runner that supports scheduling, always-on source looping, and broadcasting video sources to RTMP/RTMPS platforms with monitoring, crash recovery, and a local dashboard.
 
 Package: `@kumix/worker`
 CLI: `kumix-worker`
@@ -58,7 +58,7 @@ The dashboard includes:
 - Sources page for adding direct URL or Google Drive sources, viewing media details, previewing, renaming, cancelling, retrying, and deleting sources, including bulk delete.
 - Targets page for creating/editing RTMP targets and enabling/disabling destinations.
 - Streams page for stream lifecycle actions, logs, exports, stopped time edits, and safe deletion.
-- Settings page for timezone and disk usage limit.
+- Settings page for timezone, disk usage limit, and optional YouTube Data API key (write-only).
 - EN/ID i18n with parity and orphan-key tests.
 
 ### Sources
@@ -109,13 +109,15 @@ Streams support:
 
 Stream action matrix:
 
-| Status     | Actions                                   |
-| ---------- | ----------------------------------------- |
-| `pending`  | View Log, Export Log, Edit, Delete        |
-| `running`  | View Log, Export Log, Stop                |
-| `stopping` | View Log, Export Log                      |
-| `stopped`  | View Log, Export Log, Delete              |
-| `failed`   | View Log, Export Log, Start, Edit, Delete |
+| Status     | Actions                                                  |
+| ---------- | -------------------------------------------------------- |
+| `pending`  | View Log, Export Log, Edit, Delete                       |
+| `running`  | View Log, Export Log, Stop, Edit (YouTube Live URL only) |
+| `stopping` | View Log, Export Log, Edit (YouTube Live URL only)       |
+| `stopped`  | View Log, Export Log, Edit, Delete                       |
+| `failed`   | View Log, Export Log, Start, Edit, Delete                |
+
+Edit is available on every status so you can attach or update a YouTube Live URL for analytics without recreating the stream. While `running` or `stopping`, only the YouTube Live URL field is editable; title, source, target, and schedule stay locked. Source video always loops until stop or auto-stop.
 
 ### Logs And Events
 
@@ -186,7 +188,7 @@ Run commands from the repository root. Root and frontend dependencies require se
 `bun run dev` starts:
 
 - API on `http://localhost:8080`
-- Vite dashboard on the port shown by Vite (typically `http://localhost:5173`)
+- Vite dashboard on `http://localhost:8000` (proxies `/api` to the worker)
 
 ## Runtime Data
 
@@ -231,9 +233,12 @@ KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS
 KUMIX_WORKER_CORS_ORIGINS
 KUMIX_WORKER_FFMPEG_PATH
 KUMIX_WORKER_FFPROBE_PATH
+KUMIX_WORKER_AUTO_RESUME
 ```
 
 `KUMIX_WORKER_FFMPEG_PATH` and `KUMIX_WORKER_FFPROBE_PATH` override the bundled static binaries with a system FFmpeg/FFprobe. Set these when the static build cannot resolve DNS for RTMP output (it can segfault on some hosts because statically linked glibc cannot load NSS modules). When unset, the bundled `ffmpeg-static`/`ffprobe-static` binaries are used.
+
+`KUMIX_WORKER_AUTO_RESUME` defaults to on. On graceful stop (`SIGTERM`/`SIGINT`, e.g. Docker stop or compose recreate), active streams are marked and started again after boot. Set to `0` to disable.
 
 ## HTTP API Overview
 
@@ -342,7 +347,7 @@ export KUMIX_WORKER_FFPROBE_PATH=/usr/bin/ffprobe
 kumix-worker serve
 ```
 
-For Docker, set the same environment variables with `-e` if your containerized host exhibits the issue. The default Docker image (`node:24-bookworm-slim`) is tested with the bundled binaries and should not require this override.
+The official Docker image already installs system FFmpeg/FFprobe via apt and sets `KUMIX_WORKER_FFMPEG_PATH` / `KUMIX_WORKER_FFPROBE_PATH` to `/usr/bin/*`, so the container does not rely on the bundled static binaries for RTMP output.
 
 ### Config is missing its token
 

@@ -2,7 +2,7 @@
  * Runtime host, cache, disk, and stream metrics collection helpers.
  */
 
-import { readdirSync, statfsSync, statSync } from "node:fs";
+import { statfsSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, totalmem } from "node:os";
 import path from "node:path";
@@ -30,26 +30,6 @@ function diskUsage(dir: string) {
     return { totalBytes, freeBytes, usedBytes, usedPercent };
   } catch {
     return { totalBytes: 0, freeBytes: 0, usedBytes: 0, usedPercent: 0 };
-  }
-}
-
-/**
- * Recursively sums the byte size of all files within a directory.
- * Returns 0 when the directory does not exist or cannot be read.
- *
- * @param dir - The directory to measure.
- * @returns The total size in bytes.
- */
-function _directorySize(dir: string): number {
-  try {
-    return readdirSync(dir, { withFileTypes: true }).reduce((total, entry) => {
-      const filePath = path.join(dir, entry.name);
-      if (entry.isDirectory()) return total + _directorySize(filePath);
-      if (entry.isFile()) return total + statSync(filePath).size;
-      return total;
-    }, 0);
-  } catch {
-    return 0;
   }
 }
 

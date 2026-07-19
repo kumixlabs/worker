@@ -26,7 +26,15 @@ export function registerTargetRoutes(app: Hono) {
   app.get(
     "/api/targets",
     doc("Targets", "List targets", "Lists streaming targets with secrets omitted."),
-    (c) => c.json(ok(listTargets())),
+    (c) =>
+      c.json(
+        ok(
+          listTargets().map((target) => {
+            const full = getTarget(target.id);
+            return full ? safeTarget(full) : target;
+          }),
+        ),
+      ),
   );
 
   app.post(
@@ -51,8 +59,8 @@ export function registerTargetRoutes(app: Hono) {
       const failed: { id: string; message: string }[] = [];
       for (const id of parsed.data.ids) {
         try {
-          deleteTarget(id);
-          deleted.push(id);
+          if (deleteTarget(id)) deleted.push(id);
+          else failed.push({ id, message: "Target not found" });
         } catch (error) {
           failed.push({ id, message: error instanceof Error ? error.message : "Target is in use" });
         }

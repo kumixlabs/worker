@@ -17,7 +17,6 @@ import { useTranslations } from "use-intl";
 
 import {
   Button,
-  Checkbox,
   Combobox,
   ComboboxContent,
   ComboboxEmpty,
@@ -42,7 +41,7 @@ import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
-import { DateTimePicker, toLocalInput } from "@/components/DateTimePicker";
+import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
@@ -61,20 +60,40 @@ export function StreamsPage() {
   const [editSourceId, setEditSourceId] = useState("");
   const [editTargetId, setEditTargetId] = useState("");
   const [editScheduledFor, setEditScheduledFor] = useState("");
-  const [editStoppedAt, setEditStoppedAt] = useState("");
-  const [editLoop, setEditLoop] = useState(false);
+  const [editAutoStopAt, setEditAutoStopAt] = useState("");
   const [editYoutubeLiveUrl, setEditYoutubeLiveUrl] = useState("");
-  const streamsQuery = useQuery({ queryKey: ["streams"], queryFn: api.streams });
+  const streamsQuery = useQuery({
+    queryKey: ["streams"],
+    queryFn: api.streams,
+    refetchInterval: 5_000,
+  });
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const workerTimezone = settingsQuery.data?.timezone;
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
-  const sources: SourceOption[] = (sourcesQuery.data ?? [])
-    .filter((source) => source.status === "ready")
-    .map((source) => ({ id: source.id, name: source.name }));
-  const targets: TargetOption[] = (targetsQuery.data ?? [])
-    .filter((target) => target.active)
-    .map((target) => ({ id: target.id, label: target.label }));
+  const sources: SourceOption[] = (() => {
+    const ready = (sourcesQuery.data ?? [])
+      .filter((source) => source.status === "ready")
+      .map((source) => ({ id: source.id, name: source.name }));
+    if (editSourceId && !ready.some((source) => source.id === editSourceId) && editStream?.source) {
+      ready.push({ id: editStream.source.id, name: editStream.source.name });
+    }
+    return ready;
+  })();
+  const targets: TargetOption[] = (() => {
+    const active = (targetsQuery.data ?? [])
+      .filter((target) => target.active)
+      .map((target) => ({ id: target.id, label: target.label }));
+    if (
+      editTargetId &&
+      !active.some((target) => target.id === editTargetId) &&
+      editStream?.target
+    ) {
+      active.push({ id: editStream.target.id, label: editStream.target.label });
+    }
+    return active;
+  })();
   const selectedEditSource = sources.find((source) => source.id === editSourceId) ?? null;
   const selectedEditTarget = targets.find((target) => target.id === editTargetId) ?? null;
   const streamLocked = editStream?.status === "running" || editStream?.status === "stopping";
@@ -107,10 +126,9 @@ export function StreamsPage() {
             title: editTitle.trim(),
             sourceId: editSourceId,
             targetId: editTargetId,
-            loop: editLoop,
             youtubeLiveUrl: editYoutubeLiveUrl || null,
             scheduledFor: editScheduledFor || null,
-            stoppedAt: editStoppedAt || null,
+            autoStopAt: editAutoStopAt || null,
           };
       return api.patchStream(editStream?.id ?? "", body);
     },
@@ -148,16 +166,22 @@ export function StreamsPage() {
     setDeleteIds([]);
   };
   const streams = streamsQuery.data ?? [];
-  const openEdit = useCallback((stream: StreamRecord) => {
-    setEditStream(stream);
-    setEditTitle(stream.title);
-    setEditSourceId(stream.sourceId);
-    setEditTargetId(stream.targetId);
-    setEditScheduledFor(stream.scheduledFor ? toLocalInput(new Date(stream.scheduledFor)) : "");
-    setEditStoppedAt(stream.stoppedAt ? toLocalInput(new Date(stream.stoppedAt)) : "");
-    setEditLoop(stream.loop);
-    setEditYoutubeLiveUrl(stream.youtubeLiveUrl ?? "");
-  }, []);
+  const openEdit = useCallback(
+    (stream: StreamRecord) => {
+      setEditStream(stream);
+      setEditTitle(stream.title);
+      setEditSourceId(stream.sourceId);
+      setEditTargetId(stream.targetId);
+      setEditScheduledFor(
+        stream.scheduledFor ? toWallClockInput(new Date(stream.scheduledFor), workerTimezone) : "",
+      );
+      setEditAutoStopAt(
+        stream.autoStopAt ? toWallClockInput(new Date(stream.autoStopAt), workerTimezone) : "",
+      );
+      setEditYoutubeLiveUrl(stream.youtubeLiveUrl ?? "");
+    },
+    [workerTimezone],
+  );
   const exportStreamLog = useCallback(
     async (id: string) => {
       try {
@@ -410,14 +434,6 @@ export function StreamsPage() {
                 </ComboboxContent>
               </Combobox>
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={editLoop}
-                disabled={streamLocked}
-                onCheckedChange={(checked) => setEditLoop(checked === true)}
-              />
-              <span className="font-medium">{t("loop")}</span>
-            </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("youtubeLiveUrl")}</span>
               <Input
@@ -436,12 +452,13 @@ export function StreamsPage() {
               />
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">{t("columns.stoppedAt")}</span>
+              <span className="font-medium">{t("editAutoStopAt")}</span>
               <DateTimePicker
-                value={editStoppedAt}
-                onChange={setEditStoppedAt}
+                value={editAutoStopAt}
+                onChange={setEditAutoStopAt}
                 disabled={streamLocked}
-                placeholder={t("stoppedAtPlaceholder")}
+                min={editScheduledFor || undefined}
+                placeholder={t("autoStopAtPlaceholder")}
               />
             </label>
           </div>

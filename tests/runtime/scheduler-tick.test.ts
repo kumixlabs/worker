@@ -27,10 +27,17 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // FFmpeg may still hold handles on Windows after a real spawn from tick start.
+  const { stopAllStreams } = await import("../../src/services/stream-runner");
+  await stopAllStreams(2_000);
   resetDbForTests();
   delete process.env.KUMIX_WORKER_DATA_DIR;
-  rmSync(dataDir, { force: true, recursive: true });
+  try {
+    rmSync(dataDir, { force: true, recursive: true });
+  } catch {
+    // Best-effort cleanup; Windows can keep the dir locked briefly.
+  }
 });
 
 describe.skipIf(!hasSqlite())("tickScheduler end-to-end", () => {

@@ -8,6 +8,7 @@ const variantByKind: Record<
 > = {
   failed: "destructive",
   source_download_failed: "destructive",
+  restart_failed: "destructive",
   info: "primary",
   pending: "warning",
   running: "success",
@@ -15,6 +16,8 @@ const variantByKind: Record<
   stopping: "warning",
   system: "secondary",
   token_rotated: "warning",
+  restart_scheduled: "warning",
+  reconciled: "secondary",
 };
 
 const knownKinds = new Set([
@@ -27,6 +30,9 @@ const knownKinds = new Set([
   "source_download_failed",
   "system",
   "info",
+  "restart_scheduled",
+  "restart_failed",
+  "reconciled",
 ]);
 
 export function EventKindBadge({ kind, className }: { kind: string; className?: string }) {

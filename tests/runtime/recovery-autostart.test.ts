@@ -6,13 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDbForTests } from "../../src/db/client";
 import { createSource } from "../../src/db/sources";
-import { createStream } from "../../src/db/streams";
+import { createStream, getStream, setStreamStatus } from "../../src/db/streams";
 import { createTarget } from "../../src/db/targets";
 import { writeSettings } from "../../src/runtime/config";
 import {
   consumeAutoStartMarker,
   getTombstoneDir,
   listTombstones,
+  recoverInterruptedStreams,
   removeTombstone,
   writeAutoStartMarker,
   writeTombstone,
@@ -117,5 +118,69 @@ describe.skipIf(!hasSqlite())("consumeAutoStartMarker with DB", () => {
     expect(consumed).toEqual([stream.id]);
     expect(existsSync(path.join(getTombstoneDir(), "auto-start.json"))).toBe(false);
     expect(consumeAutoStartMarker()).toEqual([]);
+  });
+
+  it("resets marked running streams to pending for auto-resume instead of failed", () => {
+    const source = createSource({
+      kind: "url",
+      name: "Source",
+      url: "https://example.com/video.mp4",
+    });
+    const target = createTarget({
+      active: true,
+      ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      label: "YouTube",
+      streamKey: "secret",
+    });
+    const stream = createStream({
+      loop: true,
+      recurrence: "none",
+      sourceId: source.id,
+      targetId: target.id,
+      title: "Live",
+    });
+    setStreamStatus(stream.id, "running", { pid: 12_345 });
+    writeTombstone({
+      pid: 12_345,
+      status: "running",
+      streamId: stream.id,
+      writtenAt: new Date().toISOString(),
+    });
+
+    const recovered = recoverInterruptedStreams([stream.id]);
+
+    expect(recovered).toEqual([]);
+    expect(getStream(stream.id)?.status).toBe("pending");
+    expect(getStream(stream.id)?.pid).toBeNull();
+    expect(listTombstones()).toEqual([]);
+  });
+
+  it("resets marked stopping streams to pending without throwing", () => {
+    const source = createSource({
+      kind: "url",
+      name: "Source",
+      url: "https://example.com/video.mp4",
+    });
+    const target = createTarget({
+      active: true,
+      ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      label: "YouTube",
+      streamKey: "secret",
+    });
+    const stream = createStream({
+      loop: true,
+      recurrence: "none",
+      sourceId: source.id,
+      targetId: target.id,
+      title: "Live",
+    });
+    setStreamStatus(stream.id, "running", { pid: 99 });
+    setStreamStatus(stream.id, "stopping", { pid: 99 });
+
+    const recovered = recoverInterruptedStreams([stream.id]);
+
+    expect(recovered).toEqual([]);
+    expect(getStream(stream.id)?.status).toBe("pending");
+    expect(getStream(stream.id)?.pid).toBeNull();
   });
 });

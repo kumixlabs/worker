@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +17,6 @@ interface ConfirmDialogProps {
   description: string;
   confirmText: string;
   cancelText: string;
-  children?: ReactNode;
 }
 
 export function ConfirmDialog({

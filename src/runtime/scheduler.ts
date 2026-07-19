@@ -173,19 +173,9 @@ export function collectDueActions(streams: StreamRecord[], now = new Date()): Sc
 export async function tickScheduler(now = new Date()): Promise<SchedulerTickResult> {
   const result: SchedulerTickResult = { started: [], stopped: [] };
 
+  // Due stops/starts first so intentional auto-stop still ends as "stopped".
+  // Orphan reconcile runs after for any remaining untracked running/stopping rows.
   const dueActions = collectDueActions(listStreams(), now);
-  if (dueActions.length === 0) {
-    try {
-      const healed = reconcileOrphanedDbStreams();
-      if (healed > 0) {
-        addEvent(null, "reconciled", `Reconciled ${healed} orphaned running stream(s)`, {
-          healed,
-        });
-      }
-    } catch {
-      // ignore reconciliation errors
-    }
-  }
 
   for (const action of dueActions) {
     try {
@@ -227,6 +217,17 @@ export async function tickScheduler(now = new Date()): Promise<SchedulerTickResu
         { action: action.type },
       );
     }
+  }
+
+  try {
+    const healed = reconcileOrphanedDbStreams();
+    if (healed > 0) {
+      addEvent(null, "reconciled", `Reconciled ${healed} orphaned running stream(s)`, {
+        healed,
+      });
+    }
+  } catch {
+    // ignore reconciliation errors
   }
 
   schedulerStatus.lastTickAt = now.toISOString();

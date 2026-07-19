@@ -1,11 +1,10 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { ShieldAlert } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { Button, Input } from "@kumix/ui";
 import { getApiToken, setApiToken } from "@/lib/api";
 
-export function AuthGate({ children, isHome = false }: { children: ReactNode; isHome?: boolean }) {
+export function AuthGate({ children }: { children: ReactNode }) {
   const t = useTranslations("Auth");
   const [token, setToken] = useState(getApiToken());
   const [input, setInput] = useState("");
@@ -80,31 +79,18 @@ export function AuthGate({ children, isHome = false }: { children: ReactNode; is
   );
 
   if (token) return children;
-  if (isHome) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <form
-          className="contents"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          {loginCard}
-        </form>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-center">
-      <ShieldAlert className="h-16 w-16 text-destructive" />
-      <h1 className="font-bold text-4xl text-foreground tracking-tight sm:text-5xl">
-        {t("deniedTitle")}
-      </h1>
-      <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
-        {t("deniedDescription")}
-      </p>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <form
+        className="contents"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        {loginCard}
+      </form>
     </div>
   );
 }

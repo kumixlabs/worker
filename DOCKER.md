@@ -121,7 +121,8 @@ Docker deployments do not use `kumix-worker update`. Pull the latest image and r
 
 ```bash
 docker pull kumix/worker:latest
-docker rm -f kumix-worker
+docker stop kumix-worker   # SIGTERM → graceful stop + auto-resume marker
+docker rm kumix-worker
 # re-run your original docker run command
 ```
 
@@ -133,6 +134,23 @@ docker compose up -d
 ```
 
 Data persists across updates because it is stored in the mounted volume (`/app/data`), not in the container image.
+
+### Auto-resume after update / restart
+
+On graceful shutdown (`SIGTERM` / `SIGINT` — what Docker sends on `docker stop` and `compose up -d` recreate), the worker writes an auto-start marker for every active stream. After the new container boots, those streams are started again (unless their `autoStopAt` is already past).
+
+| Signal                             | Behavior                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `SIGTERM` / `SIGINT` (graceful)    | Active streams resume after boot                                        |
+| `SIGKILL` / `docker rm -f` / crash | No marker → streams marked `failed` (manual Start or wait for schedule) |
+
+Disable with:
+
+```bash
+-e KUMIX_WORKER_AUTO_RESUME=0
+```
+
+Prefer `docker stop` (or compose recreate) over `docker rm -f` so the marker is written.
 
 ---
 

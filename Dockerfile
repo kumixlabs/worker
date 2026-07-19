@@ -11,9 +11,8 @@ RUN apt-get update \
 
 COPY package.json bun.lock ./
 COPY scripts/postinstall.js ./scripts/postinstall.js
-RUN npm install \
-    && test -x node_modules/ffmpeg-static/ffmpeg \
-    && test -x node_modules/ffprobe-static/bin/linux/x64/ffprobe
+# Use bun for lockfile-faithful installs. Runtime FFmpeg comes from apt (see runner).
+RUN bun install --frozen-lockfile
 
 COPY frontend/package.json frontend/bun.lock ./frontend/
 RUN cd frontend && bun install --frozen-lockfile

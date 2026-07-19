@@ -65,7 +65,8 @@ export function registerAuthRoutes(app: Hono) {
       pruneHandoffCodes(now);
       const code = randomBytes(32).toString("base64url");
       handoffCodes.set(code, { token, expiresAt: now + handoffTtlMs });
-      return c.redirect(`/?code=${encodeURIComponent(code)}`, 302);
+      // Fragment keeps the code out of access logs, Referer, and history query strings.
+      return c.redirect(`/#code=${encodeURIComponent(code)}`, 302);
     },
   );
 

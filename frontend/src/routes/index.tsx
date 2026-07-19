@@ -51,7 +51,8 @@ export function Dashboard() {
   const recentFailures = events.filter(
     (event) => event.kind === "failed" || event.kind === "restart_failed",
   );
-  const attentionCount = failedStreams.length + invalidSources.length + recentFailures.length;
+  // Count entities only — failure events can multi-fire per stream.
+  const attentionCount = failedStreams.length + invalidSources.length;
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["streams"] });

@@ -655,7 +655,7 @@ export function cancelSourceDownload(sourceId: string): boolean {
   const controller = sourceAborts.get(sourceId);
   if (!controller) return false;
   controller.abort();
-  sourceAborts.delete(sourceId);
+  // Keep map entry until the download finally{} clears it so retry cannot race.
   sourceProgress.delete(sourceId);
   return true;
 }

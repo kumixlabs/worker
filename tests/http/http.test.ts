@@ -121,7 +121,9 @@ describe("Kumix Worker HTTP app", () => {
     expect(response.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.data.token).toBeUndefined();
+    expect(body.data.youtubeApiKey).toBeUndefined();
     expect(body.data.hasToken).toBe(true);
+    expect(body.data.hasYoutubeApiKey).toBe(false);
     expect(body.data.tokenLength).toBe("test-token-123456".length);
     expect(JSON.stringify(body)).not.toContain("test-token-123456");
   });

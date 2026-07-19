@@ -57,10 +57,11 @@ Kumix Worker currently supports:
 - Stream statuses: `pending`, `running`, `stopping`, `stopped`, `failed`.
 - Stream lifecycle actions by status:
   - `pending`: View Log, Export Log, Edit, Delete.
-  - `running`: View Log, Export Log, Stop.
-  - `stopping`: View Log, Export Log.
-  - `stopped`: View Log, Export Log, Delete.
+  - `running`: View Log, Export Log, Stop, Edit (YouTube Live URL only; other fields locked).
+  - `stopping`: View Log, Export Log, Edit (YouTube Live URL only; other fields locked).
+  - `stopped`: View Log, Export Log, Edit, Delete.
   - `failed`: View Log, Export Log, Start, Edit, Delete.
+- Edit remains available on every status so operators can attach or update a YouTube Live URL for analytics without recreating the stream.
 - Global and stream-specific logs, SSE, and text exports.
 - Short-lived signed URLs for browser SSE/export flows.
 - Token rotation with target secret re-encryption.
@@ -71,6 +72,7 @@ Kumix Worker currently supports:
 - Keep all raw secrets out of renderer responses and logs.
 - Never expose raw target stream keys to the renderer or public/core-facing API.
 - Never return the raw worker token from settings, bootstrap, or `/api/v1/*` responses.
+- Never return the raw YouTube API key from settings responses; use `hasYoutubeApiKey` only.
 - Keep all dashboard/private API routes token-authenticated unless explicitly public.
 - Keep `/api/v1/*` stable for external integrations.
 - CORS origins are not allowed by default; allowed origins must be configured via `KUMIX_WORKER_CORS_ORIGINS`.
@@ -153,9 +155,12 @@ KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS
 KUMIX_WORKER_CORS_ORIGINS
 KUMIX_WORKER_FFMPEG_PATH
 KUMIX_WORKER_FFPROBE_PATH
+KUMIX_WORKER_AUTO_RESUME
 ```
 
 `KUMIX_WORKER_FFMPEG_PATH` and `KUMIX_WORKER_FFPROBE_PATH` override the bundled `ffmpeg-static`/`ffprobe-static` binaries with system binaries. Use them when the static build segfaults resolving DNS for RTMP output (statically linked glibc cannot load NSS modules on some hosts). When unset, the bundled static binaries are used.
+
+`KUMIX_WORKER_AUTO_RESUME` defaults to on. On graceful `SIGTERM`/`SIGINT` (Docker stop / compose recreate), active stream IDs are written to an auto-start marker and resumed after boot. Set to `0`/`false`/`off` to disable.
 
 Settings fields:
 
@@ -163,12 +168,14 @@ Settings fields:
 - `port`
 - `timezone`
 - `diskUsageLimitPercent`
+- `youtubeApiKey` (optional; never returned raw — API exposes `hasYoutubeApiKey` only)
 - `dataDir`
 
-Dashboard Settings UI intentionally exposes only:
+Dashboard Settings UI intentionally exposes:
 
 - `timezone`
 - `diskUsageLimitPercent`
+- `youtubeApiKey` (write-only password field; blank keeps existing key)
 
 ## API Contracts
 

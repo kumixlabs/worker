@@ -42,13 +42,10 @@ export function setApiToken(token: string) {
   }
 }
 
-const queryParams = new URLSearchParams(window.location.search);
-const queryCode = queryParams.get("code");
-
 /**
  * Exchanges a one-time handoff code from the dashboard URL for the worker
- * token. The token never appears in the URL, so it cannot leak via history,
- * proxies, or access logs.
+ * token. Prefer `#code=` fragment (not sent to servers); still accept `?code=`
+ * for older handoff links.
  */
 async function consumeHandoffCode(code: string) {
   try {
@@ -67,15 +64,23 @@ async function consumeHandoffCode(code: string) {
   }
 }
 
-if (queryCode) {
+const queryParams = new URLSearchParams(window.location.search);
+const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+const handoffCode = hashParams.get("code") ?? queryParams.get("code");
+
+if (handoffCode) {
   queryParams.delete("code");
+  hashParams.delete("code");
   const nextQuery = queryParams.toString();
+  const nextHash = hashParams.toString();
   window.history.replaceState(
     null,
     "",
-    `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`,
+    `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${
+      nextHash ? `#${nextHash}` : ""
+    }`,
   );
-  void consumeHandoffCode(queryCode);
+  void consumeHandoffCode(handoffCode);
 }
 
 type ApiEnvelope<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
@@ -120,9 +125,24 @@ export const api = {
   stats: () => request<WorkerStats>("/api/stats"),
   metrics: () => request<WorkerMetrics>("/api/metrics"),
   healthDetails: () => request<WorkerHealthDetails>("/api/health/details"),
-  settings: () => request<WorkerSettings>("/api/settings"),
-  patchSettings: (body: Partial<WorkerSettings>) =>
-    request<WorkerSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  settings: () =>
+    request<
+      Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
+        hasToken: boolean;
+        tokenLength: number;
+        hasYoutubeApiKey: boolean;
+      }
+    >("/api/settings"),
+  patchSettings: (
+    body: Partial<Pick<WorkerSettings, "timezone" | "diskUsageLimitPercent" | "youtubeApiKey">>,
+  ) =>
+    request<
+      Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
+        hasToken: boolean;
+        tokenLength: number;
+        hasYoutubeApiKey: boolean;
+      }
+    >("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   sources: () => request<SourceRecord[]>("/api/sources"),
   createSource: (body: { name: string; kind: "url" | "gdrive"; url: string }) =>
     request<SourceRecord>("/api/sources", { method: "POST", body: JSON.stringify(body) }),
@@ -171,7 +191,6 @@ export const api = {
       title: string;
       sourceId: string;
       targetId: string;
-      loop: boolean;
       youtubeLiveUrl: string | null;
       scheduledFor: string | null;
       autoStopAt: string | null;

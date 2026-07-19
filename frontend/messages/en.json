@@ -39,8 +39,6 @@
     "tryAgain": "Try again"
   },
   "Auth": {
-    "deniedTitle": "Access denied",
-    "deniedDescription": "Access to this dashboard requires a Kumix Worker token. Enter your token below to continue.",
     "loginTitle": "Sign in",
     "loginDescription": "Enter your Kumix Worker token to continue.",
     "tokenLabel": "Worker token",
@@ -89,7 +87,10 @@
       "token_rotated": "Token rotated",
       "source_download_failed": "Download failed",
       "system": "System",
-      "info": "Info"
+      "info": "Info",
+      "restart_scheduled": "Restart scheduled",
+      "restart_failed": "Restart failed",
+      "reconciled": "Reconciled"
     }
   },
   "Dashboard": {
@@ -305,16 +306,16 @@
     "edit": "Edit",
     "editTitle": "Edit Stream",
     "editScheduledFor": "Scheduled Start",
+    "editAutoStopAt": "Auto-stop At",
+    "autoStopAtPlaceholder": "Select auto-stop time",
     "searchSource": "Search source...",
     "emptySources": "No ready sources",
     "searchTarget": "Search target...",
     "emptyTargets": "No active targets",
-    "loop": "Loop source video",
     "youtubeLiveUrl": "YouTube Live URL",
     "youtubeLiveUrlPlaceholder": "https://youtube.com/watch?v=...",
     "analytics": "Analytics",
     "saveChanges": "Save Changes",
-    "stoppedAtPlaceholder": "Select stopped time",
     "start": "Start",
     "stop": "Stop",
     "delete": "Delete",
@@ -372,7 +373,9 @@
     "diskLimitInvalid": "Enter a whole number between 50 and 99.",
     "youtubeApiKey": "YouTube Data API Key",
     "youtubeApiKeyDescription": "Required for live stream analytics. Get a key from the Google Cloud Console.",
-    "youtubeApiKeyPlaceholder": "AIza..."
+    "youtubeApiKeyPlaceholder": "AIza...",
+    "youtubeApiKeyConfigured": "A key is already configured. Enter a new value only to replace it.",
+    "youtubeApiKeyKeepPlaceholder": "Leave blank to keep the current key"
   },
   "Analytics": {
     "title": "Stream Analytics",

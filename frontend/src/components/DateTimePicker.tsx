@@ -24,21 +24,42 @@ function pad(value: number): string {
 }
 
 /**
- * Formats a Date into a wall-clock `YYYY-MM-DDTHH:MM` string (no timezone).
- *
- * @param date - The date to format.
- * @returns The local wall-clock input string.
+ * Formats an absolute Date as wall-clock `YYYY-MM-DDTHH:MM` in a timezone.
+ * Worker APIs interpret that string in the worker settings timezone.
  */
-export function toLocalInput(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+export function toWallClockInput(date: Date, timeZone?: string): string {
+  if (!timeZone) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+      date.getHours(),
+    )}:${pad(date.getMinutes())}`;
+  }
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone,
+    year: "numeric",
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}`;
 }
 
-function localInputToDate(value: string): Date | undefined {
+/** @deprecated Prefer toWallClockInput(date, workerTimezone) */
+export function toLocalInput(date: Date): string {
+  return toWallClockInput(date);
+}
+
+function wallClockToDate(value: string): Date | undefined {
   if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+  const [, year, month, day, hour, minute] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0);
 }
 
 function withDate(value: string, date: Date): string {
@@ -47,14 +68,14 @@ function withDate(value: string, date: Date): string {
 }
 
 function withTime(value: string, time: string): string {
-  const current = localInputToDate(value) ?? new Date();
+  const current = wallClockToDate(value) ?? new Date();
   return `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(
     current.getDate(),
   )}T${time || DEFAULT_TIME}`;
 }
 
 function formatValue(value: string, emptyLabel: string): string {
-  const date = localInputToDate(value);
+  const date = wallClockToDate(value);
   if (!date) return emptyLabel;
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -63,11 +84,8 @@ function formatValue(value: string, emptyLabel: string): string {
 }
 
 /**
- * Wall-clock date and time picker built from Kumix UI primitives.
- * Emits a `YYYY-MM-DDTHH:MM` string that the worker interprets in its timezone.
- *
- * @param props - Value, change handler, and optional bounds/placeholder.
- * @returns The date-time picker element.
+ * Wall-clock date and time picker. Emits `YYYY-MM-DDTHH:MM` (no offset).
+ * The worker parses that string in its configured timezone.
  */
 export function DateTimePicker({
   value,
@@ -86,9 +104,9 @@ export function DateTimePicker({
 }) {
   const t = useTranslations("Common");
   const resolvedPlaceholder = placeholder ?? t("pickDateTime");
-  const selected = localInputToDate(value);
-  const minDate = localInputToDate(min ?? "");
-  const maxDate = localInputToDate(max ?? "");
+  const selected = wallClockToDate(value);
+  const minDate = wallClockToDate(min ?? "");
+  const maxDate = wallClockToDate(max ?? "");
   const isDateDisabled = (date: Date) => {
     const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
     const minDay = minDate

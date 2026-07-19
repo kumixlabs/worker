@@ -3,7 +3,9 @@
 import type { Hono } from "hono";
 import { z } from "zod";
 
+import { getSource } from "../../db/sources";
 import { createStream, deleteStream, getStream, listStreams, patchStream } from "../../db/streams";
+import { getTarget } from "../../db/targets";
 import { parseUserDateTime } from "../../lib/timezone";
 import { readSettings } from "../../runtime/config";
 import { streamCreateSchema, streamPatchSchema } from "../../schemas/stream";
@@ -13,6 +15,18 @@ import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(100) });
+
+function requireParsedDateTime(
+  value: string | null | undefined,
+  field: string,
+  timezone: string,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const parsed = parseUserDateTime(value, timezone);
+  if (!parsed) throw new Error(`Invalid ${field}`);
+  return parsed;
+}
 
 /**
  * Converts user-entered local datetimes into UTC ISO timestamps for persistence.
@@ -26,14 +40,13 @@ function normalizeStreamSchedule<
   const timezone = readSettings().timezone;
   return {
     ...input,
-    autoStopAt:
-      input.autoStopAt !== undefined ? parseUserDateTime(input.autoStopAt, timezone) : undefined,
-    scheduledFor:
-      input.scheduledFor !== undefined
-        ? parseUserDateTime(input.scheduledFor, timezone)
-        : undefined,
-    stoppedAt:
-      input.stoppedAt !== undefined ? parseUserDateTime(input.stoppedAt, timezone) : undefined,
+    autoStopAt: requireParsedDateTime(input.autoStopAt, "autoStopAt", timezone) as T["autoStopAt"],
+    scheduledFor: requireParsedDateTime(
+      input.scheduledFor,
+      "scheduledFor",
+      timezone,
+    ) as T["scheduledFor"],
+    stoppedAt: requireParsedDateTime(input.stoppedAt, "stoppedAt", timezone) as T["stoppedAt"],
   };
 }
 
@@ -57,6 +70,8 @@ export function registerStreamRoutes(app: Hono) {
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid stream");
       }
+      if (!getSource(parsed.data.sourceId)) return fail("BAD_REQUEST", "Source not found");
+      if (!getTarget(parsed.data.targetId)) return fail("BAD_REQUEST", "Target not found");
       try {
         return c.json(ok(createStream(normalizeStreamSchedule(parsed.data))), 201);
       } catch (error) {
@@ -75,8 +90,8 @@ export function registerStreamRoutes(app: Hono) {
       const failed: { id: string; message: string }[] = [];
       for (const id of parsed.data.ids) {
         try {
-          deleteStream(id);
-          deleted.push(id);
+          if (deleteStream(id)) deleted.push(id);
+          else failed.push({ id, message: "Stream not found" });
         } catch (error) {
           failed.push({
             id,

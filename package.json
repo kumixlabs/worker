@@ -1,7 +1,7 @@
 {
   "name": "@kumix/worker",
   "version": "0.2.1",
-  "description": "Kumix Worker is a self-hosted live-stream runner that schedules, loops, and broadcasts video sources to RTMP platforms with monitoring, crash recovery, and a local dashboard.",
+  "description": "Kumix Worker is a self-hosted live-stream runner that schedules and broadcasts video sources to RTMP platforms with always-on source looping, monitoring, crash recovery, and a local dashboard.",
   "author": "Kumix Labs <hai@kumix.io>",
   "license": "MIT",
   "type": "module",
@@ -30,9 +30,9 @@
     "format": "biome format --write",
     "format:check": "biome check",
     "types:check": "tsc --noEmit && bun run frontend:types:check",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --config tests/vitest.config.ts",
+    "test:watch": "vitest --config tests/vitest.config.ts",
+    "test:coverage": "vitest run --config tests/vitest.config.ts --coverage",
     "bump": "bumpp"
   },
   "homepage": "https://github.com/kumixlabs/worker",

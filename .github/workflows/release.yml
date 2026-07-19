@@ -106,6 +106,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify tag matches package.json
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          PKG_VER=$(node -p "require('./package.json').version")
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag (expected v1.2.3): $TAG"
+            exit 1
+          fi
+          TAG_VER="${TAG#v}"
+          if [[ "$TAG_VER" != "$PKG_VER" ]]; then
+            echo "Tag v$TAG_VER must match package.json version $PKG_VER"
+            exit 1
+          fi
+          echo "Docker release @kumix/worker@$PKG_VER"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 

@@ -21,8 +21,15 @@ export const streamCreateSchema = z.object({
   title: z.string().min(1).max(200),
   sourceId: z.string().min(1).max(64),
   targetId: z.string().min(1).max(64),
-  loop: z.boolean().default(true),
-  youtubeLiveUrl: z.string().max(512).nullable().optional(),
+  // Always true; kept for API compatibility. Source video always loops until stop/auto-stop.
+  loop: z
+    .boolean()
+    .default(true)
+    .transform(() => true),
+  youtubeLiveUrl: z
+    .union([z.string().url().max(512), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => (value === "" ? null : value)),
   scheduledFor: z.string().min(1).max(64).nullable().optional(),
   autoStopAt: z.string().min(1).max(64).nullable().optional(),
   recurrence: recurrenceSchema.default("none"),
@@ -46,11 +53,12 @@ export const streamPatchSchema = streamCreateSchema.partial().extend({
 });
 
 /**
- * Parsed stream creation payload.
+ * Stream creation payload (caller/input shape).
+ * Use z.input so optional+transform fields stay optional for direct createStream() calls.
  */
-export type StreamCreateInput = z.infer<typeof streamCreateSchema>;
+export type StreamCreateInput = z.input<typeof streamCreateSchema>;
 
 /**
- * Parsed stream patch payload.
+ * Stream patch payload (caller/input shape).
  */
-export type StreamPatchInput = z.infer<typeof streamPatchSchema>;
+export type StreamPatchInput = z.input<typeof streamPatchSchema>;

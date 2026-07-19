@@ -59,7 +59,7 @@ import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EventKindBadge } from "@/components/EventKindBadge";
-import { api, queryClient } from "@/lib/api";
+import { api, getApiToken, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
 import type { EventRecord } from "../../../src/types/event";
 
@@ -132,10 +132,11 @@ export function LogPage() {
       let signed: { url: string };
       try {
         signed = await api.signedUrl(path);
-      } catch (error) {
+      } catch {
         setConnected(false);
-        if (error instanceof Error && error.message.includes("401")) {
+        if (!getApiToken()) {
           window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
+          return;
         }
         scheduleReconnect();
         return;
@@ -189,6 +190,10 @@ export function LogPage() {
       cancelled = true;
       setConnected(false);
       source?.close();
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       if (flushTimer) {
         clearInterval(flushTimer);
         flushTimer = null;

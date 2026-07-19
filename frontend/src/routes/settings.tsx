@@ -40,6 +40,7 @@ export function SettingsPage() {
   const [timezone, setTimezone] = useState("");
   const [diskLimit, setDiskLimit] = useState("");
   const [youtubeApiKey, setYoutubeApiKey] = useState("");
+  const [youtubeKeyDirty, setYoutubeKeyDirty] = useState(false);
   const timezones = useMemo(supportedTimezones, []);
 
   const updateSettings = useMutation({
@@ -47,10 +48,12 @@ export function SettingsPage() {
       api.patchSettings({
         timezone,
         diskUsageLimitPercent: Number(diskLimit),
-        youtubeApiKey,
+        ...(youtubeKeyDirty ? { youtubeApiKey } : {}),
       }),
     onSuccess: () => {
       AlertSuccess({ message: t("saved") });
+      setYoutubeApiKey("");
+      setYoutubeKeyDirty(false);
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
     onError: (error) => AlertError({ message: error.message }),
@@ -60,7 +63,8 @@ export function SettingsPage() {
     if (!settingsQuery.data) return;
     setTimezone(settingsQuery.data.timezone);
     setDiskLimit(String(settingsQuery.data.diskUsageLimitPercent));
-    setYoutubeApiKey(settingsQuery.data.youtubeApiKey ?? "");
+    setYoutubeApiKey("");
+    setYoutubeKeyDirty(false);
   }, [settingsQuery.data]);
 
   const diskValue = Number(diskLimit);
@@ -141,12 +145,22 @@ export function SettingsPage() {
             </CardTitle>
             <CardDescription>{t("youtubeApiKeyDescription")}</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
+            {settingsQuery.data?.hasYoutubeApiKey ? (
+              <p className="text-muted-foreground text-xs">{t("youtubeApiKeyConfigured")}</p>
+            ) : null}
             <Input
               type="password"
               value={youtubeApiKey}
-              placeholder={t("youtubeApiKeyPlaceholder")}
-              onChange={(event) => setYoutubeApiKey(event.target.value)}
+              placeholder={
+                settingsQuery.data?.hasYoutubeApiKey
+                  ? t("youtubeApiKeyKeepPlaceholder")
+                  : t("youtubeApiKeyPlaceholder")
+              }
+              onChange={(event) => {
+                setYoutubeApiKey(event.target.value);
+                setYoutubeKeyDirty(true);
+              }}
             />
           </CardContent>
         </Card>

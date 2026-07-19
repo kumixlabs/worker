@@ -33,7 +33,6 @@ describe("FFmpeg runner helpers", () => {
       buildFfmpegArgs({
         filePath: "/video.mp4",
         ingestUrl: "rtmp://a.rtmp.youtube.com/live2/",
-        loop: true,
         streamKey: "secret-key",
       }),
     ).toEqual([
@@ -61,6 +60,8 @@ describe("FFmpeg runner helpers", () => {
       "48000",
       "-af",
       "aresample=async=1:first_pts=0",
+      "-flvflags",
+      "no_duration_filesize",
       "-f",
       "flv",
       "rtmp://a.rtmp.youtube.com/live2/secret-key",

@@ -6,7 +6,7 @@
 [![Docker](https://img.shields.io/docker/v/kumix/worker?logo=docker)](https://hub.docker.com/r/kumix/worker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Kumix Worker adalah runner live-stream mandiri yang mendukung penjadwalan, looping opsional, dan broadcast sumber video ke platform RTMP/RTMPS dengan monitoring, crash recovery, dan dashboard lokal.
+Kumix Worker adalah runner live-stream mandiri yang mendukung penjadwalan, loop sumber video otomatis, dan broadcast ke platform RTMP/RTMPS dengan monitoring, crash recovery, dan dashboard lokal.
 
 Package: `@kumix/worker`
 CLI: `kumix-worker`
@@ -58,7 +58,7 @@ Dashboard mencakup:
 - Halaman Sources untuk menambah URL langsung atau sumber Google Drive, melihat detail media, preview, rename, membatalkan download, retry, menghapus, dan bulk delete.
 - Halaman Targets untuk membuat/mengedit target RTMP/RTMPS dan mengaktifkan/menonaktifkan tujuan.
 - Halaman Streams untuk lifecycle stream, log, export, edit waktu berhenti, dan penghapusan aman.
-- Halaman Settings untuk timezone dan batas penggunaan disk.
+- Halaman Settings untuk timezone, batas penggunaan disk, dan kunci API Data YouTube opsional (write-only).
 - i18n EN/ID dengan parity dan test orphan key.
 
 ### Sources
@@ -110,13 +110,15 @@ Streams mendukung:
 
 Matriks aksi stream:
 
-| Status     | Aksi                                      |
-| ---------- | ----------------------------------------- |
-| `pending`  | View Log, Export Log, Edit, Delete        |
-| `running`  | View Log, Export Log, Stop                |
-| `stopping` | View Log, Export Log                      |
-| `stopped`  | View Log, Export Log, Delete              |
-| `failed`   | View Log, Export Log, Start, Edit, Delete |
+| Status     | Aksi                                                     |
+| ---------- | -------------------------------------------------------- |
+| `pending`  | View Log, Export Log, Edit, Delete                       |
+| `running`  | View Log, Export Log, Stop, Edit (URL Live YouTube saja) |
+| `stopping` | View Log, Export Log, Edit (URL Live YouTube saja)       |
+| `stopped`  | View Log, Export Log, Edit, Delete                       |
+| `failed`   | View Log, Export Log, Start, Edit, Delete                |
+
+Edit tersedia di setiap status agar operator bisa menambahkan/mengubah URL Live YouTube untuk analitik tanpa membuat ulang stream. Saat `running` atau `stopping`, hanya field URL Live YouTube yang bisa diedit; title, source, target, dan jadwal dikunci. Video sumber selalu di-loop sampai stop atau auto-stop.
 
 ### Log dan Event
 
@@ -187,7 +189,7 @@ Jalankan perintah dari root repository. Dependency root dan frontend memerlukan 
 `bun run dev` menjalankan:
 
 - API pada `http://localhost:8080`.
-- Dashboard Vite pada port yang ditampilkan Vite (biasanya `http://localhost:5173`).
+- Dashboard Vite pada `http://localhost:8000` (proxy `/api` ke worker).
 
 ## Data Runtime
 
@@ -232,9 +234,12 @@ KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS
 KUMIX_WORKER_CORS_ORIGINS
 KUMIX_WORKER_FFMPEG_PATH
 KUMIX_WORKER_FFPROBE_PATH
+KUMIX_WORKER_AUTO_RESUME
 ```
 
 `KUMIX_WORKER_FFMPEG_PATH` dan `KUMIX_WORKER_FFPROBE_PATH` mengganti binary statis bawaan dengan FFmpeg/FFprobe sistem. Gunakan saat build statis gagal melakukan resolve DNS untuk output RTMP (pada sebagian host dapat mengalami segfault karena glibc statis tidak dapat memuat modul NSS). Jika tidak diatur, binary `ffmpeg-static`/`ffprobe-static` digunakan.
+
+`KUMIX_WORKER_AUTO_RESUME` default aktif. Saat stop graceful (`SIGTERM`/`SIGINT`, mis. `docker stop` atau compose recreate), stream aktif ditandai dan dijalankan lagi setelah boot. Set `0` untuk menonaktifkan.
 
 ## Ringkasan HTTP API
 
@@ -345,7 +350,7 @@ export KUMIX_WORKER_FFPROBE_PATH=/usr/bin/ffprobe
 kumix-worker serve
 ```
 
-Untuk Docker, atur environment variable yang sama dengan `-e` jika host dalam container mengalami masalah tersebut. Image Docker default (`node:24-bookworm-slim`) diuji dengan binary bawaan dan biasanya tidak memerlukan override ini.
+Image Docker resmi sudah menginstal FFmpeg/FFprobe sistem via apt dan mengatur `KUMIX_WORKER_FFMPEG_PATH` / `KUMIX_WORKER_FFPROBE_PATH` ke `/usr/bin/*`, jadi container tidak bergantung pada binary static bawaan untuk output RTMP.
 
 ### Config kehilangan token
 

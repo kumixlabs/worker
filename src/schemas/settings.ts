@@ -4,6 +4,8 @@
 
 import { z } from "zod";
 
+import { validToken } from "../runtime/config";
+
 /**
  * Validates an IANA timezone setting accepted by the worker runtime.
  */
@@ -31,10 +33,23 @@ export const settingsPatchSchema = z.object({
 });
 
 /**
- * Validates worker token rotation requests.
+ * Validates worker token rotation requests (same strength rules as CLI tokens).
  */
 export const tokenRotateSchema = z.object({
-  token: z.string().min(16).max(256),
+  token: z
+    .string()
+    .min(16)
+    .max(256)
+    .superRefine((value, ctx) => {
+      try {
+        validToken(value);
+      } catch (error) {
+        ctx.addIssue({
+          code: "custom",
+          message: error instanceof Error ? error.message : "Invalid token",
+        });
+      }
+    }),
 });
 
 /**

@@ -116,8 +116,8 @@ export function registerSourceRoutes(app: Hono) {
       const failed: { id: string; message: string }[] = [];
       for (const id of parsed.data.ids) {
         try {
-          deleteSource(id);
-          deleted.push(id);
+          if (deleteSource(id)) deleted.push(id);
+          else failed.push({ id, message: "Source not found" });
         } catch (error) {
           failed.push({ id, message: error instanceof Error ? error.message : "Source is in use" });
         }
@@ -134,8 +134,14 @@ export function registerSourceRoutes(app: Hono) {
       "Aborts an in-progress download and discards the source record.",
     ),
     (c) => {
-      const cancelled = cancelSourceDownload(c.req.param("id"));
+      const id = c.req.param("id");
+      const cancelled = cancelSourceDownload(id);
       if (!cancelled) return fail("NOT_FOUND", "No active download for this source", 404);
+      try {
+        deleteSource(id, true);
+      } catch {
+        // Abort already requested; leftover row is invalid/cancelled until cleaned up.
+      }
       return c.json(ok({ cancelled: true }));
     },
   );
@@ -226,8 +232,17 @@ export function registerSourceRoutes(app: Hono) {
       const range = c.req.header("range");
       const match = range?.match(/^bytes=(\d*)-(\d*)$/);
       if (match) {
-        const start = match[1] ? Number(match[1]) : 0;
-        const end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1;
+        let start: number;
+        let end: number;
+        if (match[1] === "" && match[2]) {
+          // Suffix form: bytes=-N means last N bytes.
+          const suffix = Number(match[2]);
+          start = Math.max(0, total - suffix);
+          end = total - 1;
+        } else {
+          start = match[1] ? Number(match[1]) : 0;
+          end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1;
+        }
         if (
           !Number.isSafeInteger(start) ||
           !Number.isSafeInteger(end) ||

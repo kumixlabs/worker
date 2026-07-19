@@ -12,20 +12,26 @@ import type { WorkerSettings } from "../../types/worker";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
-type PublicSettings = Omit<WorkerSettings, "token"> & {
+type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
   hasToken: boolean;
   tokenLength: number;
+  hasYoutubeApiKey: boolean;
 };
 
 /**
- * Removes the raw worker token from settings responses.
+ * Removes raw secrets from settings responses.
  *
  * @param settings - Full worker settings from config storage.
  * @returns Settings safe for dashboard responses.
  */
 function publicSettings(settings: WorkerSettings): PublicSettings {
-  const { token, ...rest } = settings;
-  return { ...rest, hasToken: token.length > 0, tokenLength: token.length };
+  const { token, youtubeApiKey, ...rest } = settings;
+  return {
+    ...rest,
+    hasToken: token.length > 0,
+    tokenLength: token.length,
+    hasYoutubeApiKey: Boolean(youtubeApiKey),
+  };
 }
 
 /**
@@ -83,7 +89,19 @@ export function registerSystemRoutes(app: Hono) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid settings");
       }
       const current = readSettings();
-      const next = { ...current, ...parsed.data, dataDir: current.dataDir };
+      const { youtubeApiKey, ...rest } = parsed.data;
+      const next = {
+        ...current,
+        ...rest,
+        dataDir: current.dataDir,
+        // Empty string keeps the existing key; omit/undefined leaves it unchanged.
+        youtubeApiKey:
+          youtubeApiKey === undefined
+            ? current.youtubeApiKey
+            : youtubeApiKey === ""
+              ? current.youtubeApiKey
+              : youtubeApiKey,
+      };
       writeSettings(next);
       return c.json(ok(publicSettings(next)));
     },

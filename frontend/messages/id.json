@@ -39,8 +39,6 @@
     "tryAgain": "Coba lagi"
   },
   "Auth": {
-    "deniedTitle": "Akses ditolak",
-    "deniedDescription": "Akses ke dashboard ini memerlukan token Kumix Worker. Masukkan token Anda di bawah untuk melanjutkan.",
     "loginTitle": "Masuk",
     "loginDescription": "Masukkan token Kumix Worker untuk melanjutkan.",
     "tokenLabel": "Token worker",
@@ -89,7 +87,10 @@
       "token_rotated": "Token diganti",
       "source_download_failed": "Unduhan gagal",
       "system": "Sistem",
-      "info": "Info"
+      "info": "Info",
+      "restart_scheduled": "Restart dijadwalkan",
+      "restart_failed": "Restart gagal",
+      "reconciled": "Direkonsiliasi"
     }
   },
   "Dashboard": {
@@ -305,16 +306,16 @@
     "edit": "Edit",
     "editTitle": "Edit Stream",
     "editScheduledFor": "Jadwal Mulai",
+    "editAutoStopAt": "Auto-stop Pada",
+    "autoStopAtPlaceholder": "Pilih waktu auto-stop",
     "searchSource": "Cari sumber...",
     "emptySources": "Tidak ada sumber siap",
     "searchTarget": "Cari target...",
     "emptyTargets": "Tidak ada target aktif",
-    "loop": "Ulang video sumber",
     "youtubeLiveUrl": "URL Live YouTube",
     "youtubeLiveUrlPlaceholder": "https://youtube.com/watch?v=...",
     "analytics": "Analitik",
     "saveChanges": "Simpan Perubahan",
-    "stoppedAtPlaceholder": "Pilih waktu berhenti",
     "start": "Mulai",
     "stop": "Hentikan",
     "delete": "Hapus",
@@ -372,7 +373,9 @@
     "diskLimitInvalid": "Masukkan angka bulat antara 50 dan 99.",
     "youtubeApiKey": "Kunci API Data YouTube",
     "youtubeApiKeyDescription": "Diperlukan untuk analitik live stream. Dapatkan kunci dari Google Cloud Console.",
-    "youtubeApiKeyPlaceholder": "AIza..."
+    "youtubeApiKeyPlaceholder": "AIza...",
+    "youtubeApiKeyConfigured": "Kunci sudah dikonfigurasi. Masukkan nilai baru hanya untuk menggantinya.",
+    "youtubeApiKeyKeepPlaceholder": "Kosongkan untuk mempertahankan kunci saat ini"
   },
   "Analytics": {
     "title": "Analitik Stream",

@@ -242,7 +242,19 @@ export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamR
     reconciled.add(streamId);
     if (skip.has(streamId)) {
       removeTombstone(streamId);
-      setStreamStatus(streamId, "pending", { pid: null, lastError: null });
+      // stopping → pending is illegal; park via stopped first so auto-resume can start.
+      const current = getStream(streamId);
+      if (!current) return;
+      if (current.status === "stopping") {
+        setStreamStatus(streamId, "stopped", {
+          pid: null,
+          lastError: null,
+          stoppedAt: new Date().toISOString(),
+        });
+      }
+      if (getStream(streamId)?.status !== "pending") {
+        setStreamStatus(streamId, "pending", { pid: null, lastError: null });
+      }
       return;
     }
     const pidReusable = isBeforeLastBoot(writtenAt);
@@ -251,11 +263,18 @@ export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamR
     const message = orphanAlive
       ? "Kumix Worker recovered and terminated an orphaned FFmpeg process"
       : "Kumix Worker restarted before stream stopped cleanly";
-    const stream = setStreamStatus(streamId, "failed", {
-      lastError: message,
-      pid: null,
-      stoppedAt: new Date().toISOString(),
-    });
+    let stream: StreamRecord | null = null;
+    try {
+      stream = setStreamStatus(streamId, "failed", {
+        lastError: message,
+        pid: null,
+        stoppedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Unexpected status (e.g. already stopped); leave row alone.
+      removeTombstone(streamId);
+      return;
+    }
     if (!stream) return;
     removeTombstone(streamId);
     addEvent(streamId, "failed", message, { orphanPid: pid, orphanAlive });

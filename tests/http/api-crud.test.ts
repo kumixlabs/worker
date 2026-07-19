@@ -281,7 +281,10 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
   it("supports auth handoff, public stats, and token rotation", async () => {
     const authResponse = await app.request("/auth?token=test-token-123456");
     const authLocation = authResponse.headers.get("location") ?? "";
-    const handoffCode = new URL(authLocation, "http://worker.local").searchParams.get("code") ?? "";
+    const handoffCode =
+      new URL(authLocation, "http://worker.local").hash.replace(/^#code=/, "") ||
+      new URL(authLocation, "http://worker.local").searchParams.get("code") ||
+      "";
     const exchangeResponse = await app.request("/api/auth/exchange", {
       body: JSON.stringify({ code: handoffCode }),
       headers,
@@ -325,7 +328,7 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     });
 
     expect(authResponse.status).toBe(302);
-    expect(authLocation).toMatch(/^\/\?code=/);
+    expect(authLocation).toMatch(/^\/#code=/);
     expect(authLocation).not.toContain("test-token-123456");
     expect(exchangeResponse.status).toBe(200);
     expect(exchangeBody.data.token).toBe("test-token-123456");

@@ -31,6 +31,7 @@ export function stats(): WorkerStats {
       total: streams.length,
       running: streams.filter((item) => item.status === "running").length,
       pending: streams.filter((item) => item.status === "pending").length,
+      stopping: streams.filter((item) => item.status === "stopping").length,
       stopped: streams.filter((item) => item.status === "stopped").length,
       failed: streams.filter((item) => item.status === "failed").length,
     },

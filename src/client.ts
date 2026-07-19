@@ -87,6 +87,19 @@ async function workerRequestOnce<T>(
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+  if (!response.ok) {
+    let message = `Worker API request failed: ${response.status} ${response.statusText}`;
+    try {
+      const body = JSON.parse(await response.text()) as ApiEnvelope<unknown>;
+      if (!body.ok) message = body.error.message;
+    } catch {
+      // keep status message
+    }
+    const error = new Error(message) as Error & { status: number; retryable: boolean };
+    error.status = response.status;
+    error.retryable = response.status >= 500 || response.status === 429;
+    throw error;
+  }
   const text = await response.text();
   let body: ApiEnvelope<unknown>;
   try {
@@ -94,7 +107,12 @@ async function workerRequestOnce<T>(
   } catch {
     throw new Error(`Worker API request failed: ${response.status} ${response.statusText}`);
   }
-  if (!body.ok) throw new Error(body.error.message);
+  if (!body.ok) {
+    const error = new Error(body.error.message) as Error & { status: number; retryable: boolean };
+    error.status = response.status;
+    error.retryable = false;
+    throw error;
+  }
   return schema.parse(body.data);
 }
 
@@ -121,7 +139,15 @@ async function workerRequest<T>(
       return await workerRequestOnce<T>(options, path, schema, init);
     } catch (error) {
       lastError = error;
-      if (attempt < retries) await delay(retryDelayMs * (attempt + 1));
+      const retryable =
+        error instanceof Error &&
+        "retryable" in error &&
+        (error as Error & { retryable?: boolean }).retryable === true;
+      if (attempt < retries && (retryable || !(error instanceof Error && "status" in error))) {
+        await delay(retryDelayMs * (attempt + 1));
+        continue;
+      }
+      break;
     }
   }
   throw lastError;

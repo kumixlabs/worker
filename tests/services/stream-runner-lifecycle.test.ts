@@ -11,6 +11,7 @@ import { createTarget } from "../../src/db/targets";
 import { writeSettings } from "../../src/runtime/config";
 import {
   onStreamEvent,
+  reconcileOrphanedDbStreams,
   runningStreamIds,
   stopAllStreams,
   stopStream,
@@ -115,5 +116,17 @@ describe.skipIf(!hasSqlite())("stream-runner lifecycle", () => {
     const result = await stopAllStreams();
     expect(result.requested).toEqual([]);
     expect(result.remaining).toEqual([]);
+  });
+
+  it("reconciles orphaned running streams with dead PIDs and no process map entry", () => {
+    const stream = createReadyStream();
+    setStreamStatus(stream.id, "running", { pid: 999_999 });
+
+    const healed = reconcileOrphanedDbStreams();
+
+    expect(healed).toBe(1);
+    expect(getStream(stream.id)?.status).toBe("failed");
+    expect(getStream(stream.id)?.pid).toBeNull();
+    expect(getStream(stream.id)?.lastError).toContain("no longer tracked");
   });
 });

@@ -116,7 +116,7 @@ export function createStream(input: StreamCreateInput): StreamRecord {
       input.title,
       input.sourceId,
       input.targetId,
-      input.loop ? 1 : 0,
+      1,
       input.youtubeLiveUrl ?? null,
       input.scheduledFor ?? null,
       input.autoStopAt ?? null,
@@ -146,7 +146,8 @@ export function patchStream(id: string, input: StreamPatchInput): StreamRecord |
   if (input.title !== undefined) columns.push({ col: "title", val: input.title });
   if (input.sourceId !== undefined) columns.push({ col: "source_id", val: input.sourceId });
   if (input.targetId !== undefined) columns.push({ col: "target_id", val: input.targetId });
-  if (input.loop !== undefined) columns.push({ col: "loop", val: input.loop ? 1 : 0 });
+  // loop is always on; ignore patch attempts that would disable it
+  if (input.loop !== undefined) columns.push({ col: "loop", val: 1 });
   if (input.youtubeLiveUrl !== undefined)
     columns.push({ col: "youtube_live_url", val: input.youtubeLiveUrl });
   if (input.scheduledFor !== undefined)

@@ -27,7 +27,11 @@ import {
 } from "./runtime/config";
 import { resolveFfmpegBinaries } from "./runtime/ffmpeg";
 import { runtimeHealthDetails, runtimeMetrics } from "./runtime/metrics";
-import { consumeAutoStartMarker, recoverInterruptedStreams } from "./runtime/recovery";
+import {
+  consumeAutoStartMarker,
+  recoverInterruptedStreams,
+  writeAutoStartMarker,
+} from "./runtime/recovery";
 import { startScheduler } from "./runtime/scheduler";
 import {
   activeStreamIds,
@@ -36,6 +40,17 @@ import {
   type RestartMode,
 } from "./runtime/update";
 import { startStream, stopAllStreams } from "./services/stream-runner";
+
+/**
+ * When true (default), graceful SIGTERM/SIGINT writes an auto-start marker so
+ * active streams resume after Docker recreate / process restart.
+ * Set KUMIX_WORKER_AUTO_RESUME=0 to disable.
+ */
+function autoResumeEnabled(): boolean {
+  const raw = process.env.KUMIX_WORKER_AUTO_RESUME?.trim().toLowerCase();
+  if (!raw) return true;
+  return raw !== "0" && raw !== "false" && raw !== "no" && raw !== "off";
+}
 
 /**
  * Masks a token for safe display in CLI output.
@@ -276,7 +291,15 @@ export function createCliProgram(): Command {
       const autoStartIds = consumeAutoStartMarker();
 
       // Crash recovery: reconcile streams left running by a previous process.
-      const recovered = recoverInterruptedStreams(autoStartIds);
+      let recovered: Awaited<ReturnType<typeof recoverInterruptedStreams>> = [];
+      try {
+        recovered = recoverInterruptedStreams(autoStartIds);
+      } catch (error) {
+        console.error(
+          "[worker] Crash recovery failed:",
+          error instanceof Error ? error.message : error,
+        );
+      }
 
       const app = createApiApp();
       const server = serve({
@@ -286,16 +309,36 @@ export function createCliProgram(): Command {
       });
       const stopScheduler = startScheduler();
       let shuttingDown = false;
-      const shutdown = async () => {
+      const shutdown = async (signal: string) => {
         if (shuttingDown) return;
         shuttingDown = true;
+        console.log(`[worker] Shutting down (${signal})…`);
         stopScheduler();
+        // Persist active stream IDs before stopping FFmpeg so the next process
+        // (Docker image update, compose recreate, systemd restart) can resume them.
+        if (autoResumeEnabled()) {
+          const active = activeStreamIds();
+          if (active.length > 0) {
+            try {
+              writeAutoStartMarker(active);
+              console.log(
+                `[worker] Auto-resume: marked ${active.length} active stream(s) for restart after boot`,
+              );
+            } catch (error) {
+              console.error(
+                "[worker] Failed to write auto-resume marker:",
+                error instanceof Error ? error.message : error,
+              );
+            }
+          }
+        }
         await stopAllStreams();
         await new Promise<void>((resolve) => server.close(() => resolve()));
+        closeDb();
         process.exit(0);
       };
-      process.once("SIGINT", () => void shutdown());
-      process.once("SIGTERM", () => void shutdown());
+      process.once("SIGINT", () => void shutdown("SIGINT"));
+      process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
       console.log(`Kumix Worker API listening on http://${opts.host}:${port}`);
       console.log(`Dashboard: ${dashboardUrl(opts.host, port)}`);
@@ -312,12 +355,16 @@ export function createCliProgram(): Command {
       console.log(`Timezone: ${settings.timezone}`);
       console.log(`Disk usage limit: ${settings.diskUsageLimitPercent}%`);
       if (recovered.length > 0) {
-        console.log(`Recovered ${recovered.length} interrupted stream(s) as failed`);
+        console.log(
+          autoStartIds.length > 0
+            ? `Recovered ${recovered.length} interrupted stream(s); ${autoStartIds.length} marked for auto-resume`
+            : `Recovered ${recovered.length} interrupted stream(s) as failed`,
+        );
       }
       if (autoStartIds.length > 0) {
         const autoStarted = await autoStartStreams(autoStartIds);
         console.log(
-          `Auto-started ${autoStarted.started} stream(s); skipped ${autoStarted.skipped} stream(s).`,
+          `Auto-resumed ${autoStarted.started} stream(s); skipped ${autoStarted.skipped} stream(s).`,
         );
       }
       console.log(

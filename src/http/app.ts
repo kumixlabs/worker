@@ -8,6 +8,7 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { openAPIRouteHandler } from "hono-openapi";
 
+import { readPackageVersion } from "../lib/version";
 import { allowedCorsOrigins, readSettings } from "../runtime/config";
 import { fail, ok, publicApiRateLimit, tokenAuth } from "./middleware";
 import { registerAuthRoutes } from "./routes/auth";
@@ -61,7 +62,7 @@ export function createApiApp() {
       documentation: {
         info: {
           title: "Kumix Worker API",
-          version: "0.1.0",
+          version: readPackageVersion(),
           description:
             "Local API for Kumix Worker sources, targets, streams, logs, settings, and runtime diagnostics.",
         },
@@ -106,10 +107,7 @@ export function createApiApp() {
     },
   );
 
-  // Auth handoff routes are public by design (they validate a token or code
-  // themselves) and must be registered before the dashboard tokenAuth guard.
-  registerAuthRoutes(app);
-
+  // Body limit applies to all /api/* including public auth exchange/verify.
   app.use(
     "/api/*",
     bodyLimit({
@@ -117,6 +115,10 @@ export function createApiApp() {
       onError: () => fail("payload_too_large", "Request body too large", 413),
     }),
   );
+
+  // Auth handoff routes are public by design (they validate a token or code
+  // themselves) and must be registered before the dashboard tokenAuth guard.
+  registerAuthRoutes(app);
 
   // Core-facing /api/v1/* routes: CORS + token auth + separate rate limit.
   // The tokenAuth below is scoped to non-v1 paths, so /api/v1/* is guarded here.
