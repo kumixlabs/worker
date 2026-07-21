@@ -158,7 +158,7 @@ export function DataTable<T extends { id: string }>({
     >
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-2 border-border border-b p-3 sm:flex-row sm:items-center">
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-55 flex-1">
             <Search className="absolute inset-s-3 top-2.5 size-4 text-muted-foreground" />
             <Input
               placeholder={searchPlaceholder}
