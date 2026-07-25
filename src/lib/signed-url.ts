@@ -4,7 +4,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { readSettings } from "../runtime/config";
+import { currentToken } from "../runtime/config";
 
 /** Lifetime of generated signed URLs in milliseconds. */
 export const signedUrlTtlMs = 60_000;
@@ -19,16 +19,17 @@ export function canonicalSignedPath(path: string): string {
   const url = new URL(path, "http://kumix-worker.local");
   const entries = [...url.searchParams.entries()]
     .filter(([key]) => key !== "expires" && key !== "sig")
-    .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
-      `${leftKey}\u0000${leftValue}`.localeCompare(`${rightKey}\u0000${rightValue}`),
-    );
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+      const cmp = leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+      return cmp !== 0 ? cmp : leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+    });
   const search = new URLSearchParams(entries).toString();
   return `${url.pathname}${search ? `?${search}` : ""}`;
 }
 
 function signPayload(method: string, path: string, expiresAt: number): string {
   return base64url(
-    createHmac("sha256", readSettings().token)
+    createHmac("sha256", currentToken())
       .update(`${method.toUpperCase()}:${path}:${expiresAt}`)
       .digest(),
   );

@@ -14,7 +14,8 @@ import {
 import { Link, useLocation } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
-import { Badge, Button } from "@kumix/ui";
+import { Badge } from "@kumix/ui/reui/badge";
+import { Button } from "@kumix/ui/ui/button";
 import { cn } from "@kumix/utils";
 import { queryClient, setApiToken } from "@/lib/api";
 import packageJson from "../../../package.json";
@@ -60,6 +61,15 @@ export function AppShell({
     document.title = `${title} - Kumix Worker`;
   }, [title]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [sidebarOpen]);
+
   const logout = () => {
     setApiToken("");
     queryClient.clear();
@@ -83,7 +93,7 @@ export function AppShell({
               {t("logout")}
             </Button>
             <Button
-              mode="icon"
+              size="icon"
               variant="outline"
               className="inline-flex sm:hidden"
               aria-label={t("logout")}
@@ -92,7 +102,7 @@ export function AppShell({
               <LogOut className="size-4" />
             </Button>
             <Button
-              mode="icon"
+              size="icon"
               variant="ghost"
               className="lg:hidden"
               aria-label={t("toggleSidebar")}
@@ -171,13 +181,13 @@ export function AppShell({
           </nav>
           <div className="mt-auto flex shrink-0 items-center justify-between gap-2 border-border border-t px-3 py-3 text-muted-foreground text-xs">
             <EngineStatus />
-            <Badge variant="primary" shape="circle" className="font-normal">
+            <Badge radius="full" className="font-normal">
               v{packageJson.version}
             </Badge>
           </div>
         </aside>
 
-        <main className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto bg-background p-6">
+        <main className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto bg-background p-4 sm:p-6">
           <MaxWidthWrapper className="flex flex-col gap-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>

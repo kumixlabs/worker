@@ -4,9 +4,23 @@
 
 import { runtimeMetrics } from "../runtime/metrics";
 import type { WorkerStats } from "../types/worker";
-import { listSources } from "./sources";
-import { listStreams } from "./streams";
-import { listTargets } from "./targets";
+import { getDb } from "./client";
+
+/**
+ * Counts rows grouped by a status/active column without loading full tables.
+ *
+ * @param table - Table name (allowlisted).
+ * @param column - Column to group by.
+ * @returns Map of column value → count.
+ */
+function countBy(table: "sources" | "targets" | "streams", column: string): Map<string, number> {
+  const rows = getDb()
+    .query(`SELECT ${column} AS key, COUNT(*) AS count FROM ${table} GROUP BY ${column}`)
+    .all() as Array<{ key: string | number; count: number }>;
+  const map = new Map<string, number>();
+  for (const row of rows) map.set(String(row.key), row.count);
+  return map;
+}
 
 /**
  * Aggregates high-level statistical summaries across all database entities.
@@ -16,24 +30,30 @@ import { listTargets } from "./targets";
  * @returns The summary counts and current system state details.
  */
 export function stats(): WorkerStats {
-  const sources = listSources();
-  const targets = listTargets();
-  const streams = listStreams();
+  const sourceCounts = countBy("sources", "status");
+  const streamCounts = countBy("streams", "status");
+  const targetCounts = countBy("targets", "active");
   const metrics = runtimeMetrics();
+  const sourceTotal = [...sourceCounts.values()].reduce((sum, n) => sum + n, 0);
+  const streamTotal = [...streamCounts.values()].reduce((sum, n) => sum + n, 0);
+  const targetTotal = [...targetCounts.values()].reduce((sum, n) => sum + n, 0);
   return {
     sources: {
-      total: sources.length,
-      ready: sources.filter((item) => item.status === "ready").length,
-      invalid: sources.filter((item) => item.status === "invalid").length,
+      total: sourceTotal,
+      ready: sourceCounts.get("ready") ?? 0,
+      invalid: sourceCounts.get("invalid") ?? 0,
     },
-    targets: { total: targets.length, active: targets.filter((item) => item.active).length },
+    targets: {
+      total: targetTotal,
+      active: targetCounts.get("1") ?? 0,
+    },
     streams: {
-      total: streams.length,
-      running: streams.filter((item) => item.status === "running").length,
-      pending: streams.filter((item) => item.status === "pending").length,
-      stopping: streams.filter((item) => item.status === "stopping").length,
-      stopped: streams.filter((item) => item.status === "stopped").length,
-      failed: streams.filter((item) => item.status === "failed").length,
+      total: streamTotal,
+      running: streamCounts.get("running") ?? 0,
+      pending: streamCounts.get("pending") ?? 0,
+      stopping: streamCounts.get("stopping") ?? 0,
+      stopped: streamCounts.get("stopped") ?? 0,
+      failed: streamCounts.get("failed") ?? 0,
     },
     storage: {
       cacheBytes: metrics.storage.cacheBytes,

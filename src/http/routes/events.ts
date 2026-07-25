@@ -31,12 +31,20 @@ function parseCursor(value: string | undefined): { createdAt: string; id: string
  * @returns Newline-separated event log text.
  */
 function formatEventsText(streamId?: string) {
-  return listEvents(streamId)
-    .map((event) => {
+  const lines: string[] = [];
+  let before: { createdAt: string; id: string } | undefined;
+  for (;;) {
+    const batch = listEvents(streamId, 500, before);
+    if (batch.length === 0) break;
+    for (const event of batch) {
       const stream = event.streamId ? ` stream=${event.streamId}` : "";
-      return `[${event.createdAt}] ${event.kind}${stream} ${event.message}`;
-    })
-    .join("\n");
+      lines.push(`[${event.createdAt}] ${event.kind}${stream} ${event.message}`);
+    }
+    if (batch.length < 500) break;
+    const last = batch[batch.length - 1]!;
+    before = { createdAt: last.createdAt, id: last.id };
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -67,6 +75,12 @@ function allowedSignedPath(path: string): boolean {
 function sseResponse(streamId?: string) {
   let off: (() => void) | null = null;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
+  const cleanup = () => {
+    off?.();
+    off = null;
+    if (heartbeat) clearInterval(heartbeat);
+    heartbeat = null;
+  };
   return new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
@@ -74,28 +88,37 @@ function sseResponse(streamId?: string) {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         } catch {
-          off?.();
-          off = null;
+          cleanup();
         }
       };
       for (const event of listEvents(streamId, 200).reverse()) send(event);
       send({ type: "hello", ...(streamId ? { streamId } : {}) });
-      off = streamId ? onStreamEvent(streamId, send) : onEvent(send);
+      // Global fan-out uses EventRecord; per-stream live uses onStreamEvent status/metrics.
+      // History is always EventRecord so clients can merge both shapes by presence of `id`.
+      off = streamId
+        ? onEvent((event) => {
+            if (event.streamId === streamId) send(event);
+          })
+        : onEvent(send);
+      if (streamId) {
+        const offLive = onStreamEvent(streamId, send);
+        const prev = off;
+        off = () => {
+          prev?.();
+          offLive();
+        };
+      }
       heartbeat = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(": keepalive\n\n"));
         } catch {
-          off?.();
-          off = null;
+          cleanup();
         }
       }, 15_000);
       heartbeat.unref?.();
     },
     cancel() {
-      off?.();
-      off = null;
-      if (heartbeat) clearInterval(heartbeat);
-      heartbeat = null;
+      cleanup();
     },
   });
 }
@@ -158,7 +181,8 @@ export function registerEventRoutes(app: Hono) {
   );
 
   app.get("/api/events", doc("Events", "List events", "Lists recent worker events."), (c) => {
-    const limit = Number(c.req.query("limit") ?? 200);
+    const rawLimit = Number(c.req.query("limit") ?? 200);
+    const limit = Number.isFinite(rawLimit) ? rawLimit : 200;
     const before = parseCursor(c.req.query("before"));
     return c.json(ok(listEvents(undefined, limit, before)));
   });

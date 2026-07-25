@@ -16,6 +16,7 @@ import { closeDb } from "./db/client";
 import { listStreams } from "./db/streams";
 import { reencryptTargetSecrets } from "./db/targets";
 import { createApiApp } from "./http/app";
+import { hashPassword, validPassword } from "./lib/password";
 import { readPackageVersion } from "./lib/version";
 import {
   allowedCorsOrigins,
@@ -130,17 +131,16 @@ function parseToken(value: string): string {
 }
 
 /**
- * Builds a dashboard URL for CLI output, optionally including the auth token.
+ * Builds a dashboard URL for CLI output. Never embeds the API token in the URL
+ * (password login). Core integrations that need token handoff use GET /auth?token=.
  *
  * @param host - Bind host or display host.
  * @param port - HTTP port.
- * @param token - Optional token to embed in the auth query string.
- * @returns Dashboard or auth URL.
+ * @returns Dashboard origin URL.
  */
-export function dashboardUrl(host: string, port: number, token?: string): string {
+export function dashboardUrl(host: string, port: number, _token?: string): string {
   const dashboardHost = host === "0.0.0.0" ? "localhost" : host;
-  const base = `http://${dashboardHost}:${port}`;
-  return token ? `${base}/auth?token=${encodeURIComponent(token)}` : base;
+  return `http://${dashboardHost}:${port}`;
 }
 
 /**
@@ -176,8 +176,9 @@ async function autoStartStreams(
   let started = 0;
   let skipped = 0;
   const now = Date.now();
+  const streams = listStreams();
   for (const streamId of streamIds) {
-    const stream = listStreams().find((item) => item.id === streamId);
+    const stream = streams.find((item) => item.id === streamId);
     if (!stream || (stream.autoStopAt && new Date(stream.autoStopAt).getTime() <= now)) {
       skipped += 1;
       continue;
@@ -223,7 +224,7 @@ export function createCliProgram(): Command {
     .option("--host <host>", "host used only for printed dashboard URLs", "localhost")
     .option("--timezone <timezone>", "IANA timezone for recurring schedules")
     .option("--disk-limit <percent>", "reject new sources past this disk usage percent")
-    .option("--dev", "development mode: keep/generate local token and print full URLs")
+    .option("--dev", "development mode")
     .option("--show", "print the full token instead of a masked preview")
     .action(
       (opts: {
@@ -247,18 +248,28 @@ export function createCliProgram(): Command {
               ? parseDiskLimit(opts.diskLimit)
               : current.diskUsageLimitPercent,
           };
-          if (nextToken !== current.token) reencryptTargetSecrets(current.token, nextToken);
-          writeSettings(next);
-          const showSecret = Boolean(opts.show || opts.dev);
+          if (nextToken !== current.token) {
+            reencryptTargetSecrets(current.token, nextToken);
+            try {
+              writeSettings(next);
+            } catch (error) {
+              reencryptTargetSecrets(nextToken, current.token);
+              throw error;
+            }
+          } else {
+            writeSettings(next);
+          }
           console.log(`Kumix Worker config written to ${ensureDataDir()}`);
-          console.log(`Token: ${showSecret ? next.token : maskToken(next.token)}`);
           console.log(`Port: ${next.port}`);
           console.log(`Timezone: ${next.timezone}`);
           console.log(`Disk usage limit: ${next.diskUsageLimitPercent}%`);
           console.log(`Dashboard: ${dashboardUrl(opts.host, next.port)}`);
-          console.log(
-            `Auth URL: ${showSecret ? dashboardUrl(opts.host, next.port, next.token) : "hidden (use --dev or --show)"}`,
-          );
+          if (opts.show || opts.dev) {
+            console.log(`API token: ${next.token}`);
+            console.log(
+              `(Dashboard login uses the password, default 123456 — change it in Settings.)`,
+            );
+          }
         } catch (error) {
           exitWithError(error);
         }
@@ -270,8 +281,7 @@ export function createCliProgram(): Command {
     .description("Run local Kumix Worker API")
     .option("--host <host>", "host", "localhost")
     .option("--port <port>", "port override")
-    .option("--dev", "development mode (prints the full token)")
-    .action(async (opts: { host: string; port?: string; dev?: boolean }) => {
+    .action(async (opts: { host: string; port?: string }) => {
       const settings = readSettings();
       let port: number;
       try {
@@ -287,6 +297,13 @@ export function createCliProgram(): Command {
         console.error(error instanceof Error ? error.message : "FFmpeg binaries unavailable");
         process.exit(1);
       }
+
+      process.on("unhandledRejection", (reason) => {
+        console.error("[worker] Unhandled promise rejection:", reason);
+      });
+      process.on("uncaughtException", (error) => {
+        console.error("[worker] Uncaught exception:", error);
+      });
 
       const autoStartIds = consumeAutoStartMarker();
 
@@ -306,6 +323,9 @@ export function createCliProgram(): Command {
         fetch: app.fetch,
         hostname: opts.host,
         port,
+      });
+      server.on("error", (error) => {
+        console.error("[worker] Server error:", error instanceof Error ? error.message : error);
       });
       const stopScheduler = startScheduler();
       let shuttingDown = false;
@@ -333,7 +353,13 @@ export function createCliProgram(): Command {
           }
         }
         await stopAllStreams();
-        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await Promise.race([
+          new Promise<void>((resolve) => server.close(() => resolve())),
+          new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, 5_000);
+            timer.unref?.();
+          }),
+        ]);
         closeDb();
         process.exit(0);
       };
@@ -367,12 +393,6 @@ export function createCliProgram(): Command {
           `Auto-resumed ${autoStarted.started} stream(s); skipped ${autoStarted.skipped} stream(s).`,
         );
       }
-      console.log(
-        opts.dev
-          ? `Token: ${settings.token}`
-          : `Token: ${maskToken(settings.token)} (use --dev to print full token)`,
-      );
-      if (opts.dev) console.log(`Auth URL: ${dashboardUrl(opts.host, port, settings.token)}`);
     });
 
   program
@@ -385,11 +405,11 @@ export function createCliProgram(): Command {
       const disk = metrics.storage.disk;
 
       console.log("Config:");
-      console.log(`  Token: ${maskToken(settings.token)}`);
       console.log(`  Port: ${settings.port}`);
       console.log(`  Timezone: ${settings.timezone}`);
       console.log(`  Disk usage limit: ${settings.diskUsageLimitPercent}%`);
       console.log(`  Data directory: ${settings.dataDir}`);
+      console.log(`  API token length: ${settings.token.length}`);
 
       console.log("Binaries:");
       console.log(`  FFmpeg: ${health.ffmpeg.version ?? "unknown"} (${health.ffmpeg.path})`);
@@ -451,16 +471,46 @@ export function createCliProgram(): Command {
     .option("--regenerate", "generate and store a new token")
     .option("--show", "print the full token instead of a masked preview")
     .action((opts: { regenerate?: boolean; show?: boolean }) => {
-      const current = readSettings();
-      if (opts.regenerate) {
-        const token = randomBytes(32).toString("base64url");
-        reencryptTargetSecrets(current.token, token);
-        writeSettings({ ...current, token });
-        console.log("New token generated.");
-        console.log(`Token: ${opts.show ? token : maskToken(token)}`);
-        return;
+      try {
+        const current = readSettings();
+        if (opts.regenerate) {
+          const token = randomBytes(32).toString("base64url");
+          reencryptTargetSecrets(current.token, token);
+          try {
+            writeSettings({ ...current, token });
+          } catch (error) {
+            reencryptTargetSecrets(token, current.token);
+            throw error;
+          }
+          console.log("New token generated.");
+          console.log(`Token: ${opts.show ? token : maskToken(token)}`);
+          return;
+        }
+        console.log(`Token: ${opts.show ? current.token : maskToken(current.token)}`);
+      } catch (error) {
+        exitWithError(error);
       }
-      console.log(`Token: ${opts.show ? current.token : maskToken(current.token)}`);
+    });
+
+  program
+    .command("password")
+    .description("Reset the dashboard login password")
+    .option("--password <password>", "new dashboard password")
+    .action(async (opts: { password?: string }) => {
+      try {
+        const newPassword = opts.password ? validPassword(opts.password) : "";
+        if (!newPassword) {
+          console.error("Provide a password: kumix-worker password --password <password>");
+          console.error("Password must be 6-128 characters.");
+          process.exit(1);
+        }
+        const current = readSettings();
+        writeSettings({ ...current, passwordHash: await hashPassword(newPassword) });
+        console.log("Dashboard password updated.");
+        console.log("Login at:", dashboardUrl("localhost", current.port));
+      } catch (error) {
+        exitWithError(error);
+      }
     });
 
   program

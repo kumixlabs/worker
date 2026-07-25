@@ -21,25 +21,76 @@ export const queryClient = new QueryClient({
 
 const tokenStorageKey = "kumix-worker-token";
 const tokenExpiresStorageKey = "kumix-worker-token-expires-at";
+const passwordDefaultKey = "kumix-worker-password-is-default";
+/** Fallback only when server omits expiresAt (should not happen for login/exchange). */
 const tokenTtlMs = 7 * 24 * 60 * 60 * 1000;
 
+/** Prefer sessionStorage (tab-scoped) over localStorage to limit XSS blast radius. */
+function storage(): Storage {
+  try {
+    return sessionStorage;
+  } catch {
+    return localStorage;
+  }
+}
+
 export function getApiToken() {
-  const expiresAt = Number(localStorage.getItem(tokenExpiresStorageKey) ?? "0");
+  const store = storage();
+  const expiresAt = Number(store.getItem(tokenExpiresStorageKey) ?? "0");
   if (expiresAt && expiresAt <= Date.now()) {
     setApiToken("");
     return "";
   }
-  return localStorage.getItem(tokenStorageKey) ?? "";
+  return store.getItem(tokenStorageKey) ?? "";
 }
 
-export function setApiToken(token: string) {
+export function setApiToken(
+  token: string,
+  passwordIsDefault = false,
+  expiresAt?: string | number | null,
+) {
+  const store = storage();
   if (token) {
-    localStorage.setItem(tokenStorageKey, token);
-    localStorage.setItem(tokenExpiresStorageKey, String(Date.now() + tokenTtlMs));
+    store.setItem(tokenStorageKey, token);
+    const expMs =
+      typeof expiresAt === "number"
+        ? expiresAt
+        : typeof expiresAt === "string" && expiresAt
+          ? Date.parse(expiresAt)
+          : Number.NaN;
+    store.setItem(
+      tokenExpiresStorageKey,
+      String(Number.isFinite(expMs) ? expMs : Date.now() + tokenTtlMs),
+    );
+    if (passwordIsDefault) store.setItem(passwordDefaultKey, "1");
+    else store.removeItem(passwordDefaultKey);
   } else {
-    localStorage.removeItem(tokenStorageKey);
-    localStorage.removeItem(tokenExpiresStorageKey);
+    store.removeItem(tokenStorageKey);
+    store.removeItem(tokenExpiresStorageKey);
+    store.removeItem(passwordDefaultKey);
   }
+}
+
+export function getPasswordIsDefault(): boolean {
+  try {
+    return storage().getItem(passwordDefaultKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setPasswordIsDefault(value: boolean): void {
+  try {
+    const store = storage();
+    if (value) store.setItem(passwordDefaultKey, "1");
+    else store.removeItem(passwordDefaultKey);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearPasswordIsDefault(): void {
+  setPasswordIsDefault(false);
 }
 
 /**
@@ -55,8 +106,18 @@ async function consumeHandoffCode(code: string) {
       body: JSON.stringify({ code }),
     });
     if (!response.ok) return;
-    const body = (await response.json()) as ApiEnvelope<{ token: string }>;
-    if (body.ok && body.data.token) setApiToken(body.data.token);
+    const body = (await response.json()) as ApiEnvelope<{
+      token: string;
+      expiresAt?: string;
+      passwordIsDefault?: boolean;
+    }>;
+    if (body.ok && body.data.token) {
+      setApiToken(
+        body.data.token,
+        Boolean(body.data.passwordIsDefault),
+        body.data.expiresAt ?? null,
+      );
+    }
   } catch {
     // Ignore; the auth gate will prompt for a valid link.
   } finally {
@@ -103,9 +164,7 @@ async function request<T>(path: string, init?: RequestInit) {
     setApiToken("");
     queryClient.clear();
     window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
-  }
-  if (response.status === 429) {
-    throw new Error("Too many requests. Please slow down and try again.");
+    throw new Error("Session expired");
   }
 
   const text = await response.text();
@@ -113,6 +172,8 @@ async function request<T>(path: string, init?: RequestInit) {
   try {
     body = JSON.parse(text) as ApiEnvelope<T>;
   } catch {
+    if (response.status === 429)
+      throw new Error("Too many requests. Please slow down and try again.");
     throw new Error(`Request failed (${response.status} ${response.statusText})`);
   }
   if (!body.ok) {
@@ -121,29 +182,42 @@ async function request<T>(path: string, init?: RequestInit) {
   return body.data;
 }
 
+export type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey" | "passwordHash"> & {
+  hasToken: boolean;
+  tokenLength: number;
+  hasYoutubeApiKey: boolean;
+  hasPassword: boolean;
+  passwordIsDefault: boolean;
+};
+
 export const api = {
-  stats: () => request<WorkerStats>("/api/stats"),
-  metrics: () => request<WorkerMetrics>("/api/metrics"),
-  healthDetails: () => request<WorkerHealthDetails>("/api/health/details"),
-  settings: () =>
-    request<
-      Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
-        hasToken: boolean;
-        tokenLength: number;
-        hasYoutubeApiKey: boolean;
-      }
-    >("/api/settings"),
+  stats: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<WorkerStats>("/api/stats", { signal }),
+  metrics: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<WorkerMetrics>("/api/metrics", { signal }),
+  healthDetails: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<WorkerHealthDetails>("/api/health/details", { signal }),
+  settings: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<PublicSettings>("/api/settings", { signal }),
   patchSettings: (
     body: Partial<Pick<WorkerSettings, "timezone" | "diskUsageLimitPercent" | "youtubeApiKey">>,
-  ) =>
-    request<
-      Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
-        hasToken: boolean;
-        tokenLength: number;
-        hasYoutubeApiKey: boolean;
-      }
-    >("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
-  sources: () => request<SourceRecord[]>("/api/sources"),
+  ) => request<PublicSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  changePassword: (body: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) =>
+    request<{ changed: boolean }>("/api/settings/password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  rotateToken: (token: string) =>
+    request<{ rotatedAt: string; tokenLength: number }>("/api/v1/settings/token", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  sources: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<SourceRecord[]>("/api/sources", { signal }),
   createSource: (body: { name: string; kind: "url" | "gdrive"; url: string }) =>
     request<SourceRecord>("/api/sources", { method: "POST", body: JSON.stringify(body) }),
   deleteSource: (id: string) => request<unknown>(`/api/sources/${id}`, { method: "DELETE" }),
@@ -159,7 +233,8 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ ids }),
     }),
-  targets: () => request<TargetRecord[]>("/api/targets"),
+  targets: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<TargetRecord[]>("/api/targets", { signal }),
   createTarget: (body: { label: string; ingestUrl: string; streamKey: string }) =>
     request<TargetRecord>("/api/targets", { method: "POST", body: JSON.stringify(body) }),
   patchTarget: (
@@ -172,7 +247,8 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ ids }),
     }),
-  streams: () => request<StreamRecord[]>("/api/streams"),
+  streams: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<StreamRecord[]>("/api/streams", { signal }),
   createStream: (body: {
     title: string;
     sourceId: string;
@@ -203,11 +279,16 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ ids }),
     }),
-  events: (before?: { createdAt: string; id: string }) => {
+  events: (
+    before?: { createdAt: string; id: string },
+    { signal }: { signal?: AbortSignal } = {},
+  ) => {
     const cursor = before
       ? btoa(JSON.stringify(before)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
       : "";
-    return request<EventRecord[]>(`/api/events?limit=200${cursor ? `&before=${cursor}` : ""}`);
+    return request<EventRecord[]>(`/api/events?limit=200${cursor ? `&before=${cursor}` : ""}`, {
+      signal,
+    });
   },
   clearEvents: () => request<{ deleted: number }>("/api/events", { method: "DELETE" }),
   signedUrl: (path: string) =>
@@ -219,5 +300,6 @@ export const api = {
   streamEventsExportPath: (id: string) => `/api/streams/${id}/events/export`,
   eventsStreamPath: () => "/api/events/stream",
   streamEventsPath: (id: string) => `/api/streams/${id}/events/stream`,
-  streamAnalytics: (id: string) => request<YouTubeAnalytics>(`/api/streams/${id}/analytics`),
+  streamAnalytics: (id: string, { signal }: { signal?: AbortSignal } = {}) =>
+    request<YouTubeAnalytics>(`/api/streams/${id}/analytics`, { signal }),
 };

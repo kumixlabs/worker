@@ -243,16 +243,16 @@ export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamR
     if (skip.has(streamId)) {
       removeTombstone(streamId);
       // stopping → pending is illegal; park via stopped first so auto-resume can start.
-      const current = getStream(streamId);
+      let current = getStream(streamId);
       if (!current) return;
       if (current.status === "stopping") {
-        setStreamStatus(streamId, "stopped", {
+        current = setStreamStatus(streamId, "stopped", {
           pid: null,
           lastError: null,
           stoppedAt: new Date().toISOString(),
         });
       }
-      if (getStream(streamId)?.status !== "pending") {
+      if (current?.status !== "pending") {
         setStreamStatus(streamId, "pending", { pid: null, lastError: null });
       }
       return;

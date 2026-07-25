@@ -62,6 +62,19 @@ export function getTarget(id: string): (TargetRecord & { streamKey: string }) | 
 }
 
 /**
+ * Retrieves all targets including their ciphered stream keys in a single query.
+ *
+ * @returns An array of target records with encrypted stream key payloads.
+ */
+export function listTargetsWithKeys(): (TargetRecord & { streamKey: string })[] {
+  const rows = getDb().query("SELECT * FROM targets ORDER BY created_at DESC").all() as Record<
+    string,
+    unknown
+  >[];
+  return rows.map((row) => ({ ...mapTargetRow(row), streamKey: row.stream_key_cipher as string }));
+}
+
+/**
  * Creates a new stream target in the database.
  * The stream key is encrypted at rest before insertion.
  *

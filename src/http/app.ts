@@ -31,10 +31,21 @@ export function createApiApp() {
   const publicDir = findPublicDir();
 
   app.onError((error, c) => {
-    console.error("[worker] HTTP request failed:", error);
+    console.error("[worker] HTTP request failed:", error instanceof Error ? error.message : error);
     return c.json(
       { ok: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
       500,
+    );
+  });
+
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("X-Frame-Options", "DENY");
+    c.header("Referrer-Policy", "no-referrer");
+    c.header(
+      "Content-Security-Policy",
+      "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'",
     );
   });
 
@@ -100,14 +111,13 @@ export function createApiApp() {
         ok({
           apiVersion: "v1",
           hasToken: Boolean(settings.token),
-          tokenLength: settings.token.length,
-          dashboardPath: "/auth?token={token}",
+          dashboardPath: "/",
         }),
       );
     },
   );
 
-  // Body limit applies to all /api/* including public auth exchange/verify.
+  // Body limit applies to all /api/* including public auth login/exchange.
   app.use(
     "/api/*",
     bodyLimit({
@@ -116,8 +126,8 @@ export function createApiApp() {
     }),
   );
 
-  // Auth handoff routes are public by design (they validate a token or code
-  // themselves) and must be registered before the dashboard tokenAuth guard.
+  // Auth routes are public (password login, handoff) and must be registered
+  // before the dashboard tokenAuth guard.
   registerAuthRoutes(app);
 
   // Core-facing /api/v1/* routes: CORS + token auth + separate rate limit.
@@ -137,6 +147,8 @@ export function createApiApp() {
   registerTargetRoutes(app);
   registerStreamRoutes(app);
   registerEventRoutes(app);
+
+  app.all("/api/*", (c) => fail("NOT_FOUND", "Unknown API route", 404));
 
   if (publicDir) app.get("/*", (c) => serveStatic(c, publicDir));
 

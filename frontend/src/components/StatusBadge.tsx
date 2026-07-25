@@ -1,10 +1,10 @@
 import { useTranslations } from "use-intl";
 
-import { Badge } from "@kumix/ui";
+import { Badge } from "@kumix/ui/reui/badge";
 
 const variantByStatus: Record<
   string,
-  "success" | "destructive" | "warning" | "primary" | "secondary"
+  "success" | "destructive" | "warning" | "default" | "secondary"
 > = {
   active: "success",
   ready: "success",
@@ -24,7 +24,7 @@ const knownStatuses = new Set(Object.keys(variantByStatus));
 export function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("Common.statuses");
   return (
-    <Badge variant={variantByStatus[status] ?? "primary"} appearance="light">
+    <Badge variant={variantByStatus[status] ?? "default"}>
       {knownStatuses.has(status) ? t(status as never) : status}
     </Badge>
   );

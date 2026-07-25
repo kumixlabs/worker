@@ -1,5 +1,6 @@
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import {
+  type Column,
   type ColumnDef,
   getCoreRowModel,
   getFilteredRowModel,
@@ -11,22 +12,16 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Search, Trash2 } from "lucide-react";
 
-import {
-  Button,
-  Card,
-  CardFooter,
-  CardTable,
-  Checkbox,
-  DataGrid,
-  DataGridColumnHeader,
-  DataGridPagination,
-  DataGridTable,
-  Input,
-  ScrollArea,
-  ScrollBar,
-} from "@kumix/ui";
+import { DataGrid } from "@kumix/ui/reui/data-grid/data-grid";
+import { DataGridPagination } from "@kumix/ui/reui/data-grid/data-grid-pagination";
+import { DataGridTable } from "@kumix/ui/reui/data-grid/data-grid-table";
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardFooter } from "@kumix/ui/ui/card";
+import { Checkbox } from "@kumix/ui/ui/checkbox";
+import { Input } from "@kumix/ui/ui/input";
+import { ScrollArea, ScrollBar } from "@kumix/ui/ui/scroll-area";
 
 function stringifyValue(value: unknown): string {
   if (value == null) return "";
@@ -40,6 +35,47 @@ function stringifyValue(value: unknown): string {
 
 function searchableRow(row: unknown): string {
   return stringifyValue(row).toLowerCase();
+}
+
+/** Avoid @kumix/ui DataGridColumnHeader — memo'd on stable column ref, freezes sort UI. */
+export function SortableHeader<T>({
+  column,
+  title,
+}: {
+  column: Column<T, unknown>;
+  title: string;
+}) {
+  const sorted = column.getIsSorted();
+  if (!column.getCanSort()) {
+    return (
+      <span className="inline-flex h-full items-center font-normal text-[0.8125rem] text-secondary-foreground/80">
+        {title}
+      </span>
+    );
+  }
+  return (
+    <div className="-ms-2 flex h-full items-center">
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-6 rounded-lg px-2 font-normal text-secondary-foreground/80 hover:bg-secondary hover:text-foreground"
+        onClick={() => {
+          if (sorted === "asc") column.toggleSorting(true);
+          else if (sorted === "desc") column.clearSorting();
+          else column.toggleSorting(false);
+        }}
+      >
+        {title}
+        {sorted === "desc" ? (
+          <ArrowDown className="size-3.25" aria-hidden />
+        ) : sorted === "asc" ? (
+          <ArrowUp className="size-3.25" aria-hidden />
+        ) : (
+          <ChevronsUpDown className="mt-px size-3.25" aria-hidden />
+        )}
+      </Button>
+    </div>
+  );
 }
 
 export function DataTable<T extends { id: string }>({
@@ -76,11 +112,16 @@ export function DataTable<T extends { id: string }>({
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const searchableCache = useMemo(() => {
+    const cache = new Map<T, string>();
+    for (const row of data) cache.set(row, searchableRow(row));
+    return cache;
+  }, [data]);
   const filteredData = useMemo(() => {
     const term = deferredSearch.trim().toLowerCase();
     if (!term) return data;
-    return data.filter((row) => searchableRow(row).includes(term));
-  }, [data, deferredSearch]);
+    return data.filter((row) => (searchableCache.get(row) ?? "").includes(term));
+  }, [data, deferredSearch, searchableCache]);
   const gridColumns = useMemo<ColumnDef<T>[]>(
     () => [
       ...(onDeleteSelected
@@ -92,12 +133,9 @@ export function DataTable<T extends { id: string }>({
               maxSize: 44,
               header: ({ table }) => (
                 <Checkbox
-                  checked={
-                    table.getIsAllPageRowsSelected()
-                      ? true
-                      : table.getIsSomePageRowsSelected()
-                        ? "indeterminate"
-                        : false
+                  checked={table.getIsAllPageRowsSelected()}
+                  indeterminate={
+                    table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()
                   }
                   onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
                   aria-label={selectAllLabel}
@@ -117,10 +155,11 @@ export function DataTable<T extends { id: string }>({
         : []),
       ...columns.map((column) => {
         if (typeof column.header !== "string") return column;
+        const title = column.header as string;
         return {
           ...column,
           header: ({ column: tableColumn }: HeaderContext<T, unknown>) => (
-            <DataGridColumnHeader column={tableColumn} title={column.header as string} />
+            <SortableHeader column={tableColumn} title={title} />
           ),
         } as ColumnDef<T>;
       }),
@@ -138,8 +177,8 @@ export function DataTable<T extends { id: string }>({
     enableRowSelection: (row) => getCanSelectRow?.(row.original) ?? true,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
   const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
 
@@ -174,12 +213,12 @@ export function DataTable<T extends { id: string }>({
             </Button>
           ) : null}
         </div>
-        <CardTable>
+        <CardContent className="p-0">
           <ScrollArea>
             <DataGridTable />
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
-        </CardTable>
+        </CardContent>
         <CardFooter>
           <DataGridPagination />
         </CardFooter>

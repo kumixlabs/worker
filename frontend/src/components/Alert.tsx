@@ -8,21 +8,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Alert, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@kumix/ui";
+import { Alert, AlertDescription, AlertTitle } from "@kumix/ui/reui/alert";
 
 type AlertIconKey = "primary" | "success" | "info" | "warning" | "destructive";
+type AlertVariant = NonNullable<ComponentProps<typeof Alert>["variant"]>;
 
 interface AlertToastOptions {
   message?: string;
   description?: string;
-  icon?: ComponentProps<typeof Alert>["icon"];
-  variant?: ComponentProps<typeof Alert>["variant"];
-  /**
-   * Stable id for de-duplication or updating an existing toast. When omitted,
-   * each call creates a brand-new toast (stacking behavior).
-   */
+  icon?: AlertIconKey;
+  variant?: AlertVariant;
   id?: string | number;
-  /** Auto-dismiss duration in ms. Defaults to 4000. */
   duration?: number;
 }
 
@@ -34,27 +30,36 @@ const iconMap = {
   destructive: <CircleXIcon />,
 } satisfies Record<AlertIconKey, ReactNode>;
 
+const variantByIcon: Record<AlertIconKey, AlertVariant> = {
+  primary: "default",
+  success: "success",
+  info: "info",
+  warning: "warning",
+  destructive: "destructive",
+};
+
 function showAlertToast({
   message,
   description,
   icon = "success",
-  variant = "mono",
+  variant,
   id,
   duration = 4000,
 }: AlertToastOptions & { message: string }) {
-  const iconKey: AlertIconKey = (icon as AlertIconKey) ?? "success";
+  const iconKey: AlertIconKey = icon ?? "success";
+  const resolvedVariant = variant ?? variantByIcon[iconKey];
 
   toast.custom(
     () => (
-      <Alert variant={variant} icon={icon}>
-        <AlertIcon>{iconMap[iconKey]}</AlertIcon>
-        {!description ? (
-          <AlertTitle>{message}</AlertTitle>
-        ) : (
-          <AlertContent>
+      <Alert variant={resolvedVariant} className="bg-background shadow-lg">
+        {iconMap[iconKey]}
+        {description ? (
+          <>
             <AlertTitle>{message}</AlertTitle>
             <AlertDescription>{description}</AlertDescription>
-          </AlertContent>
+          </>
+        ) : (
+          <AlertTitle>{message}</AlertTitle>
         )}
       </Alert>
     ),
@@ -63,10 +68,10 @@ function showAlertToast({
 }
 
 export function AlertToast({
-  message = "This is a toast",
+  message = "Toast",
   description,
   icon = "success",
-  variant = "mono",
+  variant,
   id,
   duration,
 }: AlertToastOptions = {}) {
@@ -74,9 +79,9 @@ export function AlertToast({
 }
 
 export function AlertSuccess({
-  message = "This is a success toast",
+  message = "Success",
   description,
-  variant = "mono",
+  variant,
   id,
   duration,
 }: AlertToastOptions = {}) {
@@ -84,9 +89,9 @@ export function AlertSuccess({
 }
 
 export function AlertError({
-  message = "This is a error toast",
+  message = "An error occurred",
   description,
-  variant = "mono",
+  variant,
   id,
   duration,
 }: AlertToastOptions = {}) {

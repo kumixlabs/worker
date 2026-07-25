@@ -149,7 +149,8 @@ export function collectDueActions(streams: StreamRecord[], now = new Date()): Sc
   return streams.flatMap((stream) => {
     const actions: SchedulerAction[] = [];
     const canStart =
-      stream.status === "pending" || (stream.status === "stopped" && stream.recurrence !== "none");
+      stream.status === "pending" ||
+      ((stream.status === "stopped" || stream.status === "failed") && stream.recurrence !== "none");
     if (canStart && isDue(stream.scheduledFor, now)) {
       actions.push({ streamId: stream.id, type: "start" });
     }
@@ -251,7 +252,11 @@ export function schedulerState() {
  * @param intervalMs - The tick interval in milliseconds (default 30000).
  * @returns A stop function that clears the interval and marks the scheduler idle.
  */
+let stopCurrentScheduler: (() => void) | null = null;
+
 export function startScheduler(intervalMs = 30_000): () => void {
+  // Re-entry guard: a second call would spawn a parallel interval loop.
+  if (stopCurrentScheduler) return stopCurrentScheduler;
   schedulerStatus.running = true;
   schedulerStatus.intervalMs = intervalMs;
   const timer = setInterval(() => {
@@ -262,8 +267,10 @@ export function startScheduler(intervalMs = 30_000): () => void {
     });
   }, intervalMs);
   timer.unref?.();
-  return () => {
+  stopCurrentScheduler = () => {
     schedulerStatus.running = false;
     clearInterval(timer);
+    stopCurrentScheduler = null;
   };
+  return stopCurrentScheduler;
 }

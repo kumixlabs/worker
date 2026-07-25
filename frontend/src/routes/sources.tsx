@@ -16,31 +16,25 @@ import {
 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@kumix/ui/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/dropdown-menu";
+import { Input } from "@kumix/ui/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -109,6 +103,7 @@ export function SourcesPage() {
     queryKey: ["sources"],
     queryFn: api.sources,
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
   const statsQuery = useQuery({ queryKey: ["stats"], queryFn: api.stats });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
@@ -170,6 +165,7 @@ export function SourcesPage() {
       setEditId(null);
       setEditName("");
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
+      void queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
     onError: (error) => AlertError({ message: error.message }),
   });
@@ -267,15 +263,17 @@ export function SourcesPage() {
         size: 90,
         cell: ({ row }) => (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label={t("columns.actions")}
-              >
-                <MoreHorizontal className="size-4" />
-              </Button>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label={t("columns.actions")}
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem className="gap-2" onClick={() => setInfoSource(row.original)}>
@@ -356,8 +354,10 @@ export function SourcesPage() {
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("kindLabel")}</span>
               <Select value={kind} onValueChange={(value) => setKind(value as "url" | "gdrive")}>
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(value) => (value === "gdrive" ? t("kindGdrive") : t("kindUrl"))}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="url">{t("kindUrl")}</SelectItem>
@@ -470,12 +470,12 @@ export function SourcesPage() {
           </DialogHeader>
           <div className="overflow-hidden rounded-lg bg-black">
             {previewUrl ? (
-              // biome-ignore lint/a11y/useMediaCaption: user-supplied source has no captions
               <video
                 key={previewUrl}
                 src={previewUrl}
                 controls
                 autoPlay
+                muted
                 controlsList="nodownload"
                 className="aspect-video w-full"
               >

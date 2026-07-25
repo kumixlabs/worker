@@ -108,6 +108,26 @@ let fetchImpl: FetchLike = defaultFetch;
  */
 const sourceAborts = new Map<string, AbortController>();
 
+/** Limits concurrent download+probe operations to protect disk/CPU/sockets. */
+const maxConcurrentDownloads = 2;
+let downloadSlots = maxConcurrentDownloads;
+const downloadQueue: Array<() => void> = [];
+
+async function acquireDownloadSlot(): Promise<void> {
+  if (downloadSlots > 0) {
+    downloadSlots -= 1;
+    return;
+  }
+  await new Promise<void>((resolve) => downloadQueue.push(resolve));
+  downloadSlots -= 1;
+}
+
+function releaseDownloadSlot(): void {
+  downloadSlots += 1;
+  const next = downloadQueue.shift();
+  if (next) next();
+}
+
 /**
  * Tracks live download progress (bytes written vs total) keyed by source ID so
  * the dashboard can show a percentage while a source is downloading.
@@ -398,47 +418,24 @@ export async function safeFetch(
   init?: RequestInit,
   maxRedirects = 5,
 ): Promise<Response> {
-  let currentUrl = urlString;
-  for (let hop = 0; hop <= maxRedirects; hop += 1) {
-    if (!(await validateUrl(currentUrl))) {
-      throw new Error("Blocked by SSRF protection");
-    }
-    let response: Response;
-    try {
-      response = await fetchImpl(currentUrl, fetchInit(init));
-    } catch (error) {
-      const cause = error instanceof Error ? error.cause : undefined;
-      const causeMessage = cause instanceof Error ? cause.message : String(cause ?? "");
-      const detail = causeMessage ? `: ${causeMessage}` : "";
-      console.error(
-        `[worker] safeFetch failed for ${redactDownloadUrl(currentUrl)}${detail}`,
-        cause instanceof Error ? { code: (cause as NodeJS.ErrnoException).code } : undefined,
-      );
-      throw new Error(`fetch failed: ${redactDownloadUrl(currentUrl)}${detail}`);
-    }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location) return response;
-      currentUrl = new URL(location, currentUrl).toString();
-      continue;
-    }
-    return response;
-  }
-  throw new Error("Too many redirects");
+  return (await safeFetchInternal(urlString, init, maxRedirects, false)).response;
 }
 
 /**
- * Fetches a URL with SSRF-safe redirects while carrying cookies across hops.
+ * Fetches a URL with SSRF-safe redirects, optionally accumulating cookies
+ * across hops for the Google Drive confirmation flow.
  *
  * @param urlString - The initial URL to fetch.
  * @param init - Optional fetch init applied to each hop.
  * @param maxRedirects - Maximum number of redirects to follow.
+ * @param carryCookies - Whether to carry Set-Cookie values between hops.
  * @returns The final response and accumulated Cookie header.
  */
-async function safeFetchWithCookies(
+async function safeFetchInternal(
   urlString: string,
-  init?: RequestInit,
-  maxRedirects = 5,
+  init: RequestInit | undefined,
+  maxRedirects: number,
+  carryCookies: boolean,
 ): Promise<{ response: Response; cookie: string | null }> {
   let currentUrl = urlString;
   let cookie: string | null = null;
@@ -448,7 +445,7 @@ async function safeFetchWithCookies(
     }
     let response: Response;
     try {
-      response = await fetchImpl(currentUrl, fetchInit(init, cookie));
+      response = await fetchImpl(currentUrl, fetchInit(init, carryCookies ? cookie : undefined));
     } catch (error) {
       const cause = error instanceof Error ? error.cause : undefined;
       const causeMessage = cause instanceof Error ? cause.message : String(cause ?? "");
@@ -459,7 +456,7 @@ async function safeFetchWithCookies(
       );
       throw new Error(`fetch failed: ${redactDownloadUrl(currentUrl)}${detail}`);
     }
-    cookie = appendCookies(cookie, cookieValues(response));
+    if (carryCookies) cookie = appendCookies(cookie, cookieValues(response));
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       if (!location) return { response, cookie };
@@ -483,13 +480,16 @@ export async function resolveGDriveDownload(
 ): Promise<{ url: string; headers?: Record<string, string> }> {
   const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
   try {
-    const { response: res, cookie } = await safeFetchWithCookies(directUrl);
+    const { response: res, cookie } = await safeFetchInternal(directUrl, undefined, 5, true);
     const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
     if (res.ok && contentType.includes("text/html")) {
       const body = await res.text();
       const confirmedUrl = extractGDriveConfirmedUrl(body, fileId, cookie);
+      if (!confirmedUrl) {
+        throw new Error("Google Drive confirmation page could not be resolved");
+      }
       return {
-        url: confirmedUrl ?? directUrl,
+        url: confirmedUrl,
         headers: cookie ? { cookie } : undefined,
       };
     }
@@ -497,7 +497,7 @@ export async function resolveGDriveDownload(
   } catch (error) {
     const message = error instanceof Error ? error.message : "resolve failed";
     console.error(`[worker] resolveGDriveDownload failed for fileId=${fileId}: ${message}`);
-    return { url: directUrl };
+    throw new Error(`Google Drive download resolve failed: ${message}`);
   }
 }
 
@@ -513,6 +513,17 @@ export async function downloadAndProbeSource(sourceId: string) {
   const source = getSource(sourceId);
   if (!source?.url) return source;
 
+  await acquireDownloadSlot();
+  try {
+    return await downloadAndProbeSourceInner(sourceId);
+  } finally {
+    releaseDownloadSlot();
+  }
+}
+
+async function downloadAndProbeSourceInner(sourceId: string) {
+  const source = getSource(sourceId);
+  if (!source?.url) return source ? source : null;
   const effectiveKind: "url" | "gdrive" =
     source.kind === "gdrive" || extractGDriveFileId(source.url) ? "gdrive" : "url";
 
@@ -583,10 +594,18 @@ export async function downloadAndProbeSource(sourceId: string) {
       `${Date.now()}-${safeFilenamePart(source.id)}${extension}`,
     );
     let bytesWritten = 0;
+    // Remaining disk allowance measured at allowanceBase; refreshed every 512 MB
+    // so a disk filling mid-download still trips the limit before it is exhausted.
+    let allowanceBase = 0;
+    let remainingAllowance = allowedBytes;
     const limiter = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         bytesWritten += chunk.byteLength;
-        if (bytesWritten > maxDownloadBytes || bytesWritten > allowedBytes) {
+        if (bytesWritten - allowanceBase >= 512 * 1024 * 1024) {
+          allowanceBase = bytesWritten;
+          remainingAllowance = allowedDownloadBytes();
+        }
+        if (bytesWritten > maxDownloadBytes || bytesWritten - allowanceBase > remainingAllowance) {
           controller.error(new Error("Download exceeds storage limit"));
           return;
         }

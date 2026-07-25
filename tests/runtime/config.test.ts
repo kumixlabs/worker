@@ -19,6 +19,9 @@ afterEach(() => {
 describe("Kumix Worker config", () => {
   it("creates default settings in the configured data directory", async () => {
     const { readSettings } = await import("../../src/runtime/config");
+    const { isPasswordHash, verifyPassword, DEFAULT_DASHBOARD_PASSWORD } = await import(
+      "../../src/lib/password"
+    );
 
     const settings = readSettings();
 
@@ -27,10 +30,13 @@ describe("Kumix Worker config", () => {
     expect(settings.diskUsageLimitPercent).toBe(90);
     expect(settings.timezone).toBe("Asia/Jakarta");
     expect(settings.token.length).toBeGreaterThanOrEqual(32);
+    expect(isPasswordHash(settings.passwordHash)).toBe(true);
+    expect(await verifyPassword(DEFAULT_DASHBOARD_PASSWORD, settings.passwordHash)).toBe(true);
   });
 
   it("persists settings", async () => {
     const { readSettings, writeSettings } = await import("../../src/runtime/config");
+    const { isPasswordHash } = await import("../../src/lib/password");
 
     writeSettings({
       dataDir,
@@ -41,7 +47,8 @@ describe("Kumix Worker config", () => {
       youtubeApiKey: "",
     });
 
-    expect(readSettings()).toEqual({
+    const settings = readSettings();
+    expect(settings).toMatchObject({
       dataDir,
       diskUsageLimitPercent: 80,
       port: 9090,
@@ -49,5 +56,6 @@ describe("Kumix Worker config", () => {
       token: "test-token-123456",
       youtubeApiKey: "",
     });
+    expect(isPasswordHash(settings.passwordHash)).toBe(true);
   });
 });

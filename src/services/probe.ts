@@ -3,10 +3,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
 
 import { getSource, updateSourceProbe } from "../db/sources";
 import { getFfprobePath } from "../runtime/ffmpeg";
@@ -22,18 +19,6 @@ export interface ProbeResult {
   width: number | null;
   height: number | null;
   fps: number | null;
-}
-
-/**
- * Computes the SHA-256 hex digest of a file's contents.
- *
- * @param filePath - Absolute path to the file.
- * @returns The lowercase hex digest.
- */
-export async function sha256File(filePath: string): Promise<string> {
-  const hasher = createHash("sha256");
-  await pipeline(createReadStream(filePath), hasher);
-  return hasher.digest("hex");
 }
 
 /**
@@ -168,18 +153,14 @@ export async function probeAndUpdateSource(sourceId: string, filePath: string) {
   try {
     if (!getSource(sourceId)) return null;
     updateSourceProbe(sourceId, { status: "probing", filePath });
-    const [probe, fileStat, sha256] = await Promise.all([
-      ffprobe(filePath),
-      stat(filePath),
-      sha256File(filePath),
-    ]);
+    const [probe, fileStat] = await Promise.all([ffprobe(filePath), stat(filePath)]);
     const invalidReason = getInvalidProbeReason(probe);
     return updateSourceProbe(sourceId, {
       status: invalidReason ? "invalid" : "ready",
       invalidReason,
       ...probe,
       sizeBytes: fileStat.size,
-      sha256,
+      sha256: null,
       filePath,
     });
   } catch (error) {

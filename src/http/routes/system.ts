@@ -4,18 +4,21 @@ import type { Hono } from "hono";
 
 import { stats } from "../../db/stats";
 import { listStreams } from "../../db/streams";
+import { hashPassword, isDefaultPasswordHash, verifyPassword } from "../../lib/password";
 import { readSettings, writeSettings } from "../../runtime/config";
 import { runtimeHealthDetails, runtimeMetrics } from "../../runtime/metrics";
 import { schedulerState } from "../../runtime/scheduler";
-import { settingsPatchSchema } from "../../schemas/settings";
+import { passwordChangeSchema, settingsPatchSchema } from "../../schemas/settings";
 import type { WorkerSettings } from "../../types/worker";
-import { fail, ok } from "../middleware";
+import { fail, ok, recordAuthFailure } from "../middleware";
 import { doc } from "./common";
 
-type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
+type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey" | "passwordHash"> & {
   hasToken: boolean;
   tokenLength: number;
   hasYoutubeApiKey: boolean;
+  hasPassword: boolean;
+  passwordIsDefault: boolean;
 };
 
 /**
@@ -24,13 +27,15 @@ type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey"> & {
  * @param settings - Full worker settings from config storage.
  * @returns Settings safe for dashboard responses.
  */
-function publicSettings(settings: WorkerSettings): PublicSettings {
-  const { token, youtubeApiKey, ...rest } = settings;
+async function publicSettings(settings: WorkerSettings): Promise<PublicSettings> {
+  const { token, youtubeApiKey, passwordHash, ...rest } = settings;
   return {
     ...rest,
     hasToken: token.length > 0,
     tokenLength: token.length,
     hasYoutubeApiKey: Boolean(youtubeApiKey),
+    hasPassword: Boolean(passwordHash),
+    passwordIsDefault: await isDefaultPasswordHash(passwordHash),
   };
 }
 
@@ -72,8 +77,8 @@ export function registerSystemRoutes(app: Hono) {
 
   app.get(
     "/api/settings",
-    doc("Settings", "Read settings", "Returns local Kumix Worker settings without the raw token."),
-    (c) => c.json(ok(publicSettings(readSettings()))),
+    doc("Settings", "Read settings", "Returns local Kumix Worker settings without secrets."),
+    async (c) => c.json(ok(await publicSettings(readSettings()))),
   );
 
   app.patch(
@@ -81,7 +86,7 @@ export function registerSystemRoutes(app: Hono) {
     doc(
       "Settings",
       "Update settings",
-      "Updates disk usage limit or timezone settings. Port and token are managed separately.",
+      "Updates disk usage limit or timezone settings. Port, token, and password are managed separately.",
     ),
     async (c) => {
       const parsed = settingsPatchSchema.safeParse(await c.req.json().catch(() => null));
@@ -94,7 +99,6 @@ export function registerSystemRoutes(app: Hono) {
         ...current,
         ...rest,
         dataDir: current.dataDir,
-        // Empty string keeps the existing key; omit/undefined leaves it unchanged.
         youtubeApiKey:
           youtubeApiKey === undefined
             ? current.youtubeApiKey
@@ -103,7 +107,34 @@ export function registerSystemRoutes(app: Hono) {
               : youtubeApiKey,
       };
       writeSettings(next);
-      return c.json(ok(publicSettings(next)));
+      return c.json(ok(await publicSettings(next)));
+    },
+  );
+
+  app.post(
+    "/api/settings/password",
+    doc(
+      "Settings",
+      "Change dashboard password",
+      "Updates the dashboard login password. Does not rotate the API token or re-encrypt stream keys.",
+    ),
+    async (c) => {
+      const parsed = passwordChangeSchema.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) {
+        return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid password change");
+      }
+      const current = readSettings();
+      if (!(await verifyPassword(parsed.data.currentPassword, current.passwordHash))) {
+        // 400 (not 401): wrong current password must not clear the SPA Bearer session.
+        // Still count against auth rate limit so brute-force of the current password is bounded.
+        recordAuthFailure(c);
+        return fail("BAD_REQUEST", "Current password is incorrect");
+      }
+      writeSettings({
+        ...current,
+        passwordHash: await hashPassword(parsed.data.newPassword),
+      });
+      return c.json(ok({ changed: true }));
     },
   );
 }

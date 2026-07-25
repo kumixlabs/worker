@@ -4,12 +4,9 @@ import { Calendar, PlayCircle, Radio } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Combobox,
   ComboboxContent,
   ComboboxEmpty,
@@ -18,13 +15,9 @@ import {
   ComboboxList,
   ComboboxTrigger,
   ComboboxValue,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/combobox";
+import { Input } from "@kumix/ui/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
@@ -37,18 +30,35 @@ function toSchedule(value: string) {
   return value ? value : null;
 }
 
+const pad = (value: number) => String(value).padStart(2, "0");
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => pad(i));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => pad(i));
+
 function durationStopAt(startAt: string, hours: string, minutes: string, timeZone?: string) {
   const totalMinutes = Number(hours || 0) * 60 + Number(minutes || 0);
   if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return null;
   const match = startAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
   if (match) {
+    // startAt is wall-clock in worker TZ; add duration as minutes on the clock
+    // fields so browser local TZ never skews auto-stop.
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
     const hour = Number(match[4]);
     const minute = Number(match[5]);
-    const base = new Date(year, month - 1, day, hour, minute);
-    return toWallClockInput(new Date(base.getTime() + totalMinutes * 60_000));
+    const total = hour * 60 + minute + totalMinutes;
+    const endDayOffset = Math.floor(total / (24 * 60));
+    const endMinuteOfDay = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+    const endHour = Math.floor(endMinuteOfDay / 60);
+    const endMinute = endMinuteOfDay % 60;
+    // UTC date math for calendar day roll only (not absolute time).
+    const endDate = new Date(Date.UTC(year, month - 1, day + endDayOffset));
+    const y = endDate.getUTCFullYear();
+    const m = String(endDate.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(endDate.getUTCDate()).padStart(2, "0");
+    const hh = String(endHour).padStart(2, "0");
+    const mm = String(endMinute).padStart(2, "0");
+    return `${y}-${m}-${d}T${hh}:${mm}`;
   }
   return toWallClockInput(new Date(Date.now() + totalMinutes * 60_000), timeZone);
 }
@@ -65,6 +75,7 @@ const WEEKDAYS = [
 
 export function NewStreamPage() {
   const t = useTranslations("CreateTask");
+  const common = useTranslations("Common");
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [sourceId, setSourceId] = useState("");
@@ -92,7 +103,7 @@ export function NewStreamPage() {
   const createStream = useMutation({
     mutationFn: () =>
       api.createStream({
-        title,
+        title: title.trim(),
         sourceId,
         targetId,
         youtubeLiveUrl: youtubeLiveUrl || null,
@@ -136,7 +147,20 @@ export function NewStreamPage() {
   const selectedTarget = activeTargets.find((target) => target.id === targetId) ?? null;
   const hasValidStop = stopMode !== "duration" || Boolean(effectiveStopAt);
   const hasValidWeekdays = recurrence !== "weekly" || weekdays.length > 0;
-  const canSubmit = title && sourceId && targetId && hasValidStop && hasValidWeekdays;
+  const canSubmit = title.trim() && sourceId && targetId && hasValidStop && hasValidWeekdays;
+  const queryError = sourcesQuery.isError || targetsQuery.isError ? common("loadError") : null;
+
+  if (queryError) {
+    return (
+      <AppShell title={t("title")} description={t("description")}>
+        <Card>
+          <CardContent className="py-6">
+            <p className="text-destructive text-sm">{queryError}</p>
+          </CardContent>
+        </Card>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell title={t("title")} description={t("description")}>
@@ -254,8 +278,16 @@ export function NewStreamPage() {
                   setStopMode(value as "none" | "duration" | "datetime");
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(value) =>
+                      value === "duration"
+                        ? t("stopDuration")
+                        : value === "datetime"
+                          ? t("stopDateTime")
+                          : t("stopNone")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">{t("stopNone")}</SelectItem>
@@ -306,8 +338,18 @@ export function NewStreamPage() {
                   setRecurrence(value as "none" | "daily" | "weekly" | "monthly")
                 }
               >
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(value) =>
+                      value === "daily"
+                        ? t("daily")
+                        : value === "weekly"
+                          ? t("weekly")
+                          : value === "monthly"
+                            ? t("monthly")
+                            : t("manual")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">{t("manual")}</SelectItem>
@@ -318,14 +360,46 @@ export function NewStreamPage() {
               </Select>
             </label>
             {recurrence !== "none" ? (
-              <label className="grid gap-1.5 text-sm">
+              <div className="grid gap-1.5 text-sm">
                 <span className="font-medium">{t("recurrenceTime")}</span>
-                <Input
-                  type="time"
-                  value={recurrenceTime}
-                  onChange={(event) => setRecurrenceTime(event.target.value)}
-                />
-              </label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={recurrenceTime.slice(0, 2) || "00"}
+                    onValueChange={(hour) =>
+                      setRecurrenceTime(`${hour}:${recurrenceTime.slice(3, 5) || "00"}`)
+                    }
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {HOUR_OPTIONS.map((hour) => (
+                        <SelectItem key={hour} value={hour}>
+                          {hour}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="font-medium text-muted-foreground">:</span>
+                  <Select
+                    value={recurrenceTime.slice(3, 5) || "00"}
+                    onValueChange={(minute) =>
+                      setRecurrenceTime(`${recurrenceTime.slice(0, 2) || "00"}:${minute}`)
+                    }
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {MINUTE_OPTIONS.map((minute) => (
+                        <SelectItem key={minute} value={minute}>
+                          {minute}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             ) : null}
             {recurrence === "weekly" ? (
               <div className="grid gap-1.5 text-sm">
@@ -336,7 +410,7 @@ export function NewStreamPage() {
                       key={day.value}
                       type="button"
                       size="sm"
-                      variant={weekdays.includes(day.value) ? "primary" : "outline"}
+                      variant={weekdays.includes(day.value) ? "default" : "outline"}
                       onClick={() =>
                         setWeekdays((current) =>
                           current.includes(day.value)

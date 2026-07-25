@@ -1,13 +1,13 @@
 import { CheckIcon, LanguagesIcon } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { Button } from "@kumix/ui/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/dropdown-menu";
 import { type Locale, useLocale } from "@/hooks/use-locale";
 
 const locales: {
@@ -32,14 +32,12 @@ export function LocaleSwitcher() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
-          <LanguagesIcon />
-          <span className="sr-only">{t("language")}</span>
-        </Button>
+      <DropdownMenuTrigger render={<Button variant="outline" size="icon" />}>
+        <LanguagesIcon />
+        <span className="sr-only">{t("language")}</span>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+      <DropdownMenuContent align="end">
         {locales.map((item) => (
           <DropdownMenuItem
             key={item.value}

@@ -68,8 +68,7 @@ function publicLinkInfo(): PublicWorkerLinkInfo {
   return {
     apiVersion: "v1",
     agentVersion: readPackageVersion(),
-    dashboardPath: "/auth?token={token}",
-    tokenLength: readSettings().token.length,
+    dashboardPath: "/",
     capabilities: publicCapabilities(),
   };
 }
@@ -168,30 +167,42 @@ function publicHealth() {
   };
 }
 
+/** Serializes token rotation so concurrent reencrypt + writeSettings cannot diverge. */
+let rotateTokenChain: Promise<unknown> = Promise.resolve();
+
 /**
  * Rotates the worker token and re-encrypts all stored target stream keys.
  * Rejects when the new token matches the current token.
+ * Never returns the raw token (client already sent it).
  *
  * @param token - The new worker token.
  * @returns The rotation timestamp and new token length.
  */
 function rotateToken(token: string) {
-  const current = readSettings();
-  if (token === current.token) throw new Error("New token must be different from current token");
-  reencryptTargetSecrets(current.token, token);
-  try {
-    writeSettings({ ...current, token });
-  } catch (error) {
-    reencryptTargetSecrets(token, current.token);
-    throw error;
-  }
-  const rotatedAt = new Date().toISOString();
-  try {
-    addEvent(null, "token_rotated", "Worker token rotated", { rotatedAt });
-  } catch (error) {
-    console.error("[worker] failed to record token rotation event:", error);
-  }
-  return { rotatedAt, tokenLength: token.length };
+  const run = async () => {
+    const current = readSettings();
+    if (token === current.token) throw new Error("New token must be different from current token");
+    reencryptTargetSecrets(current.token, token);
+    try {
+      writeSettings({ ...current, token });
+    } catch (error) {
+      reencryptTargetSecrets(token, current.token);
+      throw error;
+    }
+    const rotatedAt = new Date().toISOString();
+    try {
+      addEvent(null, "token_rotated", "Worker token rotated", { rotatedAt });
+    } catch (error) {
+      console.error("[worker] failed to record token rotation event:", error);
+    }
+    return { rotatedAt, tokenLength: token.length };
+  };
+  const next = rotateTokenChain.then(run, run);
+  rotateTokenChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
 }
 
 /**
@@ -253,7 +264,7 @@ export function registerCoreRoutes(app: Hono) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid token");
       }
       try {
-        return c.json(ok(rotateToken(parsed.data.token)));
+        return c.json(ok(await rotateToken(parsed.data.token)));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Token rotation failed";
         if (message.includes("different from current") || message.includes("Unable to decrypt")) {

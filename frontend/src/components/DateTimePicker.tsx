@@ -1,18 +1,10 @@
 import { Calendar as CalendarIcon, Clock, X } from "lucide-react";
 import { useTranslations } from "use-intl";
 
-import {
-  Button,
-  Calendar,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@kumix/ui";
+import { Button } from "@kumix/ui/ui/button";
+import { Calendar } from "@kumix/ui/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@kumix/ui/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { cn } from "@kumix/utils";
 
 const DEFAULT_TIME = "00:00";
@@ -44,11 +36,6 @@ export function toWallClockInput(date: Date, timeZone?: string): string {
   }).formatToParts(date);
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
   return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}`;
-}
-
-/** @deprecated Prefer toWallClockInput(date, workerTimezone) */
-export function toLocalInput(date: Date): string {
-  return toWallClockInput(date);
 }
 
 function wallClockToDate(value: string): Date | undefined {
@@ -119,91 +106,93 @@ export function DateTimePicker({
   };
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <div className="relative">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className={cn(
-              "w-full justify-start gap-2 font-normal",
-              !value && "text-muted-foreground",
-            )}
-          >
-            <CalendarIcon className="size-4" />
-            <span className="truncate">{formatValue(value, resolvedPlaceholder)}</span>
-          </Button>
-          {value ? (
+    <div className="relative">
+      <Popover>
+        <PopoverTrigger
+          render={
             <Button
               type="button"
-              mode="icon"
-              variant="ghost"
-              size="sm"
-              className="absolute inset-e-1 top-1/2 -translate-y-1/2"
-              aria-label={t("clearDate")}
+              variant="outline"
               disabled={disabled}
-              onClick={(event) => {
-                event.preventDefault();
-                onChange("");
-              }}
+              className={cn(
+                "w-full justify-start gap-2 font-normal",
+                !value && "text-muted-foreground",
+                value && "pe-9",
+              )}
+            />
+          }
+        >
+          <CalendarIcon className="size-4" />
+          <span className="truncate">{formatValue(value, resolvedPlaceholder)}</span>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto space-y-3 p-3" align="start">
+          <Calendar
+            mode="single"
+            selected={selected}
+            onSelect={(date: Date | undefined) => {
+              if (date) onChange(withDate(value, date));
+            }}
+            disabled={isDateDisabled}
+            autoFocus
+          />
+          <div className="flex items-center gap-2 border-border border-t pt-3">
+            <Clock className="size-4 shrink-0 text-muted-foreground" />
+            <Select
+              value={value.slice(11, 13) || "00"}
+              onValueChange={(hour) =>
+                onChange(withTime(value, `${hour}:${value.slice(14, 16) || "00"}`))
+              }
+              disabled={disabled}
             >
-              <X className="size-4" />
-            </Button>
-          ) : null}
-        </div>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto space-y-3 p-3" align="start">
-        <Calendar
-          mode="single"
-          selected={selected}
-          onSelect={(date) => {
-            if (date) onChange(withDate(value, date));
+              <SelectTrigger className="flex-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {HOUR_OPTIONS.map((hour) => (
+                  <SelectItem key={hour} value={hour}>
+                    {hour}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="font-medium text-muted-foreground">:</span>
+            <Select
+              value={value.slice(14, 16) || "00"}
+              onValueChange={(minute) =>
+                onChange(withTime(value, `${value.slice(11, 13) || "00"}:${minute}`))
+              }
+              disabled={disabled}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {MINUTE_OPTIONS.map((minute) => (
+                  <SelectItem key={minute} value={minute}>
+                    {minute}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </PopoverContent>
+      </Popover>
+      {value ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute inset-e-1 top-1/2 z-10 -translate-y-1/2"
+          aria-label={t("clearDate")}
+          disabled={disabled}
+          onClick={(event) => {
+            event.preventDefault();
+            onChange("");
           }}
-          disabled={isDateDisabled}
-          autoFocus
-        />
-        <div className="flex items-center gap-2 border-border border-t pt-3">
-          <Clock className="size-4 shrink-0 text-muted-foreground" />
-          <Select
-            value={value.slice(11, 13) || "00"}
-            onValueChange={(hour) =>
-              onChange(withTime(value, `${hour}:${value.slice(14, 16) || "00"}`))
-            }
-            disabled={disabled}
-          >
-            <SelectTrigger className="flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="max-h-60">
-              {HOUR_OPTIONS.map((hour) => (
-                <SelectItem key={hour} value={hour}>
-                  {hour}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="font-medium text-muted-foreground">:</span>
-          <Select
-            value={value.slice(14, 16) || "00"}
-            onValueChange={(minute) =>
-              onChange(withTime(value, `${value.slice(11, 13) || "00"}:${minute}`))
-            }
-            disabled={disabled}
-          >
-            <SelectTrigger className="flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="max-h-60">
-              {MINUTE_OPTIONS.map((minute) => (
-                <SelectItem key={minute} value={minute}>
-                  {minute}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </PopoverContent>
-    </Popover>
+        >
+          <X className="size-4" />
+        </Button>
+      ) : null}
+    </div>
   );
 }

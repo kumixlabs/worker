@@ -52,17 +52,24 @@ export function getDb(): SqliteDatabase {
     instance = new Database(getDbPath());
     instance.pragma("journal_mode = WAL");
     instance.pragma("foreign_keys = ON");
+    instance.pragma("busy_timeout = 5000");
     instance.pragma("wal_autocheckpoint = 1000");
 
+    const stmtCache = new Map<string, SqliteStatement>();
     const wrapper: SqliteDatabase = {
       exec: (sql: string) => instance!.exec(sql),
       query: (sql: string) => {
-        const stmt = instance!.prepare(sql);
-        return {
-          all: (...params: unknown[]) => stmt.all(...params),
-          get: (...params: unknown[]) => stmt.get(...params),
-          run: (...params: unknown[]) => stmt.run(...params),
-        };
+        let stmt = stmtCache.get(sql);
+        if (!stmt) {
+          const prepared = instance!.prepare(sql);
+          stmt = {
+            all: (...params: unknown[]) => prepared.all(...params),
+            get: (...params: unknown[]) => prepared.get(...params),
+            run: (...params: unknown[]) => prepared.run(...params),
+          };
+          stmtCache.set(sql, stmt);
+        }
+        return stmt;
       },
     };
     ensureSchema(wrapper);

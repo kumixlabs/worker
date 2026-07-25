@@ -42,9 +42,9 @@ describe.skipIf(!hasSqlite())("Core-facing Worker API contract", () => {
     expect(body.data).toMatchObject({
       apiVersion: "v1",
       hasToken: true,
-      tokenLength: "core-token-123456".length,
-      dashboardPath: "/auth?token={token}",
+      dashboardPath: "/",
     });
+    expect(body.data.tokenLength).toBeUndefined();
     expect(JSON.stringify(body)).not.toContain("core-token-123456");
   });
 
@@ -81,9 +81,9 @@ describe.skipIf(!hasSqlite())("Core-facing Worker API contract", () => {
     expect(response.status).toBe(200);
     expect(body.data).toMatchObject({
       apiVersion: "v1",
-      dashboardPath: "/auth?token={token}",
-      tokenLength: "core-token-123456".length,
+      dashboardPath: "/",
     });
+    expect(body.data.tokenLength).toBeUndefined();
     expect(body.data.capabilities.features.monitoring).toBe(true);
     expect(JSON.stringify(body)).not.toContain("core-token-123456");
   });

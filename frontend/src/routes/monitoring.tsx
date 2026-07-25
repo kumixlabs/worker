@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Cpu, HardDrive, MemoryStick, Network, RefreshCw, Server, Timer } from "lucide-react";
 import { useTranslations } from "use-intl";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@kumix/ui";
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/api";
 import { useTimeFormatter } from "@/lib/date";
@@ -34,11 +35,18 @@ function ProgressBar({ value }: { value: number }) {
 
 export function MonitoringPage() {
   const t = useTranslations("Monitoring");
-  const statsQuery = useQuery({ queryKey: ["stats"], queryFn: api.stats, refetchInterval: 5000 });
+  const common = useTranslations("Common");
+  const statsQuery = useQuery({
+    queryKey: ["stats"],
+    queryFn: api.stats,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  });
   const metricsQuery = useQuery({
     queryKey: ["metrics"],
     queryFn: api.metrics,
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const timeFormatter = useTimeFormatter(settingsQuery.data);
@@ -89,18 +97,20 @@ export function MonitoringPage() {
       title={t("title")}
       description={t("description")}
       actions={
-        <div className="flex items-center gap-2">
-          <Badge variant={hasError ? "destructive" : "success"} appearance="light">
-            {hasError ? t("offline") : t("online")}
-          </Badge>
-          <Button size="sm" variant="outline" onClick={refresh} disabled={isLoading}>
-            <RefreshCw className={isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-            {t("refresh")}
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" onClick={refresh} disabled={isLoading}>
+          <RefreshCw className={isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          {t("refresh")}
+        </Button>
       }
     >
       <div className="space-y-5">
+        {hasError ? (
+          <Card>
+            <CardContent className="py-6">
+              <p className="text-destructive text-sm">{common("loadError")}</p>
+            </CardContent>
+          </Card>
+        ) : null}
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {summary.map(({ label, value, detail, percent: progress, icon: Icon }) => (
             <Card key={label}>

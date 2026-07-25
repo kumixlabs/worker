@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@kumix/ui/css";
+@import "@kumix/ui/theme";
 
 /** Theme and custom color styles **/
 :root {

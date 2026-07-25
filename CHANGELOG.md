@@ -2,6 +2,101 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.3.0] - 2026-07-26
+
+Production-hardening release: dashboard password auth (separate from API token), security headers/CSP, tighter rate limits, SQLite/hot-path performance, download concurrency caps, graceful shutdown, and dashboard UX polish.
+
+### Breaking
+
+- Dashboard sign-in is **password-based**, not API-token paste. Factory default password is `123456`; first login with the default forces a password change in the SPA.
+- `POST /api/auth/verify` removed. Use `POST /api/auth/login` with `{ password }` (returns session `token`, `expiresAt`, `passwordIsDefault`).
+- CLI `serve` / `init` never embed the API token in printed dashboard URLs. Open the Dashboard URL and sign in with the password. Core handoff remains `GET /auth?token=…` → `#code=` exchange.
+- Bootstrap / core link metadata: `dashboardPath` is `"/"` (was `"/auth?token={token}"`). `tokenLength` dropped from public link payload.
+- `serve --dev` no longer prints a full auth URL or raw token on boot (use `kumix-worker token --show` when needed).
+- Source probe no longer stores SHA-256 (hash step removed from probe path).
+- Auth failure rate limit: **10** / 60s / IP (was 30).
+
+### Added
+
+#### Dashboard password auth
+
+- `passwordHash` in `config.json` (async scrypt: `scrypt$N$r$p$salt$hash`). Older configs without a hash are migrated on read to a factory-default hash.
+- `POST /api/auth/login` — password → Bearer session token for the SPA.
+- `POST /api/settings/password` — change password (Bearer). Does **not** rotate the API token, re-encrypt stream keys, or invalidate other Bearer sessions. Wrong current password returns **400** (not 401) so the SPA session is not cleared; still counts toward auth rate limit.
+- CLI `kumix-worker password --password <pw>` to reset the dashboard password.
+- Settings API exposes `hasPassword` and `passwordIsDefault` (never `passwordHash` or raw token).
+- SPA force-change gate when `passwordIsDefault`; revalidates from `GET /api/settings` so a CLI password reset unblocks the gate.
+- Settings **Security** tab: change password, regenerate API token (client-generated; server returns `{ rotatedAt, tokenLength }` only).
+- Password rules: 6–128 chars; reject factory default `123456` on change (Zod schema + CLI `validPassword`); N/r/p allowlisted so corrupt config cannot DoS via scrypt params; invalid `passwordHash` fails closed (no silent fallback to default).
+
+#### Security & HTTP
+
+- Response headers on all routes: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, basic CSP (`default-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, etc.).
+- Unknown `/api/*` paths return a JSON 404 envelope (before SPA static fallback).
+- Bearer scheme matching is case-insensitive; token value trimmed.
+- `currentToken()` — mtime-cached token for hot crypto/HMAC paths (avoids re-reading full settings every call).
+- Token rotation serialized (promise chain) with reencrypt rollback if `writeSettings` fails; never echoes the new token.
+- CLI `init` / `token --regenerate` reencrypt rollback on config write failure.
+
+#### Runtime & reliability
+
+- SQLite: `busy_timeout=5000` and prepared-statement cache in `getDb()`.
+- Stats via `GROUP BY` counts (no full table loads); `listTargetsWithKeys()` for bulk key ops.
+- Concurrent source download+probe capped at **2**.
+- Scheduler re-entry guard on `startScheduler`; recurring streams may auto-start from **`failed`** when due (in addition to `pending` / `stopped`).
+- Storage metrics cache TTL 5s → 30s with shared async refresh helper.
+- Event **export** paginates beyond the list limit of 200 (batches of 500).
+- SSE: unified cleanup, per-stream live `onStreamEvent` plus filtered global history; NaN `limit` on `/api/events` falls back to 200.
+- `stopAllStreams` waits on process `exit`/`error` with timeout race (not busy poll).
+- Graceful shutdown: `server.close` races a 5s timeout so hung SSE clients cannot block exit; `unhandledRejection` / `uncaughtException` logged in `serve`.
+- Stream start: clear residual `stopRequested` and force-stop if stop arrived before FFmpeg spawn; clean `stopRequested` on failed start paths.
+- Google Drive: confirmation URL must resolve or fail — never fall back to HTML quarantine page; cookie-carrying fetch only for GDrive flow.
+- Download disk allowance re-measured every 512 MB written mid-download.
+- Static assets served via streaming `createReadStream` + `content-length` (not full-file buffer).
+- Public client: Zod schema parse failures marked non-retryable.
+- Signed-path query sort uses stable key/value compare (not locale-dependent string concat).
+
+#### Dashboard UX
+
+- Password login UI + forced default-password change flow (EN/ID strings).
+- API token stored in **sessionStorage** (tab-scoped; falls back to localStorage if sessionStorage unavailable); honors server `expiresAt`.
+- Local `SortableHeader` in DataTable/Log (avoids `@kumix/ui` `DataGridColumnHeader` memo freezing sort UI).
+- Streams source/target columns sort by name via `accessorFn`.
+- Select labels use children maps where value ≠ display text (sources, log, create stream stop/recurrence).
+- Root `ErrorBoundary` with reload; queryFns accept `AbortSignal`; polling uses `refetchIntervalInBackground: false`.
+- Settings tabs: General vs Security; stop-stream confirm copy.
+- `@kumix/ui` per-file imports (`@kumix/ui/ui/*`, `@kumix/ui/reui/*`).
+
+#### Docs & tests
+
+- `AGENTS.md`, `README.md`, `README.id-ID.md`, `DOCKER.md` updated for password login, security headers, CLI, CORS env, dual install.
+- Tests: password hash/verify, login, password change, reject factory default, CSP/security headers, auth rate limit at 10, events NaN limit, config password seeding.
+
+### Fixed
+
+- Stop stream API returns 404 when the stream is missing (was a loose success).
+- Stream create/patch requires source status `ready` and validates target existence on patch.
+- YouTube analytics: not-found / private / bad video ID stay 400; other upstream failures return **502** `UPSTREAM_ERROR`.
+- Recovery path uses the status returned from `setStreamStatus` (avoids extra read races).
+- Internal HTTP error logs print `error.message` only (less noisy stack dumps).
+- Log page: older-events load errors swallowed for retry; older buffer capped; Select/Popover aligned with current UI kit.
+
+### Changed
+
+- Dashboard password and API token are separate concerns: password = SPA login; token = Bearer API + stream-key AES root + signed-URL HMAC.
+- Password change does not invalidate existing Bearer sessions (documented).
+- CLI `status` prints API token length, not a masked token; help text documents password vs token.
+- Dependency bumps: `better-sqlite3` 13.x, `hono` 4.12.32, `undici` 8.9.0, biome/bumpp/concurrently, frontend lockfile refresh.
+- Package version **0.3.0**.
+
+### Migration notes
+
+1. Upgrade and start the worker once so `config.json` gains `passwordHash` (default password `123456` until you change it).
+2. Sign in with `123456`, complete the forced password change (or run `kumix-worker password --password <pw>`).
+3. Integrations that opened `/auth?token=…` still work for handoff; printed CLI/Docker URLs are password login only.
+4. Any client calling `POST /api/auth/verify` must switch to `POST /api/auth/login`.
+5. If you relied on source SHA-256 in the UI/API, that field is no longer populated on new probes.
+
 ## [0.2.1] - 2026-07-19
 
 ### Added

@@ -58,7 +58,7 @@ Dashboard mencakup:
 - Halaman Sources untuk menambah URL langsung atau sumber Google Drive, melihat detail media, preview, rename, membatalkan download, retry, menghapus, dan bulk delete.
 - Halaman Targets untuk membuat/mengedit target RTMP/RTMPS dan mengaktifkan/menonaktifkan tujuan.
 - Halaman Streams untuk lifecycle stream, log, export, edit waktu berhenti, dan penghapusan aman.
-- Halaman Settings untuk timezone, batas penggunaan disk, dan kunci API Data YouTube opsional (write-only).
+- Halaman Settings untuk timezone, batas penggunaan disk, kunci API Data YouTube opsional (write-only), ganti password dashboard, dan regenerate API token.
 - i18n EN/ID dengan parity dan test orphan key.
 
 ### Sources
@@ -72,9 +72,9 @@ Sources mendukung:
 - Batas ukuran download, enforcement batas penggunaan disk, dan cleanup saat gagal.
 - Ekstraksi metadata FFprobe dengan timeout probe.
 - Validasi codec dan bitrate dengan fallback `format.bit_rate`.
-- Hash SHA-256 secara streaming.
 - Penyimpanan cache lokal yang dihapus dari disk saat source dihapus.
-- Dialog detail dengan durasi, resolusi, FPS, codec, bitrate, SHA-256, dan alasan invalid.
+- Batas konkurensi download+probe untuk melindungi disk/CPU.
+- Dialog detail dengan durasi, resolusi, FPS, codec, bitrate, dan alasan invalid.
 - Progress download, cancel, retry, rename, preview, dan bulk delete.
 
 Aturan validasi:
@@ -155,7 +155,11 @@ Perintah umum:
 kumix-worker init
 kumix-worker serve
 kumix-worker status
+kumix-worker doctor
 kumix-worker token
+kumix-worker token --show
+kumix-worker token --regenerate
+kumix-worker password --password <password-baru>
 kumix-worker reset --yes
 kumix-worker reset --all --yes
 kumix-worker update
@@ -212,10 +216,12 @@ Struktur data:
 
 Config berisi:
 
-- `token`
+- `token` — kunci Bearer API, root enkripsi stream key, HMAC signed URL
+- `passwordHash` — hash scrypt password login dashboard
 - `port`
 - `timezone`
 - `diskUsageLimitPercent`
+- `youtubeApiKey` — opsional; tidak pernah dikembalikan mentah dari API
 - `dataDir`
 
 File config ditulis dengan permission terbatas jika didukung sistem operasi.
@@ -245,7 +251,7 @@ KUMIX_WORKER_AUTO_RESUME
 
 Route dashboard/private menggunakan Bearer token:
 
-- `/api/settings`
+- `/api/settings`, `PATCH /api/settings`, `POST /api/settings/password`
 - `/api/stats`
 - `/api/metrics`
 - `/api/health/details`
@@ -264,45 +270,47 @@ Route publik tanpa autentikasi:
 - `GET /api/bootstrap`
 - `GET /openapi`
 - `GET /docs`
-- `GET /auth?token=...`
-- `POST /api/auth/exchange`
-- `POST /api/auth/verify`
+- `GET /auth?token=...` (handoff CLI/core saja)
+- `POST /api/auth/login` (password dashboard)
+- `POST /api/auth/exchange` (kode handoff → session token)
 
 URL signed dibuat oleh `POST /api/events/signed-url` dan `POST /api/sources/:id/preview-url`, serta berumur pendek.
 
 ## Catatan Keamanan
 
-- Route API memerlukan Bearer token kecuali route yang secara eksplisit publik.
-- Handoff dashboard tidak menaruh token di URL: `/auth?token=` memvalidasi token, lalu redirect dengan kode single-use berumur pendek yang ditukar dashboard melalui `POST /api/auth/exchange`.
-- Percobaan token invalid dibatasi rate limit, dengan bucket expired yang dibersihkan. Bucket menggunakan alamat socket secara default; forwarded header hanya dipercaya ketika `KUMIX_WORKER_TRUST_PROXY=1`.
-- Request web/core API memiliki rate limit terpisah.
-- Route `/api/*` menerapkan batas body request 1 MB.
-- Stream key dienkripsi menggunakan token worker.
-- Rotasi token mengenkripsi ulang stream key target dalam satu transaksi.
-- Raw worker token tidak pernah dikembalikan dari settings atau endpoint core.
-- Raw maupun encrypted stream key target tidak pernah dikembalikan oleh response API; hanya preview bermask yang diekspos.
-- Download source dilindungi SSRF melalui pemeriksaan DNS, validasi setiap redirect, dan DNS pinning saat koneksi yang memblokir alamat private, loopback, link-local, dan embedded-IPv4 (6to4/NAT64).
-- Static file serving melindungi dari path traversal.
+- Login dashboard memakai password (default pabrik `123456`, di-hash scrypt). Login pertama dengan default memaksa ganti password di SPA. Ganti kapan saja di Settings atau lewat `kumix-worker password --password <pw>`. Ganti password tidak merotasi token API, tidak mengenkripsi ulang stream key, dan tidak mematikan sesi Bearer lain.
+- Hash password async scrypt dengan parameter biaya allowlisted (menolak `passwordHash` korup/malicious yang bisa DoS proses). `passwordHash` invalid fail-closed (tidak silent reset ke default).
+- Rute API membutuhkan auth Bearer token kecuali yang memang public. Setelah login password (atau handoff), SPA menyimpan worker token di **sessionStorage** dan mengirimkannya sebagai Bearer. Pada 401 SPA membersihkan sesi.
+- Handoff core: `/auth?token=` memvalidasi token, lalu redirect `#code=` single-use yang ditukar lewat `POST /api/auth/exchange`. URL dashboard dari CLI tidak pernah menyematkan token (login password).
+- Rotasi token (`POST /api/v1/settings/token` atau `kumix-worker token --regenerate`) hanya mengembalikan `{ rotatedAt, tokenLength }` — tidak meng-echo token baru. Rotasi konkuren diserialisasi; stream key dienkripsi ulang dengan rollback jika tulis config gagal.
+- Percobaan auth invalid di-rate-limit (10 / 60s / IP), dengan lazy expiry dan prune. Header forwarded hanya dipercaya saat `KUMIX_WORKER_TRUST_PROXY=1` (hanya di belakang proxy yang strip XFF klien).
+- Panggilan web/core API di-rate-limit terpisah.
+- Rute `/api/*` membatasi body request 1 MB; path `/api/*` yang tidak dikenal mengembalikan envelope 404.
+- Respons menyertakan security header: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, dan Content-Security-Policy dasar.
+- Password dashboard baru tidak boleh sama dengan default pabrik (`123456`); ditolak API dan CLI.
+- Stream key dienkripsi AES-256-GCM dari worker token. FFmpeg di-spawn dengan URL RTMP (termasuk stream key) sebagai argv — deploy single-tenant atau di container agar daftar proses tidak dibagikan.
+- Raw worker token dan password hash tidak pernah dikembalikan dari settings atau endpoint core-facing. Settings hanya mengekspos `passwordIsDefault` / `hasPassword` (boolean) dan `tokenLength`.
+- Raw dan encrypted stream key target tidak pernah dikembalikan dari respons API; hanya masked preview yang diekspos.
+- Download source dilindungi SSRF via cek DNS, validasi tiap hop redirect, dan DNS pinning saat koneksi yang memblokir alamat private, loopback, link-local, dan embedded-IPv4 (6to4/NAT64). Gagal resolve confirmation Google Drive tidak fallback ke halaman HTML karantina. Download konkuren dibatasi.
+- Static file serving menjaga path traversal dan men-stream aset.
 - Nama file cache source dan export event disanitasi.
-- Penulisan config atomic, dan crash recovery menghindari penghentian PID yang dipakai ulang setelah reboot.
+- Tulis config atomik. Crash recovery menghindari terminate PID yang di-reuse setelah reboot. Graceful shutdown menghentikan stream dan menutup HTTP server dengan timeout agar klien SSE tidak menahan exit.
 - Reset data destruktif menolak direktori yang tidak aman.
 
 ## CI dan Release
 
 GitHub Actions:
 
-- `ci.yml` menjalankan install, typecheck, lint, test, build, dan validasi Docker pada pull request serta push ke main.
+- `ci.yml` menjalankan install, typecheck, lint, test, dan build pada pull request serta push ke main.
 - `release.yml` publish ke NPM pada tag `v*`, sekaligus build/push image Docker multi-platform ke GHCR dan Docker Hub.
 
-Publish NPM memerlukan secret repository `NPM_TOKEN`. Docker Hub memerlukan `DOCKERHUB_USERNAME` dan `DOCKERHUB_TOKEN`.
+Publish NPM memerlukan secret repository `NPM_TOKEN`.
 
 Tag release menggunakan:
 
 ```text
 vX.Y.Z
 ```
-
-Versi tag harus sama persis dengan versi di `package.json`. Image Docker menyertakan provenance dan SBOM.
 
 ## Verifikasi
 
@@ -317,9 +325,11 @@ bun run build
 
 Test suite mencakup:
 
-- Validasi config, termasuk penolakan token lemah.
-- Integrasi DB.
-- CRUD HTTP API, termasuk non-exposure stream key, perlindungan penghapusan stream aktif, dan flow SSE signed URL.
+- Validasi config, termasuk penolakan token lemah dan seeding password hash.
+- Helper password (hash/verify scrypt async, penolakan parameter korup).
+- Integrasi DB dan agregasi stats.
+- CRUD HTTP API, login auth/ganti password, non-exposure stream key, perlindungan penghapusan stream aktif, dan flow SSE signed URL.
+- Rate limit auth dan security response header.
 - Kontrak API core-facing.
 - Keamanan static serving.
 - Helper FFmpeg/FFprobe.

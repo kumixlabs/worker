@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   type ColumnDef,
@@ -6,12 +6,12 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  type HeaderContext,
   type PaginationState,
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
 import {
-  Check,
   ChevronsUpDown,
   Download,
   Pause,
@@ -27,38 +27,28 @@ import {
 import { useSearchParams } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { Badge } from "@kumix/ui/reui/badge";
+import { DataGrid } from "@kumix/ui/reui/data-grid/data-grid";
+import { DataGridPagination } from "@kumix/ui/reui/data-grid/data-grid-pagination";
+import { DataGridTable } from "@kumix/ui/reui/data-grid/data-grid-table";
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardFooter } from "@kumix/ui/ui/card";
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardFooter,
-  CardTable,
   Command,
-  CommandCheck,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
-  DataGrid,
-  DataGridColumnHeader,
-  DataGridPagination,
-  DataGridTable,
-  Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/command";
+import { Input } from "@kumix/ui/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@kumix/ui/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { EventKindBadge } from "@/components/EventKindBadge";
+import { SortableHeader } from "@/components/DataTable";
+import { EventKindBadge, knownEventKinds } from "@/components/EventKindBadge";
 import { api, getApiToken, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
 import type { EventRecord } from "../../../src/types/event";
@@ -87,7 +77,12 @@ export function LogPage() {
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
   const t = useTranslations("Log");
   const common = useTranslations("Common");
-  const streamsQuery = useQuery({ queryKey: ["streams"], queryFn: api.streams });
+  const eventT = useTranslations("Common.eventKinds");
+  const streamsQuery = useQuery({
+    queryKey: ["streams"],
+    queryFn: api.streams,
+    refetchIntervalInBackground: false,
+  });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
   const streams = streamsQuery.data ?? [];
@@ -103,8 +98,12 @@ export function LogPage() {
         a.id.localeCompare(b.id),
     )[0];
     if (!oldest) return;
-    const older = await api.events({ createdAt: oldest.createdAt, id: oldest.id });
-    setOlderEvents((current) => uniqueEvents([...current, ...older]));
+    try {
+      const older = await api.events({ createdAt: oldest.createdAt, id: oldest.id });
+      setOlderEvents((current) => uniqueEvents([...current, ...older]).slice(0, 1000));
+    } catch {
+      // ignore — user can retry
+    }
   };
 
   useEffect(() => {
@@ -252,28 +251,26 @@ export function LogPage() {
     setKindFilter(ALL);
     setLiveEvents([]);
   };
-  const exportEvents = async () => {
+  const exportEvents = useCallback(async () => {
     try {
       const signed = await api.signedUrl(api.eventsExportPath());
       window.location.href = signed.url;
     } catch (error) {
       AlertError({ message: error instanceof Error ? error.message : common("loadError") });
     }
-  };
+  }, [common]);
   const columns = useMemo<ColumnDef<EventRecord>[]>(
     () => [
       {
         accessorKey: "kind",
-        header: ({ column }) => <DataGridColumnHeader column={column} title={t("columns.kind")} />,
+        header: t("columns.kind"),
         cell: ({ row }) => <EventKindBadge kind={row.original.kind} />,
         size: 120,
       },
       {
         id: "stream",
         accessorFn: (row) => row.streamId ?? "",
-        header: ({ column }) => (
-          <DataGridColumnHeader column={column} title={t("columns.stream")} />
-        ),
+        header: t("columns.stream"),
         cell: ({ row }) => {
           const stream = streams.find((item) => item.id === row.original.streamId);
           return <span className="text-sm">{stream?.title ?? row.original.streamId ?? "-"}</span>;
@@ -283,15 +280,13 @@ export function LogPage() {
       },
       {
         accessorKey: "message",
-        header: ({ column }) => (
-          <DataGridColumnHeader column={column} title={t("columns.message")} />
-        ),
+        header: t("columns.message"),
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.message}</span>,
         size: 520,
       },
       {
         accessorKey: "createdAt",
-        header: ({ column }) => <DataGridColumnHeader column={column} title={t("columns.time")} />,
+        header: t("columns.time"),
         cell: ({ row }) => (
           <span className="text-muted-foreground text-xs">
             {dateTimeFormatter.format(new Date(row.original.createdAt))}
@@ -302,8 +297,22 @@ export function LogPage() {
     ],
     [dateTimeFormatter, streams, t],
   );
+  const gridColumns = useMemo(
+    () =>
+      columns.map((column) => {
+        if (typeof column.header !== "string") return column;
+        const title = column.header;
+        return {
+          ...column,
+          header: ({ column: tableColumn }: HeaderContext<EventRecord, unknown>) => (
+            <SortableHeader column={tableColumn} title={title} />
+          ),
+        } as ColumnDef<EventRecord>;
+      }),
+    [columns],
+  );
   const table = useReactTable({
-    columns,
+    columns: gridColumns,
     data: events,
     getRowId: (row) => row.id,
     state: { pagination, sorting },
@@ -311,8 +320,8 @@ export function LogPage() {
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
 
   return (
@@ -367,10 +376,7 @@ export function LogPage() {
                   {paused ? t("paused") : connected ? t("live") : t("reconnecting")}
                 </p>
               </div>
-              <Badge
-                variant={paused ? "warning" : connected ? "success" : "destructive"}
-                appearance="light"
-              >
+              <Badge variant={paused ? "warning" : connected ? "success" : "destructive"}>
                 {paused ? t("paused") : connected ? t("live") : t("reconnecting")}
               </Badge>
             </CardContent>
@@ -391,7 +397,7 @@ export function LogPage() {
         >
           <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-border border-b p-3">
-              <div className="relative min-w-[220px] flex-1">
+              <div className="relative min-w-55 flex-1">
                 <Search className="absolute inset-s-3 top-2.5 size-4 text-muted-foreground" />
                 <Input
                   placeholder={common("search")}
@@ -402,11 +408,11 @@ export function LogPage() {
               </div>
 
               <Popover open={streamFilterOpen} onOpenChange={setStreamFilterOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[220px] justify-between">
-                    <span className="truncate">{selectedStream?.title ?? t("allSources")}</span>
-                    <ChevronsUpDown className="h-4 w-4 opacity-60" />
-                  </Button>
+                <PopoverTrigger
+                  render={<Button variant="outline" className="w-55 justify-between" />}
+                >
+                  <span className="truncate">{selectedStream?.title ?? t("allSources")}</span>
+                  <ChevronsUpDown className="h-4 w-4 opacity-60" />
                 </PopoverTrigger>
                 <PopoverContent className="w-72 p-0" align="start">
                   <Command>
@@ -416,19 +422,20 @@ export function LogPage() {
                       <CommandGroup>
                         <CommandItem
                           value={t("allSources")}
+                          data-checked={!streamId || undefined}
                           onSelect={() => {
                             setStreamId("");
                             setLiveEvents([]);
                             setStreamFilterOpen(false);
                           }}
                         >
-                          <span>{t("allSources")}</span>
-                          {!streamId ? <CommandCheck icon={Check} /> : null}
+                          <span className="truncate">{t("allSources")}</span>
                         </CommandItem>
                         {streams.map((stream) => (
                           <CommandItem
                             key={stream.id}
                             value={stream.title}
+                            data-checked={streamId === stream.id || undefined}
                             onSelect={() => {
                               setStreamId(stream.id);
                               setLiveEvents([]);
@@ -436,7 +443,6 @@ export function LogPage() {
                             }}
                           >
                             <span className="truncate">{stream.title}</span>
-                            {streamId === stream.id ? <CommandCheck icon={Check} /> : null}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -445,15 +451,23 @@ export function LogPage() {
                 </PopoverContent>
               </Popover>
 
-              <Select value={kindFilter} onValueChange={setKindFilter}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue />
+              <Select value={kindFilter} onValueChange={(value) => setKindFilter(value ?? ALL)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue>
+                    {(value) =>
+                      !value || value === ALL
+                        ? t("kindAll")
+                        : knownEventKinds.has(value)
+                          ? eventT(value as never)
+                          : value
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>{t("kindAll")}</SelectItem>
                   {kindOptions.map((kind) => (
                     <SelectItem key={kind} value={kind}>
-                      {kind}
+                      {knownEventKinds.has(kind) ? eventT(kind as never) : kind}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -478,9 +492,9 @@ export function LogPage() {
                 </Button>
               </div>
             </div>
-            <CardTable className="overflow-x-auto">
+            <CardContent className="overflow-x-auto p-0">
               <DataGridTable />
-            </CardTable>
+            </CardContent>
             <CardFooter>
               <DataGridPagination />
             </CardFooter>

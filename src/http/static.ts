@@ -2,12 +2,14 @@
  * Static asset discovery and serving helpers for bundled worker dashboard files.
  */
 
-import { existsSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { createReadStream, existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Context } from "hono";
+
+import { toWebStream } from "../lib/utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,16 +111,17 @@ export async function serveStatic(c: Context, publicDir: string): Promise<Respon
   const indexFile = join(publicRoot, "index.html");
   const requestedStats = await stat(requestedFile).catch(() => null);
   const filePath = requestedStats?.isFile() ? requestedFile : indexFile;
-  const file = await readFile(filePath).catch(() => null);
+  const stats = await stat(filePath).catch(() => null);
 
-  if (!file) {
+  if (!stats?.isFile()) {
     return new Response("UI not built", { status: 404 });
   }
 
-  return new Response(file, {
+  return new Response(toWebStream(createReadStream(filePath)), {
     headers: {
       "cache-control": getCacheControl(filePath),
       "content-type": getContentType(filePath),
+      "content-length": String(stats.size),
     },
   });
 }

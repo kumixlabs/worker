@@ -4,14 +4,14 @@
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
-import { readSettings } from "../runtime/config";
+import { currentToken } from "../runtime/config";
 
 /**
  * Derives a 32-byte AES key by hashing the worker auth token with SHA-256.
  *
  * @returns The derived encryption key.
  */
-function key(token = readSettings().token): Buffer {
+function key(token = currentToken()): Buffer {
   return createHash("sha256").update(token).digest();
 }
 

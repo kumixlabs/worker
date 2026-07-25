@@ -113,7 +113,15 @@ async function workerRequestOnce<T>(
     error.retryable = false;
     throw error;
   }
-  return schema.parse(body.data);
+  try {
+    return schema.parse(body.data);
+  } catch (error) {
+    // Schema mismatches are deterministic; mark with a status so retries skip them.
+    const parseError = error as Error & { status?: number; retryable?: boolean };
+    parseError.status = response.status;
+    parseError.retryable = false;
+    throw parseError;
+  }
 }
 
 /**

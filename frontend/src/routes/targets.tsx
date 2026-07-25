@@ -4,21 +4,23 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { Badge } from "@kumix/ui/reui/badge";
+import { Button } from "@kumix/ui/ui/button";
 import {
-  Badge,
-  Button,
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@kumix/ui/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/dropdown-menu";
+import { Input } from "@kumix/ui/ui/input";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -87,6 +89,7 @@ export function TargetsPage() {
       setOpen(false);
       AlertSuccess({ message: t("targetUpdated") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
+      void queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
     onError: (error) => AlertError({ message: error.message }),
   });
@@ -95,6 +98,7 @@ export function TargetsPage() {
     onSuccess: () => {
       AlertSuccess({ message: t("targetDeleted") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
+      void queryClient.invalidateQueries({ queryKey: ["streams"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
     onError: (error) => AlertError({ message: error.message }),
@@ -105,6 +109,7 @@ export function TargetsPage() {
       AlertSuccess({ message: t("targetDeleted") });
       for (const failed of result.failed) AlertError({ message: failed.message });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
+      void queryClient.invalidateQueries({ queryKey: ["streams"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
     onError: (error) => AlertError({ message: error.message }),
@@ -123,6 +128,7 @@ export function TargetsPage() {
     onSuccess: () => {
       AlertSuccess({ message: t("targetUpdated") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
+      void queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
     onError: (error) => AlertError({ message: error.message }),
   });
@@ -140,7 +146,7 @@ export function TargetsPage() {
         header: task("targetColumns.status"),
         size: 130,
         cell: ({ row }) => (
-          <Badge variant={row.original.active ? "success" : "secondary"} appearance="light">
+          <Badge variant={row.original.active ? "success" : "secondary"}>
             {row.original.active ? task("targetColumns.active") : task("targetColumns.disabled")}
           </Badge>
         ),
@@ -157,10 +163,12 @@ export function TargetsPage() {
         size: 90,
         cell: ({ row }) => (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8" aria-label={t("actions")}>
-                <MoreHorizontal className="size-4" />
-              </Button>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="icon" className="size-8" aria-label={t("actions")} />
+              }
+            >
+              <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem className="gap-2" onClick={() => openEdit(row.original)}>

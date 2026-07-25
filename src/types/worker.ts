@@ -7,6 +7,11 @@
  */
 export interface WorkerSettings {
   token: string;
+  /**
+   * Scrypt hash of the dashboard login password (`scrypt$...`).
+   * Separate from `token` (API key + stream-key crypto root).
+   */
+  passwordHash: string;
   port: number;
   /** Disk usage threshold reported by runtime metrics and used by operators for cache safety. */
   diskUsageLimitPercent: number;
@@ -82,7 +87,6 @@ export type PublicWorkerLinkInfo = {
   apiVersion: "v1";
   agentVersion: string;
   dashboardPath: string;
-  tokenLength: number;
   capabilities: PublicWorkerCapabilities;
 };
 

@@ -105,19 +105,23 @@ export async function stopAllStreams(timeoutMs = 12_000): Promise<StopAllStreams
   for (const streamId of streamIds) stopStream(streamId);
   if (streamIds.length === 0) return { requested: [], remaining: [] };
 
-  await new Promise<void>((resolve) => {
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      if (
-        streamIds.every((streamId) => !processes.has(streamId)) ||
-        Date.now() - startedAt >= timeoutMs
-      ) {
-        clearInterval(timer);
-        resolve();
-      }
-    }, 100);
-    timer.unref?.();
-  });
+  const exitPromises = streamIds.map(
+    (id) =>
+      new Promise<void>((resolve) => {
+        const proc = processes.get(id);
+        if (!proc) return resolve();
+        const onExit = () => resolve();
+        proc.once("exit", onExit);
+        proc.once("error", onExit);
+      }),
+  );
+  await Promise.race([
+    Promise.all(exitPromises),
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs);
+      timer.unref?.();
+    }),
+  ]);
 
   return {
     requested: streamIds,
@@ -186,6 +190,11 @@ export function redactFfmpegLog(line: string): string {
  * Builds the FFmpeg argument list to remux a local file to an RTMP destination.
  * Always loops the source; schedule/auto-stop owns when the broadcast ends.
  * Copies video while re-encoding audio for reliable AAC/FLV output.
+ *
+ * Note: the RTMP URL containing the plaintext stream key is passed as a
+ * positional argv. On multi-user hosts, `ps aux` or `/proc/<pid>/cmdline`
+ * would expose it. Kumix Worker is designed for single-tenant deployment
+ * (container or dedicated box) where the operator already owns the key.
  *
  * @param input - The source path, ingest URL, and stream key.
  * @returns The ordered FFmpeg CLI arguments.
@@ -285,6 +294,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
     );
     if (!child.pid) {
       const message = "Failed to spawn ffmpeg";
+      stopRequested.delete(streamId);
       setStreamStatus(streamId, "failed", {
         stoppedAt: new Date().toISOString(),
         pid: null,
@@ -306,6 +316,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
     } catch (error) {
       processes.delete(streamId);
       processStartedAt.delete(streamId);
+      stopRequested.delete(streamId);
       killChildProcess(child, "SIGKILL");
       const message =
         error instanceof Error ? error.message : "Failed to initialize stream recovery";
@@ -336,6 +347,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
     } catch (error) {
       processes.delete(streamId);
       processStartedAt.delete(streamId);
+      stopRequested.delete(streamId);
       killChildProcess(child, "SIGKILL");
       try {
         removeTombstone(streamId);
@@ -358,6 +370,8 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
         setStreamStatus(streamId, "stopping");
         addEvent(streamId, "stopping", "Stop requested during start", null);
         killChildProcess(childToStop, "SIGTERM");
+      } else {
+        stopRequested.delete(streamId);
       }
     } else {
       addEvent(streamId, "running", `FFmpeg started with pid ${child.pid}`, { pid: child.pid });
@@ -550,6 +564,27 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
     return getStream(streamId);
   } finally {
     startingStreams.delete(streamId);
+    // Drop residual stopRequested when start ended without a tracked process
+    // (failed pre-spawn / validation). In-flight stop-before-spawn is handled
+    // after spawn via stopRequested + settle.
+    if (stopRequested.has(streamId) && !processes.has(streamId) && !restartTimers.has(streamId)) {
+      stopRequested.delete(streamId);
+      const current = getStream(streamId);
+      if (
+        current &&
+        current.status !== "stopped" &&
+        current.status !== "failed" &&
+        current.status !== "stopping"
+      ) {
+        forceSetStreamStatus(streamId, "stopped", {
+          stoppedAt: new Date().toISOString(),
+          pid: null,
+          lastError: null,
+        });
+        addEvent(streamId, "stopped", "Stop requested before FFmpeg spawned", null);
+        emit(streamId, { type: "status", status: "stopped" });
+      }
+    }
   }
 }
 

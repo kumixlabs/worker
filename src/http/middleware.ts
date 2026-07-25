@@ -7,12 +7,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Context, Next } from "hono";
 
 import { verifySignedUrl } from "../lib/signed-url";
-import { readSettings } from "../runtime/config";
+import { currentToken } from "../runtime/config";
 
 const authFailures = new Map<string, { count: number; resetAt: number }>();
 const publicApiHits = new Map<string, { count: number; resetAt: number }>();
 const authWindowMs = 60_000;
-const authMaxFailures = 30;
+const authMaxFailures = 10;
 const publicApiWindowMs = 60_000;
 const publicApiMaxRequests = 120;
 
@@ -71,7 +71,7 @@ function requestKey(c: Context): string {
  * @param expected - The expected token (defaults to the current settings token).
  * @returns True when the tokens match.
  */
-export function verifyToken(token: string, expected = readSettings().token): boolean {
+export function verifyToken(token: string, expected = currentToken()): boolean {
   if (!token || !expected) return false;
   const actualBuffer = Buffer.from(token);
   const expectedBuffer = Buffer.from(expected);
@@ -79,11 +79,11 @@ export function verifyToken(token: string, expected = readSettings().token): boo
   return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-/** Extracts the Bearer token from the Authorization header. */
+/** Extracts the Bearer token from the Authorization header (scheme case-insensitive). */
 function requestToken(c: Context): string {
   const header = c.req.header("authorization") ?? "";
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
-  return bearer || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || "";
 }
 
 /** Checks whether the request carries a valid signed URL for an allowed path. */
@@ -101,8 +101,8 @@ function signedRequest(c: Context): boolean {
 
 /**
  * Checks whether a client has exceeded the invalid-auth-attempt threshold.
- * Intended for routes that validate tokens themselves (e.g. `/auth`,
- * `/api/auth/verify`) and therefore bypass the full `tokenAuth` middleware.
+ * Intended for routes that validate credentials themselves (e.g. `/auth`,
+ * `/api/auth/login`, `/api/auth/exchange`) and therefore bypass `tokenAuth`.
  *
  * @param c - The Hono request context.
  * @returns A 429 JSON Response when rate-limited, otherwise null.
@@ -110,9 +110,13 @@ function signedRequest(c: Context): boolean {
 export function checkAuthRateLimit(c: Context): Response | null {
   const key = requestKey(c);
   const now = Date.now();
-  pruneExpiredBuckets(authFailures, now);
   const current = authFailures.get(key);
-  if (current && current.resetAt > now && current.count >= authMaxFailures) {
+  if (current && current.resetAt <= now) {
+    authFailures.delete(key);
+  }
+  pruneExpiredBuckets(authFailures, now);
+  const bucket = authFailures.get(key);
+  if (bucket && bucket.resetAt > now && bucket.count >= authMaxFailures) {
     return Response.json(
       { ok: false, error: { code: "RATE_LIMITED", message: "Too many invalid token attempts" } },
       { status: 429 },

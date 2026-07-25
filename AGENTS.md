@@ -1,276 +1,147 @@
 # AGENTS.md
 
-This file guides coding agents working in the standalone Kumix Worker repository.
+Self-hosted Kumix live-stream runner: local dashboard + API, SQLite, source cache, scheduler, FFmpeg/FFprobe.
 
-## Scope
+Package `@kumix/worker`, CLI `kumix-worker`. Node `>=24`, package manager `bun@1.3+`. Runtime is Node (not Bun) even though scripts use Bun.
 
-Kumix Worker is the self-hosted Kumix live-stream runner. It is an independent package/repository for running a local dashboard, local API, SQLite state, source cache, scheduled jobs, and FFmpeg/FFprobe stream execution.
+## Layout
 
-Primary folders:
+| Path           | Role                                               |
+| -------------- | -------------------------------------------------- |
+| `src/`         | Backend: CLI, Hono API, DB, services, types        |
+| `frontend/`    | Vite React dashboard (separate `package.json`)     |
+| `public/`      | **Generated** Vite output — do not edit by hand    |
+| `tests/`       | Vitest (`tests/vitest.config.ts`; `@` → `../src`)  |
+| `src/index.ts` | Public package API — renames/removals are breaking |
 
-- `src/` - backend runtime, CLI, HTTP API, DB access, schemas, services, and shared types.
-- `frontend/` - Vite React dashboard, i18n messages, and UI routes.
-- `public/` - built dashboard assets served by the worker package.
-- `tests/` - Vitest test suite for runtime, API, DB, frontend smoke/i18n, and service behavior.
-- `.github/workflows/` - CI plus NPM and Docker release workflows.
+Entrypoints: `src/cli.ts` (CLI), `src/http/app.ts` (routes). Schema bootstrapped in `getDb()` via `CREATE TABLE IF NOT EXISTS` — **no migration runner**. Schema changes need manual `ALTER` or drop-recreate. One ad-hoc helper: `tryColumnMigration` (e.g. `youtube_live_url`).
 
-## Architecture
+## Install & commands
 
-- `src/cli.ts` owns the `kumix-worker` CLI: init, serve, status, doctor, token, reset, update, and runtime bootstrap.
-- `src/http/app.ts` wires Hono routes, CORS, OpenAPI, docs, auth middleware, core-facing routes, dashboard routes, and static serving.
-- `src/http/middleware.ts` owns Bearer token auth, signed URL auth, auth failure rate limiting, web API rate limiting, and response envelopes.
-- `src/http/routes/` owns route groups:
-  - `auth.ts` - dashboard auth handoff via single-use code, code exchange, and token verification, all rate-limited against brute-force attempts.
-  - `system.ts` - settings, stats, metrics, and health details for dashboard.
-  - `sources.ts` - source CRUD, bulk delete, download/probe trigger, signed preview URL, and range-based preview streaming.
-  - `targets.ts` - target CRUD, active state, encrypted stream keys, bulk delete.
-  - `streams.ts` - stream CRUD, start, stop, stopped time patching, bulk delete.
-  - `events.ts` - event listing, SSE, exports, signed URLs.
-  - `core.ts` - core-facing `/api/v1/*` health, stats, capabilities, link, and token rotation.
-- `src/db/` owns SQLite schema and query helpers. Schema is bootstrapped inline via `CREATE TABLE IF NOT EXISTS` in `getDb()` — there is no migration runner, no migration files, and no version table. Schema changes require manual ALTER or drop-recreate.
-- `src/runtime/` owns config, FFmpeg binary resolution, metrics, scheduler, recovery/tombstones, and update helpers.
-- `src/services/` owns FFprobe probing, source download/cache, and FFmpeg stream runner behavior.
-- `src/lib/` owns crypto, signed URLs, timezone parsing, utilities, and package version helpers.
-- `frontend/src/routes/` owns dashboard pages.
-- `frontend/messages/en.json` and `frontend/messages/id.json` must stay structurally identical.
-- `src/index.ts` is the public package API surface for external consumers (e.g. Kumix core). Renaming or removing exports is a breaking change.
-- `public/assets/` contains generated Vite build output — do not edit manually.
-
-## Feature Summary
-
-Kumix Worker currently supports:
-
-- Local dashboard with Overview, Monitoring, Log, Sources, Targets, Streams, Create Stream, and Settings pages.
-- Token-authenticated API with rate limiting.
-- Core-facing `/api/v1/*` API for health, stats, capabilities, link metadata, and token rotation.
-- Runtime config in `~/.kumix-worker/config.json` by default.
-- Local SQLite DB in `~/.kumix-worker/db/db.sqlite`.
-- Source cache under `~/.kumix-worker/cache`.
-- Tombstone recovery under `~/.kumix-worker/tombstones`.
-- Direct URL and Google Drive source registration.
-- Source download with SSRF protection (DNS checks + per-redirect-hop validation + connection-time DNS pinning via an `undici` Agent that only connects to vetted public addresses), safe filename handling, max size enforcement, configured disk-usage-limit enforcement, streaming SHA-256, and FFprobe metadata extraction with a probe timeout.
-- H.264/AAC source validation with max video bitrate `35000 kbps` / `35 Mbps`, falling back to `format.bit_rate` when the per-stream bitrate is absent.
-- Cached source files are removed from disk on source deletion.
-- Source downloads expose progress and support cancellation, retry, rename, preview, and bulk deletion.
-- RTMP/RTMPS targets with encrypted stream keys.
-- Manual, scheduled, and recurring streams.
-- Stream statuses: `pending`, `running`, `stopping`, `stopped`, `failed`.
-- Stream lifecycle actions by status:
-  - `pending`: View Log, Export Log, Edit, Delete.
-  - `running`: View Log, Export Log, Stop, Edit (YouTube Live URL only; other fields locked).
-  - `stopping`: View Log, Export Log, Edit (YouTube Live URL only; other fields locked).
-  - `stopped`: View Log, Export Log, Edit, Delete.
-  - `failed`: View Log, Export Log, Start, Edit, Delete.
-- Edit remains available on every status so operators can attach or update a YouTube Live URL for analytics without recreating the stream.
-- Global and stream-specific logs, SSE, and text exports.
-- Short-lived signed URLs for browser SSE/export flows.
-- Token rotation with target secret re-encryption.
-- CI and release workflows for lint/typecheck/test/build, NPM publishing, and multi-platform Docker publishing.
-
-## Non-Negotiable Rules
-
-- Keep all raw secrets out of renderer responses and logs.
-- Never expose raw target stream keys to the renderer or public/core-facing API.
-- Never return the raw worker token from settings, bootstrap, or `/api/v1/*` responses.
-- Never return the raw YouTube API key from settings responses; use `hasYoutubeApiKey` only.
-- Keep all dashboard/private API routes token-authenticated unless explicitly public.
-- Keep `/api/v1/*` stable for external integrations.
-- CORS origins are not allowed by default; allowed origins must be configured via `KUMIX_WORKER_CORS_ORIGINS`.
-- Keep stream key encryption compatible with token rotation.
-- Keep source URL handling safe; sanitize cache filenames and clean partial downloads on failure.
-- Keep static serving path traversal protections.
-- Keep recovery/tombstone behavior crash-safe.
-- Keep destructive reset protected by the data directory marker and unsafe path checks.
-- Keep English for code, comments, docs, and committed text.
-- Keep `frontend/messages/en.json` and `frontend/messages/id.json` in parity.
-- Do not add comments unless explicitly asked.
-
-## Commands
-
-Use commands from the worker repository root.
-
-```bash
-bun run dev
-bun run build
-bun run start
-bun run lint
-bun run lint:fix
-bun run format
-bun run types:check
-bun run test
-bun run test:watch
-bun run test:coverage
-bun run bump
-```
-
-`bun run types:check` checks both backend and frontend TypeScript.
-
-`bun run build` cleans `dist/`, builds backend and frontend via `tsc`, runs `node scripts/fix-esm-extensions.mjs` to rewrite bare relative imports in `dist/` to `.js` extensions, copies `public/` into `dist/public`, then verifies `dist/public/index.html`. Running `tsc` directly without the `fix:esm` step produces broken ESM output.
-
-`bun run dev` runs the backend under `node --watch --import tsx` (not Bun runtime) and the Vite frontend dev server concurrently. Backend listens on port 8080; Vite proxies `/api` to `http://localhost:8080`. Both must be running for the dev dashboard to work.
-
-`bun run bump` uses `bumpp` to bump the version. The release workflow enforces that the git tag matches `package.json` version exactly.
-
-Before finishing meaningful changes, run:
-
-```bash
-bun run types:check
-bun run lint
-bun run test
-bun run build
-```
-
-If the change is very small and the user needs speed, run the smallest relevant subset first, but finish with the full suite before declaring production readiness.
-
-### Install
-
-Two separate installs are required — root and frontend:
+Two installs required (CI does both):
 
 ```bash
 bun install
 bun install --cwd frontend
 ```
 
-CI runs them as separate steps. A single `bun install` at root does not install frontend dependencies; `bun run build` and `bun run types:check` (frontend half) will fail without it.
+Root install alone does **not** install frontend deps; `types:check` / `build` fail without the second.
 
-## Runtime Configuration
-
-Default data directory:
-
-```text
-~/.kumix-worker
+```bash
+bun run dev            # API :8080 (node --watch --import tsx) + Vite :8000 (proxies /api)
+bun run build          # clean → tsc → fix:esm → frontend:build → copy public → verify
+bun run types:check    # backend + frontend
+bun run lint           # biome check
+bun run test           # must run from repo root
+bun run bump           # bumpp; git tag vX.Y.Z must match package.json
 ```
 
-Supported environment variables:
+**Build trap:** bare `tsc` without `bun run fix:esm` (`scripts/fix-esm-extensions.mjs`) yields broken ESM in `dist/`. Always use `bun run build`.
 
-```text
-KUMIX_WORKER_DATA_DIR
-KUMIX_WORKER_PORT
-KUMIX_WORKER_TIMEZONE
-KUMIX_WORKER_IPV4_FIRST
-KUMIX_WORKER_TRUST_PROXY
-KUMIX_WORKER_DISK_LIMIT_PERCENT
-KUMIX_WORKER_MAX_DOWNLOAD_BYTES
-KUMIX_WORKER_DOWNLOAD_TIMEOUT_MS
-KUMIX_WORKER_CORS_ORIGINS
-KUMIX_WORKER_FFMPEG_PATH
-KUMIX_WORKER_FFPROBE_PATH
-KUMIX_WORKER_AUTO_RESUME
+Before calling work done: `types:check` → `lint` → `test` → `build` (build required for frontend / public / API surface changes).
+
+## Security (non-negotiable)
+
+- Never return raw target stream keys, worker token, or YouTube API key (use `hasYoutubeApiKey` only).
+- Token rotation response: `{ rotatedAt, tokenLength }` only — **never** echo the new token (client already sent it). Rotation is process-serialized (promise chain + reencrypt rollback on config write fail).
+- Dashboard/private `/api/*` needs Bearer token except explicit public routes.
+- Keep `/api/v1/*` stable for core integrations.
+- CORS empty by default — set `KUMIX_WORKER_CORS_ORIGINS`.
+- Sanitize source cache filenames; clean partial downloads; static path-traversal safe.
+- Destructive reset only with data-dir marker + unsafe-path checks.
+- English for code/docs/commits. No comments unless asked.
+- Security headers on all responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, plus a basic CSP (`default-src 'self'`, etc.).
+- Password hashing: async scrypt (`scrypt$N$r$p$salt$hash`); N/r/p allowlisted (reject corrupt config DoS). Corrupt `passwordHash` fails closed (no silent fallback to default). Reject factory default `123456` on change (API schema + CLI `validPassword`).
+- Hot paths use `currentToken()` (mtime-cached); avoid re-reading full settings for every crypto/HMAC call.
+- SPA honors login/exchange `expiresAt`; revalidates `passwordIsDefault` from `GET /api/settings` so CLI password reset unblocks force-change gate.
+
+Public routes: `GET /health`, `/api/bootstrap`, `/openapi`, `/docs`, `/auth?token=...` (core handoff only), `POST /api/auth/login`, `POST /api/auth/exchange`.
+
+Dashboard login uses a **password** (scrypt hash in `config.json`, factory default `123456`). First login with default forces password change in the SPA (`passwordIsDefault`). Change via `POST /api/settings/password` (Bearer) or CLI `kumix-worker password --password <pw>`. Password change does **not** re-encrypt stream keys or invalidate existing Bearer sessions.
+
+**Token** remains the API key + AES root for target stream keys + HMAC for signed URLs. Dashboard SPA stores the token in **sessionStorage** after password login (or CLI/core handoff). Never return raw token, password hash, stream keys, or YouTube API key. CLI `serve` prints Dashboard URL without embedding the token.
+
+Core API (Bearer): `GET /api/v1/{health,stats,capabilities,link}`, `POST /api/v1/settings/token`.
+
+Link/bootstrap metadata: `dashboardPath: "/"` (password login). Core may still use `GET /auth?token=` for handoff → `#code=` exchange. Client helper `workerDashboardUrl` still builds the handoff path for core integrations.
+
+Signed URLs: `POST /api/events/signed-url`, `POST /api/sources/:id/preview-url` (path-scoped). All `/api/*` body limit 1 MB. Unknown `/api/*` → 404 envelope.
+
+Auth rate limit: **10** failures / 60s / IP (in-memory, lazy-expire + prune). `KUMIX_WORKER_TRUST_PROXY=1` only behind a proxy that strips client-supplied forwarded headers.
+
+Dashboard Settings UI: timezone, diskUsageLimitPercent, youtubeApiKey (write-only; blank keeps existing), change password, regenerate API token (client-generated; server does not echo token).
+
+## Stream lifecycle
+
+Statuses: `pending` | `running` | `stopping` | `stopped` | `failed`.
+
+| Status   | Actions                                                 |
+| -------- | ------------------------------------------------------- |
+| pending  | View/Export Log, Edit, Delete                           |
+| running  | View/Export Log, Stop, Edit (**YouTube Live URL only**) |
+| stopping | View/Export Log, Edit (**YouTube Live URL only**)       |
+| stopped  | View/Export Log, Edit, Delete                           |
+| failed   | View/Export Log, Start, Edit, Delete                    |
+
+Server blocks delete on `running`/`stopping`. Manual stop → `stopped` (not `failed`). Edit always allowed so operators can attach YouTube Live URL without recreating. Stream create/patch requires source `ready` and existing target. Recurring streams may auto-start from `failed` when due.
+
+## Frontend
+
+- Routes: `frontend/src/routes/`. Kumix UI (`DataTable`, dialogs, `Checkbox` not native; schedule Selects from `@kumix/ui`, not native `<select>` / `type="time"`).
+- i18n: `frontend/messages/en.json` + `id.json` must stay structurally identical; orphan-key test enforces usage.
+- Dates via `useDateTimeFormatter`. Wall-clock schedule fields use worker timezone (`toWallClockInput(date, timezone)`).
+- Tab title: `{Page} - Kumix Worker`.
+- Types imported as `import type` from `../../../src/types/*` (erased at build; keep shapes aligned).
+- API client (`frontend/src/lib/api.ts`): 401 clears session + throws; queryFns accept `AbortSignal`; polling uses `refetchIntervalInBackground: false`.
+- Source/target mutations that change embedded names must also invalidate `["streams"]`.
+- Root `ErrorBoundary` in `main.tsx`; route `errorElement` for page crashes.
+
+## Backend conventions
+
+- Zod-validate bodies before DB writes; `ok()` / `fail()` envelopes.
+- No legacy migrations unless explicitly required.
+- Scheduler: overlap guarded; re-entry guard on `startScheduler`; recurring may auto-start from `failed` when due.
+- Sources: H.264/AAC, max video bitrate 35000 kbps (fallback `format.bit_rate`). Concurrent download+probe capped at 2.
+- SQLite: WAL + `busy_timeout=5000` + foreign keys + prepared-statement cache in `getDb()`.
+- Stats: `GROUP BY` counts, not full table loads.
+- GDrive: resolve confirmation URL or fail; never fall back to HTML quarantine page.
+- Event export paginates beyond the list limit of 200.
+- Graceful shutdown: stop streams → server.close with 5s timeout; `unhandledRejection` / `uncaughtException` logged in `serve`.
+- FFmpeg argv includes plaintext RTMP URL (stream key) — single-tenant / container deployment assumed.
+
+## Runtime data
+
+Default `~/.kumix-worker` (`config.json`, `db/db.sqlite`, `cache/`, `tombstones/`). Override: `KUMIX_WORKER_DATA_DIR`.
+
+`config.json` fields: `token`, `passwordHash`, `port`, `timezone`, `diskUsageLimitPercent`, `youtubeApiKey`, `dataDir`.
+
+Notable env:
+
+- `KUMIX_WORKER_FFMPEG_PATH` / `KUMIX_WORKER_FFPROBE_PATH` — system binaries when static build segfaults on RTMP DNS (glibc NSS).
+- `KUMIX_WORKER_AUTO_RESUME` — default on; graceful stop writes auto-start marker. `0`/`false`/`off` disables.
+- `KUMIX_WORKER_TRUST_PROXY=1` for real client IP behind proxy (proxy must strip client XFF).
+- `KUMIX_WORKER_IPV4_FIRST` — default on; set `0` to disable.
+
+CLI auth/ops: `init`, `serve`, `status`, `doctor`, `token` (`--show` / `--regenerate`), `password --password <pw>`, `update`, `reset`.
+
+## Testing quirks
+
+```bash
+bun run test                                    # from repo root only
+bun run test -- tests/http/api-crud.test.ts     # single file
 ```
 
-`KUMIX_WORKER_FFMPEG_PATH` and `KUMIX_WORKER_FFPROBE_PATH` override the bundled `ffmpeg-static`/`ffprobe-static` binaries with system binaries. Use them when the static build segfaults resolving DNS for RTMP output (statically linked glibc cannot load NSS modules on some hosts). When unset, the bundled static binaries are used.
+- Config: `tests/vitest.config.ts` (not root). `pool: "forks"` for `process.chdir` — no thread-safe globals.
+- **Wrong cwd:** `messages.test.ts` uses `process.cwd()` for `frontend/src`; running inside `tests/` silently skips orphan checks.
+- DB tests: call `resetDbForTests()` in `beforeEach`/`afterEach` (closes SQLite singleton).
+- Test tokens: `validToken` requires length 16–256, rejects weak patterns and &lt;5 distinct chars. Use random-looking 16+ char stubs, not `"test"`.
+- Stream create tests must mark sources `ready` via `updateSourceProbe` before `POST /api/streams`.
+- Password helpers are async (`hashPassword` / `verifyPassword` / `isDefaultPasswordHash`); tests must `await`.
+- HTTP auth tests: use rate-limit reset helper between cases when hammering login.
 
-`KUMIX_WORKER_AUTO_RESUME` defaults to on. On graceful `SIGTERM`/`SIGINT` (Docker stop / compose recreate), active stream IDs are written to an auto-start marker and resumed after boot. Set to `0`/`false`/`off` to disable.
+## CI / release
 
-Settings fields:
+- CI: dual install → types:check → lint → test → build.
+- Release on `v*` tags: NPM (`NPM_TOKEN`) + multi-arch Docker (GHCR + Docker Hub secrets). Tag must equal `package.json` version.
 
-- `token`
-- `port`
-- `timezone`
-- `diskUsageLimitPercent`
-- `youtubeApiKey` (optional; never returned raw — API exposes `hasYoutubeApiKey` only)
-- `dataDir`
-
-Dashboard Settings UI intentionally exposes:
-
-- `timezone`
-- `diskUsageLimitPercent`
-- `youtubeApiKey` (write-only password field; blank keeps existing key)
-
-## API Contracts
-
-Private/dashboard API routes live under `/api/*` and require Bearer token auth, except explicit public routes.
-
-Core-facing API routes live under `/api/v1/*` and require Bearer token auth:
-
-- `GET /api/v1/health`
-- `GET /api/v1/stats`
-- `GET /api/v1/capabilities`
-- `GET /api/v1/link`
-- `POST /api/v1/settings/token`
-
-Public routes:
-
-- `GET /health`
-- `GET /api/bootstrap`
-- `GET /openapi`
-- `GET /docs`
-- `GET /auth?token=...` (validates the token, then redirects with a single-use handoff code instead of the raw token)
-- `POST /api/auth/exchange` (exchanges a single-use handoff code for the token)
-- `POST /api/auth/verify`
-
-All `/api/*` routes enforce a 1 MB request body limit.
-
-Signed URL routes are generated by `POST /api/events/signed-url` (valid only for event/list/export/SSE paths) and `POST /api/sources/:id/preview-url` (valid only for the matching source preview path).
-
-## Frontend Rules
-
-- Use React + Vite + React Router route modules in `frontend/src/routes`.
-- Use Kumix UI components for tables, dialogs, buttons, badges, popovers, selects, and date/time picker primitives.
-- Tables use `DataTable` where possible.
-- Keep row actions consistent with stream status rules.
-- Keep destructive actions behind confirmation dialogs.
-- Use `useDateTimeFormatter` for displayed dates so locale and worker timezone are respected.
-- Keep browser tab title format: `{Page} - Kumix Worker`.
-- Keep table select controls using Kumix UI `Checkbox`, not native checkbox inputs.
-- Keep all user-facing strings in `frontend/messages/en.json` and `frontend/messages/id.json`.
-- The message test checks parity and orphan UI keys; update tests only when a key is intentionally dynamic.
-- Frontend imports types via relative paths like `../../../src/types/*` from the backend `src/`. These are `import type` only (erased at build time, no runtime coupling). A future shared `@kumix/types` package would replace this; until then, keep the types structurally aligned when changing `src/types/*`.
-
-## Backend Rules
-
-- Validate every request body with Zod schemas before DB writes.
-- Use `ok()` and `fail()` response helpers for JSON API responses.
-- Keep route-level errors safe and avoid leaking secrets.
-- Keep DB helpers responsible for SQLite persistence and type mapping.
-- Keep runtime services independent from renderer/UI code.
-- Do not add legacy migrations unless explicitly required; current schema is a fresh-start worker schema.
-- Keep stream deletion blocked for `running` and `stopping` statuses server-side.
-- Keep manual stop ending as `stopped`, not `failed`.
-- Keep scheduler overlap guarded.
-- Keep token rotation re-encrypting target stream keys.
-
-## Testing Notes
-
-The suite currently covers the following test areas:
-
-- `tests/http/api-crud.test.ts` - dashboard/private API behavior, including stream-key non-exposure, running-stream delete protection, and SSE signed URL flows.
-- `tests/http/web-contract.test.ts` - core-facing API contract.
-- `tests/http/static.test.ts` - static file safety.
-- `tests/db/db.test.ts` - SQLite integration.
-- `tests/runtime/*` - config, scheduler, recovery, metrics, FFmpeg resolution, version compare, and scheduler tick lifecycle.
-- `tests/services/*` - source downloader (incl. SSRF validation and happy-path download), probe, stream runner, and stream lifecycle helpers.
-- `tests/lib/*` - crypto, token verification, and timezone helpers.
-- `tests/frontend/messages.test.ts` - i18n parity and orphan UI keys.
-- `tests/frontend/frontend-smoke.test.ts` - dashboard smoke checks.
-
-Vitest config lives at `tests/vitest.config.ts`, not the repo root. The `@` alias in that config resolves to `../src`. Always run tests from the repo root (`bun run test`), not from inside `tests/` — `messages.test.ts` uses `process.cwd()` to locate `frontend/src` and will silently pass with zero orphan checks if run from the wrong directory.
-
-Tests use `pool: "forks"` (not threads) to support `process.chdir`. Do not assume thread-safe globals in new test files.
-
-New test files that touch the DB must call `resetDbForTests()` in `beforeEach`/`afterEach` to close the SQLite singleton and prevent cross-test state bleed.
-
-Test tokens must be at least 16 characters (`validToken` enforces `length >= 16`). Short stubs like `"test"` or `"abc123"` will fail validation. Tokens that are too predictable (repeated characters, common words, or fewer than 5 distinct characters) are also rejected.
-
-## CI And Release
-
-- `.github/workflows/ci.yml` runs install, typecheck, lint, test, and build on PR/main.
-- `.github/workflows/release.yml` publishes to NPM on `v*` tags and builds/pushes multi-platform Docker images to GHCR and Docker Hub (requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets).
-- NPM publish requires the `NPM_TOKEN` repository secret.
-- Release tags use `vX.Y.Z` and must match `package.json` version exactly.
-- Docker provenance and SBOM are enabled.
-
-## Completion Checklist
-
-Before reporting done:
-
-- Confirm relevant API routes remain authenticated and safe.
-- Confirm stream lifecycle actions match the status matrix.
-- Confirm EN/ID message keys remain aligned.
-- Confirm no orphan UI messages remain.
-- Confirm generated public assets are updated if frontend changed.
-- Run `bun run types:check`.
-- Run `bun run lint`.
-- Run `bun run test`.
-- Run `bun run build` for frontend/shared UI/API changes.
-- Report exactly what passed and any checks that could not be run.
+`CLAUDE.md` points here — keep this file the single agent source of truth.

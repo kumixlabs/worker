@@ -74,7 +74,7 @@ const defaultSchedulerMetrics: SchedulerMetrics = {
   lastStopped: 0,
 };
 
-const storageCacheTtlMs = 5_000;
+const storageCacheTtlMs = 30_000;
 let cachedStorage: {
   expiresAt: number;
   value: { cacheBytes: number; disk: ReturnType<typeof diskUsage> };
@@ -92,6 +92,26 @@ let smoothedCpuUsagePercent = 0;
  * @param cacheDir - The cache directory to measure.
  * @returns Cache and disk usage metrics.
  */
+/**
+ * Refreshes the cached storage metrics in the background.
+ *
+ * @param cacheDir - The cache directory to measure.
+ */
+function refreshStorageAsync(cacheDir: string): void {
+  storageRefreshInFlight = true;
+  void directorySizeAsync(cacheDir)
+    .then((cacheBytes) => {
+      cachedStorage = {
+        expiresAt: Date.now() + storageCacheTtlMs,
+        value: { cacheBytes, disk: diskUsage(cacheDir) },
+      };
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      storageRefreshInFlight = false;
+    });
+}
+
 function storageMetrics(cacheDir: string) {
   const now = Date.now();
   if (!cachedStorage) {
@@ -99,33 +119,11 @@ function storageMetrics(cacheDir: string) {
     cachedStorage = { expiresAt: now + storageCacheTtlMs, value };
     // Immediately kick off an async scan so the cache is populated without
     // blocking the event loop on a potentially large directory.
-    storageRefreshInFlight = true;
-    void directorySizeAsync(cacheDir)
-      .then((cacheBytes) => {
-        cachedStorage = {
-          expiresAt: Date.now() + storageCacheTtlMs,
-          value: { cacheBytes, disk: diskUsage(cacheDir) },
-        };
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        storageRefreshInFlight = false;
-      });
+    refreshStorageAsync(cacheDir);
     return value;
   }
   if (cachedStorage.expiresAt <= now && !storageRefreshInFlight) {
-    storageRefreshInFlight = true;
-    void directorySizeAsync(cacheDir)
-      .then((cacheBytes) => {
-        cachedStorage = {
-          expiresAt: Date.now() + storageCacheTtlMs,
-          value: { cacheBytes, disk: diskUsage(cacheDir) },
-        };
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        storageRefreshInFlight = false;
-      });
+    refreshStorageAsync(cacheDir);
   }
   return cachedStorage.value;
 }

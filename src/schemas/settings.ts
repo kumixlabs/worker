@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 
+import { DEFAULT_DASHBOARD_PASSWORD } from "../lib/password";
 import { validToken } from "../runtime/config";
 
 /**
@@ -24,7 +25,7 @@ const timezoneSchema = z
 
 /**
  * Validates dashboard settings updates.
- * Port and token are intentionally excluded because they are managed separately.
+ * Port, token, and password are managed separately.
  */
 export const settingsPatchSchema = z.object({
   diskUsageLimitPercent: z.number().int().min(50).max(99).optional(),
@@ -53,6 +54,44 @@ export const tokenRotateSchema = z.object({
 });
 
 /**
+ * Validates dashboard password change requests.
+ */
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z.string().min(6).max(128),
+    confirmPassword: z.string().min(6).max(128),
+  })
+  .superRefine((value, ctx) => {
+    if (value.newPassword !== value.confirmPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["confirmPassword"],
+        message: "Password confirmation does not match",
+      });
+    }
+    if (value.newPassword === value.currentPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["newPassword"],
+        message: "New password must be different from the current password",
+      });
+    }
+    if (value.newPassword === DEFAULT_DASHBOARD_PASSWORD) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["newPassword"],
+        message: "Password must not be the factory default",
+      });
+    }
+  });
+
+/**
  * Parsed worker settings patch payload.
  */
 export type SettingsPatchInput = z.infer<typeof settingsPatchSchema>;
+
+/**
+ * Parsed password change payload.
+ */
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;

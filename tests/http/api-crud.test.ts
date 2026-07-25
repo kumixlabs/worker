@@ -40,6 +40,10 @@ afterEach(() => {
   rmSync(dataDir, { force: true, recursive: true });
 });
 
+function markSourceReady(sourceId: string) {
+  updateSourceProbe(sourceId, { status: "ready", filePath: path.join(dataDir, "video.mp4") });
+}
+
 describe.skipIf(!hasSqlite())("API CRUD integration", () => {
   it("creates source, target, stream and lists events", async () => {
     const sourceResponse = await app.request("/api/sources", {
@@ -48,6 +52,7 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
       method: "POST",
     });
     const sourceBody = await sourceResponse.json();
+    markSourceReady(sourceBody.data.id);
 
     const targetResponse = await app.request("/api/targets", {
       body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
@@ -87,6 +92,7 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
       method: "POST",
     });
     const sourceBody = await sourceResponse.json();
+    markSourceReady(sourceBody.data.id);
     const targetResponse = await app.request("/api/targets", {
       body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
       headers,
@@ -296,11 +302,6 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
       headers,
       method: "POST",
     });
-    const verifyResponse = await app.request("/api/auth/verify", {
-      body: JSON.stringify({ token: "test-token-123456" }),
-      headers,
-      method: "POST",
-    });
     const healthResponse = await app.request("/api/v1/health", { headers });
     const healthBody = await healthResponse.json();
     const statsResponse = await app.request("/api/v1/stats", { headers });
@@ -333,7 +334,6 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     expect(exchangeResponse.status).toBe(200);
     expect(exchangeBody.data.token).toBe("test-token-123456");
     expect(reuseExchangeResponse.status).toBe(401);
-    expect(verifyResponse.status).toBe(200);
     expect(healthResponse.status).toBe(200);
     expect(["ok", "degraded"]).toContain(healthBody.data.status);
     expect(healthBody.data.streamsRunning).toBe(0);
@@ -348,6 +348,9 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     );
     expect(sameTokenResponse.status).toBe(409);
     expect(rotateResponse.status).toBe(200);
+    const rotateBody = await rotateResponse.json();
+    expect(rotateBody.data.token).toBeUndefined();
+    expect(rotateBody.data.tokenLength).toBe("new-token-123456789".length);
     const afterRotation = getTarget(targetBody.data.id)!;
     expect(afterRotation.streamKey).not.toBe(beforeRotation.streamKey);
     expect(decryptSecretWithToken(afterRotation.streamKey, "new-token-123456789")).toBe(
@@ -382,6 +385,7 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
       method: "POST",
     });
     const sourceBody = await sourceResponse.json();
+    markSourceReady(sourceBody.data.id);
     const targetResponse = await app.request("/api/targets", {
       body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
       headers,
@@ -454,6 +458,7 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
       method: "POST",
     });
     const sourceBody = await sourceResponse.json();
+    markSourceReady(sourceBody.data.id);
     const targetResponse = await app.request("/api/targets", {
       body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
       headers,

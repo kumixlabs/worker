@@ -1,15 +1,15 @@
 import { useTranslations } from "use-intl";
 
-import { Badge } from "@kumix/ui";
+import { Badge } from "@kumix/ui/reui/badge";
 
 const variantByKind: Record<
   string,
-  "success" | "destructive" | "warning" | "primary" | "secondary"
+  "success" | "destructive" | "warning" | "default" | "secondary"
 > = {
   failed: "destructive",
   source_download_failed: "destructive",
   restart_failed: "destructive",
-  info: "primary",
+  info: "default",
   pending: "warning",
   running: "success",
   stopped: "secondary",
@@ -20,7 +20,7 @@ const variantByKind: Record<
   reconciled: "secondary",
 };
 
-const knownKinds = new Set([
+export const knownEventKinds = new Set([
   "running",
   "stopping",
   "stopped",
@@ -38,8 +38,8 @@ const knownKinds = new Set([
 export function EventKindBadge({ kind, className }: { kind: string; className?: string }) {
   const t = useTranslations("Common.eventKinds");
   return (
-    <Badge variant={variantByKind[kind] ?? "primary"} appearance="light" className={className}>
-      {knownKinds.has(kind) ? t(kind as never) : kind}
+    <Badge variant={variantByKind[kind] ?? "default"} className={className}>
+      {knownEventKinds.has(kind) ? t(kind as never) : kind}
     </Badge>
   );
 }

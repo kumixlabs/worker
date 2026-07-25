@@ -18,9 +18,8 @@ export function readPackageVersion(): string {
     try {
       const pkg = JSON.parse(readFileSync(candidate, "utf8")) as { version?: string };
       if (pkg.version) return pkg.version;
-    } catch (error) {
-      if (!(error instanceof SyntaxError) && !(error instanceof Error && "code" in error))
-        throw error;
+    } catch {
+      // Missing or unreadable package.json; try the next candidate.
     }
   }
   return "0.0.0";

@@ -7,7 +7,7 @@ import {
   createTarget,
   deleteTarget,
   getTarget,
-  listTargets,
+  listTargetsWithKeys,
   patchTarget,
   safeTarget,
 } from "../../db/targets";
@@ -26,15 +26,7 @@ export function registerTargetRoutes(app: Hono) {
   app.get(
     "/api/targets",
     doc("Targets", "List targets", "Lists streaming targets with secrets omitted."),
-    (c) =>
-      c.json(
-        ok(
-          listTargets().map((target) => {
-            const full = getTarget(target.id);
-            return full ? safeTarget(full) : target;
-          }),
-        ),
-      ),
+    (c) => c.json(ok(listTargetsWithKeys().map((target) => safeTarget(target)))),
   );
 
   app.post(

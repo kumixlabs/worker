@@ -2,13 +2,13 @@ import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useTranslations } from "use-intl";
 
+import { Button } from "@kumix/ui/ui/button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/dropdown-menu";
 
 export function ModeSwitcher() {
   const t = useTranslations("Shell");
@@ -18,13 +18,11 @@ export function ModeSwitcher() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
-          {theme === "system" ? <MonitorIcon /> : theme === "dark" ? <MoonIcon /> : <SunIcon />}
-          <span className="sr-only">{t("mode.toggle")}</span>
-        </Button>
+      <DropdownMenuTrigger render={<Button variant="outline" size="icon" />}>
+        {theme === "system" ? <MonitorIcon /> : theme === "dark" ? <MoonIcon /> : <SunIcon />}
+        <span className="sr-only">{t("mode.toggle")}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+      <DropdownMenuContent align="end">
         <DropdownMenuItem
           className={isActive("light") ? "bg-accent" : ""}
           onClick={() => setTheme("light")}

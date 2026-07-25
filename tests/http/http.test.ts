@@ -73,7 +73,7 @@ describe("Kumix Worker HTTP app", () => {
 
   it("rate limits repeated invalid token attempts", async () => {
     let response = await app.request("/api/stats", { headers: { "x-forwarded-for": "10.0.0.1" } });
-    for (let index = 0; index < 30; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       response = await app.request("/api/stats", { headers: { "x-forwarded-for": "10.0.0.1" } });
     }
 
@@ -83,13 +83,13 @@ describe("Kumix Worker HTTP app", () => {
     expect(body.error.code).toBe("RATE_LIMITED");
   });
 
-  it("rate limits repeated invalid auth verify attempts", async () => {
+  it("rate limits repeated invalid password login attempts", async () => {
     let response: Response;
-    for (let index = 0; index < 31; index += 1) {
-      response = await app.request("/api/auth/verify", {
+    for (let index = 0; index < 11; index += 1) {
+      response = await app.request("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-forwarded-for": "10.0.0.2" },
-        body: JSON.stringify({ token: "wrong-token-value-here" }),
+        body: JSON.stringify({ password: "wrong-password-here" }),
       });
     }
 
@@ -101,13 +101,35 @@ describe("Kumix Worker HTTP app", () => {
 
   it("rate limits repeated invalid auth handoff attempts", async () => {
     let response: Response;
-    for (let index = 0; index < 31; index += 1) {
+    for (let index = 0; index < 11; index += 1) {
       response = await app.request("/auth?token=wrong-token-value-here", {
         headers: { "x-forwarded-for": "10.0.0.3" },
       });
     }
 
     expect(response!.status).toBe(429);
+  });
+
+  it("logs in with the default dashboard password and rejects a wrong password", async () => {
+    const bad = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "not-the-password" }),
+    });
+    const badBody = await bad.json();
+    expect(bad.status).toBe(401);
+    expect(badBody.ok).toBe(false);
+
+    const good = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "123456" }),
+    });
+    const goodBody = await good.json();
+    expect(good.status).toBe(200);
+    expect(goodBody.ok).toBe(true);
+    expect(goodBody.data.token).toBe("test-token-123456");
+    expect(typeof goodBody.data.expiresAt).toBe("string");
   });
 
   it("accepts bearer token authentication", async () => {
@@ -122,10 +144,107 @@ describe("Kumix Worker HTTP app", () => {
     expect(body.ok).toBe(true);
     expect(body.data.token).toBeUndefined();
     expect(body.data.youtubeApiKey).toBeUndefined();
+    expect(body.data.passwordHash).toBeUndefined();
     expect(body.data.hasToken).toBe(true);
+    expect(body.data.hasPassword).toBe(true);
+    expect(body.data.passwordIsDefault).toBe(true);
     expect(body.data.hasYoutubeApiKey).toBe(false);
     expect(body.data.tokenLength).toBe("test-token-123456".length);
     expect(JSON.stringify(body)).not.toContain("test-token-123456");
+  });
+
+  it("changes the dashboard password without rotating the API token", async () => {
+    const headers = {
+      Authorization: "Bearer test-token-123456",
+      "Content-Type": "application/json",
+    };
+    const mismatch = await app.request("/api/settings/password", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        currentPassword: "123456",
+        newPassword: "newpass1",
+        confirmPassword: "newpass2",
+      }),
+    });
+    expect(mismatch.status).toBe(400);
+
+    const wrongCurrent = await app.request("/api/settings/password", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        currentPassword: "wrong-pass",
+        newPassword: "newpass1",
+        confirmPassword: "newpass1",
+      }),
+    });
+    expect(wrongCurrent.status).toBe(400);
+
+    const changed = await app.request("/api/settings/password", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        currentPassword: "123456",
+        newPassword: "newpass1",
+        confirmPassword: "newpass1",
+      }),
+    });
+    const changedBody = await changed.json();
+    expect(changed.status).toBe(200);
+    expect(changedBody.data.changed).toBe(true);
+
+    const oldLogin = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "123456" }),
+    });
+    expect(oldLogin.status).toBe(401);
+
+    const newLogin = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "newpass1" }),
+    });
+    const newLoginBody = await newLogin.json();
+    expect(newLogin.status).toBe(200);
+    expect(newLoginBody.data.token).toBe("test-token-123456");
+
+    // Token auth still works (password change must not re-encrypt / rotate token).
+    const settings = await app.request("/api/settings", {
+      headers: { Authorization: "Bearer test-token-123456" },
+    });
+    expect(settings.status).toBe(200);
+    const settingsBody = await settings.json();
+    expect(settingsBody.data.passwordIsDefault).toBe(false);
+  });
+
+  it("rejects changing the dashboard password back to the factory default", async () => {
+    const headers = {
+      Authorization: "Bearer test-token-123456",
+      "Content-Type": "application/json",
+    };
+    await app.request("/api/settings/password", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        currentPassword: "123456",
+        newPassword: "newpass1",
+        confirmPassword: "newpass1",
+      }),
+    });
+    const backToDefault = await app.request("/api/settings/password", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        currentPassword: "newpass1",
+        newPassword: "123456",
+        confirmPassword: "123456",
+      }),
+    });
+    expect(backToDefault.status).toBe(400);
+    const body = await backToDefault.json();
+    expect(body.ok).toBe(false);
+    expect(String(body.error?.message ?? "")).toMatch(/factory default/i);
   });
 
   it("honors configured CORS origins for public API", async () => {
@@ -182,5 +301,25 @@ describe("Kumix Worker HTTP app", () => {
 
     expect(response.status).toBe(429);
     expect(body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("sets security headers on all responses", async () => {
+    const response = await app.request("/health");
+
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("content-security-policy")).toMatch(/default-src 'self'/);
+  });
+
+  it("guards against NaN limit on /api/events", async () => {
+    const response = await app.request("/api/events?limit=abc", {
+      headers: { Authorization: "Bearer test-token-123456" },
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.data)).toBe(true);
   });
 });

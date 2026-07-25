@@ -4,7 +4,9 @@ import { AlertTriangle, Clock, Plus, Radio, Square } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@kumix/ui";
+import { Badge } from "@kumix/ui/reui/badge";
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -17,12 +19,23 @@ export function Dashboard() {
   const t = useTranslations("Dashboard");
   const common = useTranslations("Common");
   const [stopId, setStopId] = useState<string | null>(null);
-  const streamsQuery = useQuery({ queryKey: ["streams"], queryFn: api.streams });
-  const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
+  const streamsQuery = useQuery({
+    queryKey: ["streams"],
+    queryFn: api.streams,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+  });
+  const sourcesQuery = useQuery({
+    queryKey: ["sources"],
+    queryFn: api.sources,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+  });
   const eventsQuery = useQuery({
     queryKey: ["events"],
     queryFn: () => api.events(),
-    refetchInterval: 5000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
   });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
@@ -32,9 +45,18 @@ export function Dashboard() {
   const sources = sourcesQuery.data ?? [];
   const events = eventsQuery.data ?? [];
 
-  const liveStreams = streams.filter((stream) => stream.status === "running");
-  const failedStreams = streams.filter((stream) => stream.status === "failed");
-  const invalidSources = sources.filter((source) => source.status === "invalid");
+  const liveStreams = useMemo(
+    () => streams.filter((stream) => stream.status === "running"),
+    [streams],
+  );
+  const failedStreams = useMemo(
+    () => streams.filter((stream) => stream.status === "failed"),
+    [streams],
+  );
+  const invalidSources = useMemo(
+    () => sources.filter((source) => source.status === "invalid"),
+    [sources],
+  );
   const scheduledStreams = useMemo(
     () =>
       streams
@@ -47,9 +69,10 @@ export function Dashboard() {
         .slice(0, 5),
     [streams],
   );
-  const recentEvents = events.slice(0, 8);
-  const recentFailures = events.filter(
-    (event) => event.kind === "failed" || event.kind === "restart_failed",
+  const recentEvents = useMemo(() => events.slice(0, 8), [events]);
+  const recentFailures = useMemo(
+    () => events.filter((event) => event.kind === "failed" || event.kind === "restart_failed"),
+    [events],
   );
   // Count entities only — failure events can multi-fire per stream.
   const attentionCount = failedStreams.length + invalidSources.length;
@@ -104,11 +127,9 @@ export function Dashboard() {
       title={t("title")}
       description={t("description")}
       actions={
-        <Button asChild>
-          <Link to="/streams/new">
-            <Plus />
-            {t("create")}
-          </Link>
+        <Button render={<Link to="/streams/new" />} nativeButton={false}>
+          <Plus />
+          {t("create")}
         </Button>
       }
     >
@@ -169,13 +190,13 @@ export function Dashboard() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                      <Badge appearance="light">
+                      <Badge variant="primary-light">
                         {t("fps", { value: stream.lastMetrics?.fps ?? 0 })}
                       </Badge>
-                      <Badge appearance="light">
+                      <Badge variant="primary-light">
                         {t("bitrate", { value: stream.lastMetrics?.bitrateKbps ?? 0 })}
                       </Badge>
-                      <Badge appearance="light">
+                      <Badge variant="primary-light">
                         {t("dropped", { value: stream.lastMetrics?.droppedFrames ?? 0 })}
                       </Badge>
                       <Button

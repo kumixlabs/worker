@@ -3,10 +3,19 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { defaultPasswordHash, isPasswordHash } from "../lib/password";
 import type { WorkerSettings } from "../types/worker";
 
 const DEFAULT_DIR = path.join(homedir(), ".kumix-worker");
@@ -122,8 +131,24 @@ function normalizeSettings(
         "'kumix-worker reset --all --yes' to recreate the worker from scratch.",
     );
   }
+  let passwordHash: string;
+  if (
+    parsed.passwordHash === undefined ||
+    parsed.passwordHash === null ||
+    parsed.passwordHash === ""
+  ) {
+    passwordHash = defaultPasswordHash();
+  } else if (isPasswordHash(parsed.passwordHash)) {
+    passwordHash = parsed.passwordHash;
+  } else {
+    throw new Error(
+      "Kumix Worker config has an invalid passwordHash. Restore a valid scrypt hash or run " +
+        "'kumix-worker reset --all --yes' to recreate the worker from scratch.",
+    );
+  }
   return {
     token: validToken(parsed.token || randomBytes(32).toString("base64url")),
+    passwordHash,
     port: validPort(parsed.port ?? process.env.KUMIX_WORKER_PORT ?? 8080),
     diskUsageLimitPercent: validDiskLimit(
       parsed.diskUsageLimitPercent ?? process.env.KUMIX_WORKER_DISK_LIMIT_PERCENT ?? 90,
@@ -173,6 +198,7 @@ export function resetWorkerData(includeConfig: boolean): void {
 
   if (includeConfig && existsSync(configFile)) {
     rmSync(configFile, { force: true });
+    tokenCache = null;
   }
 
   ensureDataDir();
@@ -249,10 +275,17 @@ export function readSettings(): WorkerSettings {
   }
 
   try {
-    return normalizeSettings(
-      JSON.parse(readFileSync(file, "utf8")) as Partial<WorkerSettings>,
-      false,
-    );
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<WorkerSettings>;
+    const settings = normalizeSettings(parsed, false);
+    // Persist default password hash when migrating older configs that only had a token.
+    if (
+      parsed.passwordHash === undefined ||
+      parsed.passwordHash === null ||
+      parsed.passwordHash === ""
+    ) {
+      writeSettings(settings);
+    }
+    return settings;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown config error";
     throw new Error(
@@ -263,16 +296,58 @@ export function readSettings(): WorkerSettings {
 
 /**
  * Persists the worker settings to config.json.
- * Writes with 0600 permissions to protect the auth token.
+ * Writes with 0600 permissions to protect the auth token and password hash.
+ * Missing passwordHash is filled with a hash of the factory default password.
  *
  * @param settings - The settings object to save.
  */
-export function writeSettings(settings: WorkerSettings): void {
+export function writeSettings(
+  settings: Omit<WorkerSettings, "passwordHash"> & { passwordHash?: string },
+): void {
   ensureDataDir();
+  const toWrite: WorkerSettings = {
+    ...settings,
+    passwordHash: isPasswordHash(settings.passwordHash)
+      ? settings.passwordHash
+      : defaultPasswordHash(),
+  };
   const configPath = getConfigPath();
   const tempPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(tempPath, `${JSON.stringify(toWrite, null, 2)}\n`, { mode: 0o600 });
   renameSync(tempPath, configPath);
+  tokenCache = {
+    path: configPath,
+    mtimeMs: statSync(configPath).mtimeMs,
+    token: toWrite.token,
+  };
+}
+
+/**
+ * Cached token keyed by config path + mtime. Read-heavy crypto helpers use this
+ * to avoid re-reading and re-validating config.json on every call. Invalidated
+ * by writeSettings/resetWorkerData and by external config edits (mtime change).
+ */
+let tokenCache: { path: string; mtimeMs: number; token: string } | null = null;
+
+/**
+ * Returns the current worker token, reading config.json only when it changed.
+ *
+ * @returns The worker auth token.
+ */
+export function currentToken(): string {
+  const configPath = getConfigPath();
+  let mtimeMs = 0;
+  try {
+    mtimeMs = statSync(configPath).mtimeMs;
+  } catch {
+    // Missing config: fall through to readSettings which creates it.
+  }
+  if (tokenCache && tokenCache.path === configPath && tokenCache.mtimeMs === mtimeMs) {
+    return tokenCache.token;
+  }
+  const token = readSettings().token;
+  tokenCache = { path: configPath, mtimeMs: statSync(configPath).mtimeMs, token };
+  return token;
 }
 
 /**

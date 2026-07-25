@@ -70,7 +70,9 @@ export function registerStreamRoutes(app: Hono) {
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid stream");
       }
-      if (!getSource(parsed.data.sourceId)) return fail("BAD_REQUEST", "Source not found");
+      const source = getSource(parsed.data.sourceId);
+      if (!source) return fail("BAD_REQUEST", "Source not found");
+      if (source.status !== "ready") return fail("BAD_REQUEST", "Source is not ready");
       if (!getTarget(parsed.data.targetId)) return fail("BAD_REQUEST", "Target not found");
       try {
         return c.json(ok(createStream(normalizeStreamSchedule(parsed.data))), 201);
@@ -134,10 +136,16 @@ export function registerStreamRoutes(app: Hono) {
         const analytics = await fetchYouTubeAnalytics(videoId, apiKey);
         return c.json(ok(analytics));
       } catch (error) {
-        return fail(
-          "BAD_REQUEST",
-          error instanceof Error ? error.message : "Failed to fetch YouTube analytics",
-        );
+        const message =
+          error instanceof Error ? error.message : "Failed to fetch YouTube analytics";
+        if (
+          message.includes("not found") ||
+          message.includes("video ID") ||
+          message.includes("private")
+        ) {
+          return fail("BAD_REQUEST", message);
+        }
+        return fail("UPSTREAM_ERROR", message, 502);
       }
     },
   );
@@ -163,6 +171,14 @@ export function registerStreamRoutes(app: Hono) {
         sentKeys.size > 0 && [...sentKeys].every((k) => k === "youtubeLiveUrl");
       if (isRunning && !onlyYoutubeUrl) {
         return fail("CONFLICT", "Cannot update a running or stopping stream", 409);
+      }
+      if (parsed.data.sourceId !== undefined) {
+        const source = getSource(parsed.data.sourceId);
+        if (!source) return fail("BAD_REQUEST", "Source not found");
+        if (source.status !== "ready") return fail("BAD_REQUEST", "Source is not ready");
+      }
+      if (parsed.data.targetId !== undefined && !getTarget(parsed.data.targetId)) {
+        return fail("BAD_REQUEST", "Target not found");
       }
       let updated;
       try {
@@ -192,7 +208,11 @@ export function registerStreamRoutes(app: Hono) {
   app.post(
     "/api/streams/:id/stop",
     doc("Streams", "Stop stream", "Stops a running stream job."),
-    (c) => c.json(ok(stopStream(c.req.param("id")))),
+    (c) => {
+      const stopped = stopStream(c.req.param("id"));
+      if (!stopped) return fail("NOT_FOUND", "Stream not found", 404);
+      return c.json(ok(stopped));
+    },
   );
 
   app.delete(

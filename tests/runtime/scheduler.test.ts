@@ -68,6 +68,12 @@ describe("scheduler", () => {
             scheduledFor: "2026-01-01T11:59:00.000Z",
             status: "stopped",
           }),
+          stream({
+            id: "str_failed_recur",
+            recurrence: "daily",
+            scheduledFor: "2026-01-01T11:59:00.000Z",
+            status: "failed",
+          }),
         ],
         now,
       ),
@@ -75,6 +81,7 @@ describe("scheduler", () => {
       { streamId: "str_start", type: "start" },
       { streamId: "str_stop", type: "stop" },
       { streamId: "str_recur", type: "start" },
+      { streamId: "str_failed_recur", type: "start" },
     ]);
   });
 

@@ -15,8 +15,8 @@ import {
 import { Link } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { Button } from "@kumix/ui/ui/button";
 import {
-  Button,
   Combobox,
   ComboboxContent,
   ComboboxEmpty,
@@ -25,18 +25,22 @@ import {
   ComboboxList,
   ComboboxTrigger,
   ComboboxValue,
+} from "@kumix/ui/ui/combobox";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@kumix/ui/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
-} from "@kumix/ui";
+} from "@kumix/ui/ui/dropdown-menu";
+import { Input } from "@kumix/ui/ui/input";
 import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -55,6 +59,7 @@ export function StreamsPage() {
   const common = useTranslations("Common");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
+  const [stopId, setStopId] = useState<string | null>(null);
   const [editStream, setEditStream] = useState<StreamRecord | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editSourceId, setEditSourceId] = useState("");
@@ -66,13 +71,14 @@ export function StreamsPage() {
     queryKey: ["streams"],
     queryFn: api.streams,
     refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
   });
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const workerTimezone = settingsQuery.data?.timezone;
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
-  const sources: SourceOption[] = (() => {
+  const sources: SourceOption[] = useMemo(() => {
     const ready = (sourcesQuery.data ?? [])
       .filter((source) => source.status === "ready")
       .map((source) => ({ id: source.id, name: source.name }));
@@ -80,8 +86,8 @@ export function StreamsPage() {
       ready.push({ id: editStream.source.id, name: editStream.source.name });
     }
     return ready;
-  })();
-  const targets: TargetOption[] = (() => {
+  }, [sourcesQuery.data, editSourceId, editStream]);
+  const targets: TargetOption[] = useMemo(() => {
     const active = (targetsQuery.data ?? [])
       .filter((target) => target.active)
       .map((target) => ({ id: target.id, label: target.label }));
@@ -93,7 +99,7 @@ export function StreamsPage() {
       active.push({ id: editStream.target.id, label: editStream.target.label });
     }
     return active;
-  })();
+  }, [targetsQuery.data, editTargetId, editStream]);
   const selectedEditSource = sources.find((source) => source.id === editSourceId) ?? null;
   const selectedEditTarget = targets.find((target) => target.id === editTargetId) ?? null;
   const streamLocked = editStream?.status === "running" || editStream?.status === "stopping";
@@ -119,8 +125,7 @@ export function StreamsPage() {
   });
   const updateStream = useMutation({
     mutationFn: () => {
-      const isRunning = editStream?.status === "running" || editStream?.status === "stopping";
-      const body = isRunning
+      const body = streamLocked
         ? { youtubeLiveUrl: editYoutubeLiveUrl || null }
         : {
             title: editTitle.trim(),
@@ -165,6 +170,11 @@ export function StreamsPage() {
     deleteStreams.mutate(deleteIds);
     setDeleteIds([]);
   };
+  const confirmStop = () => {
+    if (!stopId) return;
+    stopStream.mutate(stopId);
+    setStopId(null);
+  };
   const streams = streamsQuery.data ?? [];
   const openEdit = useCallback(
     (stream: StreamRecord) => {
@@ -208,13 +218,15 @@ export function StreamsPage() {
         cell: ({ row }) => <StatusBadge status={row.original.status} />,
       },
       {
-        accessorKey: "source",
+        id: "source",
+        accessorFn: (row) => row.source?.name ?? "",
         header: t("columns.source"),
         size: 220,
         cell: ({ row }) => row.original.source?.name ?? "-",
       },
       {
-        accessorKey: "target",
+        id: "target",
+        accessorFn: (row) => row.target?.label ?? "",
         header: t("columns.target"),
         size: 180,
         cell: ({ row }) => row.original.target?.label ?? "-",
@@ -243,7 +255,7 @@ export function StreamsPage() {
               <span>
                 {t("columns.startedAt")}: {startedAt}
               </span>
-              <span className="text-emerald-600">
+              <span className="text-emerald-600 dark:text-emerald-400">
                 {t("columns.stoppedAt")}: {stoppedAt}
               </span>
             </div>
@@ -256,22 +268,24 @@ export function StreamsPage() {
         size: 90,
         cell: ({ row }) => (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label={t("columns.actions")}
-              >
-                <MoreHorizontal className="size-4" />
-              </Button>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label={t("columns.actions")}
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               {row.original.status === "running" ? (
                 <DropdownMenuItem
                   className="gap-2"
                   disabled={stopStream.isPending}
-                  onClick={() => stopStream.mutate(row.original.id)}
+                  onClick={() => setStopId(row.original.id)}
                 >
                   <Square className="size-4 text-muted-foreground" />
                   {t("stop")}
@@ -290,18 +304,20 @@ export function StreamsPage() {
                 <Pencil className="size-4 text-muted-foreground" />
                 {t("edit")}
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="gap-2">
-                <Link to={`/log?q=${encodeURIComponent(row.original.id)}`}>
-                  <Eye className="size-4 text-muted-foreground" />
-                  {t("viewLog")}
-                </Link>
+              <DropdownMenuItem
+                className="gap-2"
+                render={<Link to={`/log?q=${encodeURIComponent(row.original.id)}`} />}
+              >
+                <Eye className="size-4 text-muted-foreground" />
+                {t("viewLog")}
               </DropdownMenuItem>
               {row.original.youtubeLiveUrl ? (
-                <DropdownMenuItem asChild className="gap-2">
-                  <Link to={`/streams/${encodeURIComponent(row.original.id)}`}>
-                    <BarChart3 className="size-4 text-muted-foreground" />
-                    {t("analytics")}
-                  </Link>
+                <DropdownMenuItem
+                  className="gap-2"
+                  render={<Link to={`/streams/${encodeURIComponent(row.original.id)}`} />}
+                >
+                  <BarChart3 className="size-4 text-muted-foreground" />
+                  {t("analytics")}
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
@@ -334,11 +350,9 @@ export function StreamsPage() {
       title={t("title")}
       description={t("description")}
       actions={
-        <Button asChild>
-          <Link to="/streams/new">
-            <Plus />
-            {t("create")}
-          </Link>
+        <Button render={<Link to="/streams/new" />} nativeButton={false}>
+          <Plus />
+          {t("create")}
         </Button>
       }
     >
@@ -489,6 +503,15 @@ export function StreamsPage() {
         selectRowLabel={common("selectRow")}
         onDeleteSelected={setDeleteIds}
         getCanSelectRow={(stream) => stream.status !== "running" && stream.status !== "stopping"}
+      />
+      <ConfirmDialog
+        open={!!stopId}
+        onOpenChange={(value) => !value && setStopId(null)}
+        onConfirm={confirmStop}
+        title={t("stopTitle")}
+        description={t("stopDescription")}
+        confirmText={common("confirm")}
+        cancelText={common("cancel")}
       />
       <ConfirmDialog
         open={!!deleteId}

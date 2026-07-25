@@ -3,35 +3,58 @@ import { ArrowLeft, Calendar, Eye, MessageSquare, ThumbsUp, Users } from "lucide
 import { Link, useParams } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@kumix/ui";
+import { Badge } from "@kumix/ui/reui/badge";
+import { Button } from "@kumix/ui/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
-import type { YouTubeAnalytics } from "../../../src/services/youtube";
 
 export function StreamAnalyticsPage() {
   const t = useTranslations("Analytics");
   const common = useTranslations("Common");
   const { id = "" } = useParams<{ id: string }>();
   const streamQuery = useQuery({
-    queryKey: ["stream", id],
-    queryFn: () => api.streams().then((s) => s.find((x) => x.id === id) ?? null),
+    queryKey: ["streams"],
+    queryFn: api.streams,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+    select: (streams) => streams.find((s) => s.id === id) ?? null,
   });
   const analyticsQuery = useQuery({
     queryKey: ["stream-analytics", id],
     queryFn: () => api.streamAnalytics(id),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
   const stream = streamQuery.data;
-  const analytics = analyticsQuery.data as YouTubeAnalytics | undefined;
+  const analytics = analyticsQuery.data;
 
   if (streamQuery.isLoading) {
     return (
       <AppShell title={t("title")} description={t("description")}>
         <p className="text-muted-foreground text-sm">{common("loading")}</p>
+      </AppShell>
+    );
+  }
+
+  if (streamQuery.isError) {
+    return (
+      <AppShell title={t("title")} description={t("description")}>
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="py-6">
+              <p className="text-destructive text-sm">{t("streamNotFound")}</p>
+            </CardContent>
+          </Card>
+          <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
+            <ArrowLeft className="size-4" />
+            {t("backToStreams")}
+          </Button>
+        </div>
       </AppShell>
     );
   }
@@ -45,11 +68,9 @@ export function StreamAnalyticsPage() {
               <p className="text-destructive text-sm">{t("streamNotFound")}</p>
             </CardContent>
           </Card>
-          <Button asChild variant="outline">
-            <Link to="/streams">
-              <ArrowLeft className="size-4" />
-              {t("backToStreams")}
-            </Link>
+          <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
+            <ArrowLeft className="size-4" />
+            {t("backToStreams")}
           </Button>
         </div>
       </AppShell>
@@ -67,11 +88,9 @@ export function StreamAnalyticsPage() {
               <p className="text-destructive text-sm">{error}</p>
             </CardContent>
           </Card>
-          <Button asChild variant="outline">
-            <Link to="/streams">
-              <ArrowLeft className="size-4" />
-              {t("backToStreams")}
-            </Link>
+          <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
+            <ArrowLeft className="size-4" />
+            {t("backToStreams")}
           </Button>
         </div>
       </AppShell>
@@ -128,11 +147,9 @@ export function StreamAnalyticsPage() {
       title={t("title")}
       description={t("description")}
       actions={
-        <Button asChild variant="outline">
-          <Link to="/streams">
-            <ArrowLeft className="size-4" />
-            {t("backToStreams")}
-          </Link>
+        <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
+          <ArrowLeft className="size-4" />
+          {t("backToStreams")}
         </Button>
       }
     >
@@ -144,15 +161,15 @@ export function StreamAnalyticsPage() {
               <StatusBadge status={stream.status} />
               {analytics ? (
                 analytics.isLive ? (
-                  <Badge appearance="light" className="text-red-500">
+                  <Badge variant="primary-light" className="text-red-500">
                     {t("live")}
                   </Badge>
                 ) : analytics.isUpcoming ? (
-                  <Badge appearance="light" className="text-amber-500">
+                  <Badge variant="primary-light" className="text-amber-500">
                     {t("upcoming")}
                   </Badge>
                 ) : (
-                  <Badge appearance="light" className="text-muted-foreground">
+                  <Badge variant="primary-light" className="text-muted-foreground">
                     {t("ended")}
                   </Badge>
                 )
@@ -165,6 +182,7 @@ export function StreamAnalyticsPage() {
                 <img
                   src={analytics.thumbnailUrl}
                   alt={analytics.title}
+                  referrerPolicy="no-referrer"
                   className="h-28 w-50 rounded-lg border border-border object-cover"
                 />
               ) : null}

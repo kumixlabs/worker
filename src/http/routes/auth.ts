@@ -1,9 +1,11 @@
-/** Dashboard authentication handoff and token verification routes. */
+/** Dashboard authentication: password login and CLI/core handoff. */
 
 import { randomBytes } from "node:crypto";
 
 import type { Hono } from "hono";
 
+import { isDefaultPasswordHash, verifyPassword } from "../../lib/password";
+import { readSettings } from "../../runtime/config";
 import {
   checkAuthRateLimit,
   clearAuthRateLimit,
@@ -37,14 +39,19 @@ function pruneHandoffCodes(now: number): void {
   }
 }
 
-// Sweep stale handoff codes on a timer so an idle worker does not let the map
-// grow unbounded between requests. Unref'd so it never keeps the event loop
-// alive on its own.
 const handoffPruneTimer = setInterval(() => pruneHandoffCodes(Date.now()), 5 * 60 * 1000);
 handoffPruneTimer.unref?.();
 
+function issueSession(token: string, passwordIsDefault = false) {
+  return {
+    token,
+    expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
+    passwordIsDefault,
+  };
+}
+
 /**
- * Registers dashboard token handoff and token verification routes.
+ * Registers dashboard auth routes (password login and token handoff).
  *
  * @param app - Hono app to attach routes to.
  */
@@ -65,7 +72,6 @@ export function registerAuthRoutes(app: Hono) {
       pruneHandoffCodes(now);
       const code = randomBytes(32).toString("base64url");
       handoffCodes.set(code, { token, expiresAt: now + handoffTtlMs });
-      // Fragment keeps the code out of access logs, Referer, and history query strings.
       return c.redirect(`/#code=${encodeURIComponent(code)}`, 302);
     },
   );
@@ -92,26 +98,34 @@ export function registerAuthRoutes(app: Hono) {
       }
       clearAuthRateLimit(c);
       handoffCodes.delete(code);
+      const settings = readSettings();
       return c.json(
-        ok({ token: entry.token, expiresAt: new Date(now + sessionTtlMs).toISOString() }),
+        ok(issueSession(entry.token, await isDefaultPasswordHash(settings.passwordHash))),
       );
     },
   );
 
   app.post(
-    "/api/auth/verify",
-    doc("Auth", "Verify token", "Validates a dashboard token and returns a session expiry."),
+    "/api/auth/login",
+    doc(
+      "Auth",
+      "Login with password",
+      "Validates the dashboard password and returns the worker API token for the SPA session.",
+    ),
     async (c) => {
       const limited = checkAuthRateLimit(c);
       if (limited) return limited;
-      const body = (await c.req.json().catch(() => null)) as { token?: unknown } | null;
-      const token = typeof body?.token === "string" ? body.token : "";
-      if (!verifyToken(token)) {
+      const body = (await c.req.json().catch(() => null)) as { password?: unknown } | null;
+      const password = typeof body?.password === "string" ? body.password : "";
+      const settings = readSettings();
+      if (!password || !(await verifyPassword(password, settings.passwordHash))) {
         recordAuthFailure(c);
-        return fail("UNAUTHORIZED", "Invalid Kumix Worker token", 401);
+        return fail("UNAUTHORIZED", "Invalid password", 401);
       }
       clearAuthRateLimit(c);
-      return c.json(ok({ expiresAt: new Date(Date.now() + sessionTtlMs).toISOString() }));
+      return c.json(
+        ok(issueSession(settings.token, await isDefaultPasswordHash(settings.passwordHash))),
+      );
     },
   );
 }

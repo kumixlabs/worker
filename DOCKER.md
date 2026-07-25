@@ -28,17 +28,9 @@ The worker listens on port `8080`. Open the dashboard URL printed in the contain
 docker logs kumix-worker
 ```
 
-Look for the `Auth URL:` line to open the authenticated dashboard. By default the token is masked; to print the full auth URL, override the container command with `--dev`:
+Look for the `Dashboard:` line (for example `http://localhost:8080`). Sign in with the dashboard password (factory default `123456`; change it under Settings → Security).
 
-```bash
-docker run -d \
-  -p 8080:8080 \
-  -v "$HOME/.kumix-worker:/app/data" \
-  -e KUMIX_WORKER_DATA_DIR=/app/data \
-  --name kumix-worker \
-  kumix/worker:latest \
-  serve --host 0.0.0.0 --dev
-```
+The API token is separate from the password. View or rotate it with `kumix-worker token` / Settings → Security, not from the serve logs.
 
 ## Manage container
 
