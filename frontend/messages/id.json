@@ -248,8 +248,6 @@
   "Monitoring": {
     "title": "Monitoring VPS",
     "description": "Pantau CPU, memori, bandwidth, penyimpanan, dan job FFmpeg yang berjalan.",
-    "online": "Kumix Worker online",
-    "offline": "Koneksi bermasalah",
     "refresh": "Muat ulang",
     "cpu": "Penggunaan CPU",
     "memory": "Memori",
@@ -410,8 +408,7 @@
     "apiTokenRotated": "Token API di-regenerate",
     "apiTokenCopy": "Salin",
     "apiTokenCopied": "Disalin",
-    "apiTokenValueLabel": "Token",
-    "apiTokenNewLabel": "Token API baru (salin sekarang — tidak ditampilkan lagi)"
+    "apiTokenValueLabel": "Token"
   },
   "Analytics": {
     "title": "Analitik Stream",

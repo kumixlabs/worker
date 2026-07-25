@@ -248,8 +248,6 @@
   "Monitoring": {
     "title": "VPS Monitoring",
     "description": "Monitor CPU, memory, bandwidth, storage, and running FFmpeg jobs.",
-    "online": "Kumix Worker online",
-    "offline": "Connection issue",
     "refresh": "Refresh",
     "cpu": "CPU Usage",
     "memory": "Memory",
@@ -410,8 +408,7 @@
     "apiTokenRotated": "API token regenerated",
     "apiTokenCopy": "Copy",
     "apiTokenCopied": "Copied",
-    "apiTokenValueLabel": "Token",
-    "apiTokenNewLabel": "New API token (copy now — it will not be shown again)"
+    "apiTokenValueLabel": "Token"
   },
   "Analytics": {
     "title": "Stream Analytics",
