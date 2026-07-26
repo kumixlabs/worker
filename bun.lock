@@ -5,7 +5,7 @@
     "": {
       "name": "@kumix/worker",
       "dependencies": {
-        "@hono/node-server": "^2.0.11",
+        "@hono/node-server": "^2.0.12",
         "@hono/standard-validator": "^0.3.0",
         "@scalar/hono-api-reference": "^0.11.11",
         "better-sqlite3": "^13.0.1",
@@ -122,7 +122,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.1", "", { "os": "win32", "cpu": "x64" }, "sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A=="],
 
-    "@hono/node-server": ["@hono/node-server@2.0.11", "", { "peerDependencies": { "hono": "^4" } }, "sha512-bjD221KPLoJTWUwso1J6fGKiTXEUFedG/s0visavY4zakFPkeGURMRNly+FhBHs7T8Dz4qHaZIMX9ZoJHSJtKA=="],
+    "@hono/node-server": ["@hono/node-server@2.0.12", "", { "peerDependencies": { "hono": "^4" } }, "sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg=="],
 
     "@hono/standard-validator": ["@hono/standard-validator@0.3.0", "", { "peerDependencies": { "@standard-schema/spec": "^1.0.0", "hono": ">=4.11.2" } }, "sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ=="],
 

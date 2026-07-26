@@ -479,12 +479,20 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       } catch {
         // ignore
       }
-      addEvent(streamId, "restart_scheduled", `FFmpeg restart scheduled in ${delay}ms`, {
-        attempt,
-        delay,
-        code,
-        signal,
-      });
+      addEvent(
+        streamId,
+        "restart_scheduled",
+        `FFmpeg restart scheduled in ${delay}ms (exit ${reason})${
+          diagnostic ? `: ${diagnostic}` : ""
+        }`,
+        {
+          attempt,
+          delay,
+          code,
+          signal,
+          diagnostic: diagnostic || undefined,
+        },
+      );
       emit(streamId, { type: "status", status: "restarting" });
       restartTimers.set(
         streamId,

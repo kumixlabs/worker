@@ -2,6 +2,14 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.3.1] - 2026-07-26
+
+Patch: include FFmpeg stderr diagnostic in `restart_scheduled` event payload so operators can see why FFmpeg exited (code/signal + last 3 stderr lines).
+
+### Fixed
+
+- `restart_scheduled` event now includes exit reason + FFmpeg stderr diagnostic (last 3 lines, redacted, ≤500 chars) in both the event **message** (visible in dashboard Log) and **payload.diagnostic** field. Previously the diagnostic was written to stream `lastError` but cleared on successful restart, leaving no persistent record of the exit cause.
+
 ## [0.3.0] - 2026-07-26
 
 Production-hardening release: dashboard password auth (separate from API token), security headers/CSP, tighter rate limits, SQLite/hot-path performance, download concurrency caps, graceful shutdown, and dashboard UX polish.
