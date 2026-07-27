@@ -25,12 +25,11 @@ const passwordDefaultKey = "kumix-worker-password-is-default";
 /** Fallback only when server omits expiresAt (should not happen for login/exchange). */
 const tokenTtlMs = 7 * 24 * 60 * 60 * 1000;
 
-/** Prefer sessionStorage (tab-scoped) over localStorage to limit XSS blast radius. */
 function storage(): Storage {
   try {
-    return sessionStorage;
-  } catch {
     return localStorage;
+  } catch {
+    return sessionStorage;
   }
 }
 
