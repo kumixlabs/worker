@@ -76,7 +76,7 @@
     "@kumix/biome-config": "^0.1.0",
     "@kumix/tsconfig": "^0.1.0",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "4.1.10",
     "bumpp": "^12.0.0",
     "concurrently": "^10.0.4",

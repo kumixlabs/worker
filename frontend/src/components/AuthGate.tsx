@@ -72,7 +72,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         setPasswordIsDefault(isDefault);
         setMustChangePassword(isDefault);
       } catch {
-        // offline / transient — keep sessionStorage flag
+        // offline / transient — keep stored flag
       }
     })();
     return () => {

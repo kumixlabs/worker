@@ -563,7 +563,12 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       }
       if (scheduleRestart(code, signal)) return;
       const reason = signal ? `signal ${signal}` : `code ${code}`;
-      settle("failed", `FFmpeg failed with ${reason}`, { code, signal });
+      const diag = diagnosticLines.slice(-3).join(" | ").slice(0, 500);
+      settle("failed", `FFmpeg failed with ${reason}${diag ? `: ${diag}` : ""}`, {
+        code,
+        signal,
+        diagnostic: diag || undefined,
+      });
     };
     child.on("close", onFinished);
     child.on("exit", (code, signal) => {

@@ -1,5 +1,7 @@
 @import "tailwindcss";
+@import "shadcn/tailwind.css";
 @import "@kumix/ui/theme";
+@import "@fontsource-variable/geist";
 
 /** Theme and custom color styles **/
 :root {
@@ -12,6 +14,7 @@
 
 /** Custom Font Size **/
 @theme {
+  --font-sans: "Geist Variable", sans-serif;
   --text-2xs: 0.6875rem;
   --text-2sm: 0.8125rem;
   --text-2xs--line-height: calc(0.825 / 0.6875);
