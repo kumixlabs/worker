@@ -2,7 +2,18 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
-## [0.3.1] - 2026-07-26
+## [0.3.2] - 2026-07-28
+
+Patch: auth token now persists in `localStorage` (survives tab close) and the restart-exhausted failure path includes the same FFmpeg stderr diagnostic as `restart_scheduled`.
+
+### Fixed
+
+- Restart-exhausted `failed` event now includes FFmpeg stderr diagnostic (exit reason + last 3 stderr lines, redacted, ≤500 chars) in the event message and `payload.diagnostic` — matching the `restart_scheduled` fix from 0.3.1. Previously the exhaustion path had no diagnostic, leaving operators blind to the final failure cause.
+- AuthGate stale comment corrected after `sessionStorage` → `localStorage` migration.
+
+### Changed
+
+- Dashboard auth token storage moved from `sessionStorage` to `localStorage`. Sessions now survive tab/window close and persist until server-side `expiresAt` (7-day session). Tab-scoped behavior lost; operators who need it can clear storage manually.
 
 Patch: include FFmpeg stderr diagnostic in `restart_scheduled` event payload so operators can see why FFmpeg exited (code/signal + last 3 stderr lines).
 
