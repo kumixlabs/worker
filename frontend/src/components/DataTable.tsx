@@ -8,20 +8,29 @@ import {
   getSortedRowModel,
   type HeaderContext,
   type PaginationState,
+  type Row,
   type RowSelectionState,
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Search, Trash2, X } from "lucide-react";
 
 import { DataGrid } from "@kumix/ui/reui/data-grid/data-grid";
 import { DataGridPagination } from "@kumix/ui/reui/data-grid/data-grid-pagination";
-import { DataGridTable } from "@kumix/ui/reui/data-grid/data-grid-table";
+import { DataGridScrollArea } from "@kumix/ui/reui/data-grid/data-grid-scroll-area";
+import {
+  DataGridTable,
+  DataGridTableRowSelect,
+  DataGridTableRowSelectAll,
+} from "@kumix/ui/reui/data-grid/data-grid-table";
+import { Frame, FrameFooter, FrameHeader, FramePanel } from "@kumix/ui/reui/frame";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardFooter } from "@kumix/ui/ui/card";
-import { Checkbox } from "@kumix/ui/ui/checkbox";
-import { Input } from "@kumix/ui/ui/input";
-import { ScrollArea, ScrollBar } from "@kumix/ui/ui/scroll-area";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@kumix/ui/ui/input-group";
 
 function stringifyValue(value: unknown): string {
   if (value == null) return "";
@@ -37,14 +46,7 @@ function searchableRow(row: unknown): string {
   return stringifyValue(row).toLowerCase();
 }
 
-/** Avoid @kumix/ui DataGridColumnHeader — memo'd on stable column ref, freezes sort UI. */
-export function SortableHeader<T>({
-  column,
-  title,
-}: {
-  column: Column<T, unknown>;
-  title: string;
-}) {
+function SortableHeader<T>({ column, title }: { column: Column<T, unknown>; title: string }) {
   const sorted = column.getIsSorted();
   if (!column.getCanSort()) {
     return (
@@ -79,6 +81,7 @@ export function SortableHeader<T>({
 }
 
 export function DataTable<T extends { id: string }>({
+  actions,
   columns,
   data,
   empty,
@@ -86,13 +89,13 @@ export function DataTable<T extends { id: string }>({
   isError,
   errorMessage,
   searchPlaceholder = "Search...",
+  clearSearchLabel = "Clear search",
   initialSorting = [],
   selectedActionLabel,
-  selectAllLabel = "Select all rows",
-  selectRowLabel = "Select row",
   onDeleteSelected,
   getCanSelectRow,
 }: {
+  actions?: ReactNode;
   columns: ColumnDef<T>[];
   data: T[];
   empty: ReactNode;
@@ -100,10 +103,9 @@ export function DataTable<T extends { id: string }>({
   isError?: boolean;
   errorMessage?: ReactNode;
   searchPlaceholder?: string;
+  clearSearchLabel?: string;
   initialSorting?: SortingState;
   selectedActionLabel?: string;
-  selectAllLabel?: string;
-  selectRowLabel?: string;
   onDeleteSelected?: (ids: string[]) => void;
   getCanSelectRow?: (row: T) => boolean;
 }) {
@@ -128,43 +130,26 @@ export function DataTable<T extends { id: string }>({
         ? [
             {
               id: "select",
-              size: 44,
-              minSize: 44,
-              maxSize: 44,
-              header: ({ table }) => (
-                <Checkbox
-                  checked={table.getIsAllPageRowsSelected()}
-                  indeterminate={
-                    table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()
-                  }
-                  onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
-                  aria-label={selectAllLabel}
-                />
-              ),
-              cell: ({ row }) => (
-                <Checkbox
-                  checked={row.getIsSelected()}
-                  disabled={!row.getCanSelect()}
-                  onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
-                  aria-label={selectRowLabel}
-                />
-              ),
+              size: 35,
+              header: () => <DataGridTableRowSelectAll />,
+              cell: ({ row }: { row: Row<T> }) => <DataGridTableRowSelect row={row} />,
               enableSorting: false,
+              enableResizing: false,
             } satisfies ColumnDef<T>,
           ]
         : []),
       ...columns.map((column) => {
         if (typeof column.header !== "string") return column;
-        const title = column.header as string;
+        const headerTitle = column.header as string;
         return {
           ...column,
           header: ({ column: tableColumn }: HeaderContext<T, unknown>) => (
-            <SortableHeader column={tableColumn} title={title} />
+            <SortableHeader column={tableColumn} title={headerTitle} />
           ),
         } as ColumnDef<T>;
       }),
     ],
-    [columns, onDeleteSelected, selectAllLabel, selectRowLabel],
+    [columns, onDeleteSelected],
   );
   const table = useReactTable({
     columns: gridColumns,
@@ -195,34 +180,49 @@ export function DataTable<T extends { id: string }>({
       }}
       emptyMessage={isError ? (errorMessage ?? empty) : empty}
     >
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-2 border-border border-b p-3 sm:flex-row sm:items-center">
-          <div className="relative min-w-55 flex-1">
-            <Search className="absolute inset-s-3 top-2.5 size-4 text-muted-foreground" />
-            <Input
+      <Frame stacked dense>
+        <FrameHeader className="flex w-full flex-row flex-wrap items-center justify-between gap-3">
+          <InputGroup className="w-48 bg-background">
+            <InputGroupAddon align="inline-start">
+              <Search className="size-4" />
+            </InputGroupAddon>
+            <InputGroupInput
               placeholder={searchPlaceholder}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="ps-9"
             />
+            {search.length > 0 ? (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label={clearSearchLabel}
+                  title={clearSearchLabel}
+                  size="icon-xs"
+                  onClick={() => setSearch("")}
+                >
+                  <X className="size-4" />
+                </InputGroupButton>
+              </InputGroupAddon>
+            ) : null}
+          </InputGroup>
+          <div className="flex items-center gap-2.5">
+            {onDeleteSelected && selectedIds.length > 0 ? (
+              <Button variant="destructive" onClick={() => onDeleteSelected(selectedIds)}>
+                <Trash2 />
+                {selectedActionLabel ?? "Delete selected"} ({selectedIds.length})
+              </Button>
+            ) : null}
+            {actions}
           </div>
-          {onDeleteSelected && selectedIds.length > 0 ? (
-            <Button variant="destructive" onClick={() => onDeleteSelected(selectedIds)}>
-              <Trash2 />
-              {selectedActionLabel ?? "Delete selected"} ({selectedIds.length})
-            </Button>
-          ) : null}
-        </div>
-        <CardContent className="p-0">
-          <ScrollArea>
+        </FrameHeader>
+        <FramePanel className="p-0 shadow-none">
+          <DataGridScrollArea>
             <DataGridTable />
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
-        </CardContent>
-        <CardFooter>
+          </DataGridScrollArea>
+        </FramePanel>
+        <FrameFooter className="py-1.5 pr-2 pl-2.5">
           <DataGridPagination />
-        </CardFooter>
-      </Card>
+        </FrameFooter>
+      </Frame>
     </DataGrid>
   );
 }

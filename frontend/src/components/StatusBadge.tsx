@@ -1,20 +1,17 @@
 import { useTranslations } from "use-intl";
 
-import { Badge } from "@kumix/ui/reui/badge";
+import { Badge, type BadgeProps } from "@kumix/ui/reui/badge";
 
-const variantByStatus: Record<
-  string,
-  "success" | "destructive" | "warning" | "default" | "secondary"
-> = {
-  active: "success",
-  ready: "success",
-  running: "success",
-  pending: "warning",
-  downloading: "warning",
-  probing: "warning",
-  stopping: "warning",
-  failed: "destructive",
-  invalid: "destructive",
+const variantByStatus: Record<string, NonNullable<BadgeProps["variant"]>> = {
+  active: "success-light",
+  ready: "success-light",
+  running: "success-light",
+  pending: "warning-light",
+  downloading: "warning-light",
+  probing: "warning-light",
+  stopping: "warning-light",
+  failed: "destructive-light",
+  invalid: "destructive-light",
   disabled: "secondary",
   stopped: "secondary",
 };

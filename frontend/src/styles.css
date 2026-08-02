@@ -6,6 +6,7 @@
 /** Theme and custom color styles **/
 :root {
   --primary: oklch(0.586 0.253 17.585);
+  --sidebar-width-mobile: 18rem;
 }
 
 .dark {
@@ -15,10 +16,6 @@
 /** Custom Font Size **/
 @theme {
   --font-sans: "Geist Variable", sans-serif;
-  --text-2xs: 0.6875rem;
-  --text-2sm: 0.8125rem;
-  --text-2xs--line-height: calc(0.825 / 0.6875);
-  --text-2sm--line-height: calc(1.075 / 0.8125);
 }
 
 html,
@@ -33,16 +30,4 @@ body,
   html {
     scroll-behavior: smooth;
   }
-}
-
-/** Custom Containers **/
-@utility container {
-  @apply mx-auto max-w-none px-4 lg:px-5;
-  @media (width >= --theme(--breakpoint-xl)) {
-    @apply max-w-(--breakpoint-xl);
-  }
-}
-
-@utility container-fluid {
-  @apply mx-auto w-full px-4 lg:px-5;
 }

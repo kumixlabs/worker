@@ -1,8 +1,11 @@
 import { type ReactNode, useEffect, useState } from "react";
+import { ArrowRight, CircleAlertIcon, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "use-intl";
 
-import { Button } from "@kumix/ui/ui/button";
-import { Input } from "@kumix/ui/ui/input";
+import { Button } from "@kumix/ui/motion/button/base";
+import { Input } from "@kumix/ui/motion/input";
+import { Alert, AlertTitle } from "@kumix/ui/reui/alert";
+import { Frame, FramePanel } from "@kumix/ui/reui/frame";
 import {
   clearPasswordIsDefault,
   getApiToken,
@@ -18,6 +21,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -157,69 +161,60 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <form
-          className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
+          className="w-full max-w-sm space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
             void submitPasswordChange();
           }}
         >
-          <div className="text-center">
-            <h1 className="font-bold text-2xl tracking-tight">{t("changeDefaultTitle")}</h1>
-            <p className="mt-2 text-muted-foreground text-sm">{t("changeDefaultDescription")}</p>
-          </div>
-          {!password ? (
-            <div className="space-y-2">
-              <label htmlFor="worker-current-password" className="block font-medium text-sm">
-                {t("passwordLabel")}
-              </label>
-              <Input
-                id="worker-current-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                disabled={submitting}
-              />
-            </div>
-          ) : null}
-          <div className="space-y-2">
-            <label htmlFor="worker-new-password" className="block font-medium text-sm">
-              {t("newPasswordLabel")}
-            </label>
-            <Input
-              id="worker-new-password"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              disabled={submitting}
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="worker-confirm-password" className="block font-medium text-sm">
-              {t("confirmPasswordLabel")}
-            </label>
-            <Input
-              id="worker-confirm-password"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              disabled={submitting}
-            />
-          </div>
-          {error ? (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
-          ) : null}
-          <Button
-            className="w-full"
-            type="submit"
-            disabled={!password || !newPassword || !confirmPassword || submitting}
-          >
-            {t("changeDefaultSubmit")}
-          </Button>
+          <Frame>
+            <FramePanel className="space-y-5">
+              <div className="text-center">
+                <h1 className="font-bold text-2xl tracking-tight">{t("changeDefaultTitle")}</h1>
+                <p className="mt-2 text-muted-foreground text-sm">
+                  {t("changeDefaultDescription")}
+                </p>
+              </div>
+              {error ? (
+                <Alert variant="destructive">
+                  <CircleAlertIcon />
+                  <AlertTitle>{error}</AlertTitle>
+                </Alert>
+              ) : null}
+              <div className="flex flex-col gap-4">
+                {!password ? (
+                  <Input
+                    label={t("passwordLabel")}
+                    type="password"
+                    value={password}
+                    onChange={setPassword}
+                    disabled={submitting}
+                  />
+                ) : null}
+                <Input
+                  label={t("newPasswordLabel")}
+                  type="password"
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  disabled={submitting}
+                />
+                <Input
+                  label={t("confirmPasswordLabel")}
+                  type="password"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  disabled={submitting}
+                />
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={!password || !newPassword || !confirmPassword || submitting}
+                >
+                  {t("changeDefaultSubmit")}
+                </Button>
+              </div>
+            </FramePanel>
+          </Frame>
         </form>
       </div>
     );
@@ -228,38 +223,50 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <form
-        className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
+        className="w-full max-w-sm space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
           void submitLogin();
         }}
       >
-        <div className="text-center">
-          <h1 className="font-bold text-2xl tracking-tight">{t("loginTitle")}</h1>
-          <p className="mt-2 text-muted-foreground text-sm">{t("loginDescription")}</p>
-        </div>
-        <label htmlFor="worker-password" className="sr-only">
-          {t("passwordLabel")}
-        </label>
-        <Input
-          id="worker-password"
-          type="password"
-          autoComplete="current-password"
-          placeholder={t("passwordPlaceholder")}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          disabled={submitting}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "worker-password-error" : undefined}
-        />
-        {error ? (
-          <p id="worker-password-error" role="alert" className="text-destructive text-sm">
-            {error}
-          </p>
-        ) : null}
-        <Button className="w-full" type="submit" disabled={!password || submitting}>
-          {t("loginSubmit")}
-        </Button>
+        <Frame>
+          <FramePanel className="space-y-5">
+            <div className="text-center">
+              <h1 className="font-bold text-2xl tracking-tight">{t("loginTitle")}</h1>
+              <p className="mt-2 text-muted-foreground text-sm">{t("loginDescription")}</p>
+            </div>
+            {error ? (
+              <Alert variant="destructive">
+                <CircleAlertIcon />
+                <AlertTitle>{error}</AlertTitle>
+              </Alert>
+            ) : null}
+            <div className="flex flex-col gap-4">
+              <Input
+                label={t("passwordLabel")}
+                type={show ? "text" : "password"}
+                placeholder={t("passwordPlaceholder")}
+                value={password}
+                onChange={setPassword}
+                disabled={submitting}
+                rightIcon={
+                  <button
+                    type="button"
+                    onClick={() => setShow((s) => !s)}
+                    aria-label={show ? "Hide password" : "Show password"}
+                    className="pointer-events-auto"
+                  >
+                    {show ? <EyeOff /> : <Eye />}
+                  </button>
+                }
+              />
+              <Button type="submit" className="w-full" disabled={!password || submitting}>
+                {t("loginSubmit")}
+                <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          </FramePanel>
+        </Frame>
       </form>
     </div>
   );

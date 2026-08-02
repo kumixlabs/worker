@@ -186,6 +186,7 @@ export function registerStreamRoutes(app: Hono) {
       } catch (error) {
         return fail("BAD_REQUEST", error instanceof Error ? error.message : "Invalid schedule");
       }
+      if (!updated) return fail("NOT_FOUND", "Stream not found", 404);
       return c.json(ok(updated));
     },
   );
@@ -195,7 +196,9 @@ export function registerStreamRoutes(app: Hono) {
     doc("Streams", "Start stream", "Starts FFmpeg for a stream job."),
     async (c) => {
       try {
-        return c.json(ok(await startStream(c.req.param("id"))));
+        const started = await startStream(c.req.param("id"));
+        if (!started) return fail("NOT_FOUND", "Stream not found", 404);
+        return c.json(ok(started));
       } catch (error) {
         return fail(
           "BAD_REQUEST",

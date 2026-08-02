@@ -1,11 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Calendar, Eye, MessageSquare, ThumbsUp, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  CircleAlertIcon,
+  Eye,
+  MessageSquare,
+  ThumbsUp,
+  Users,
+} from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { Alert, AlertTitle } from "@kumix/ui/reui/alert";
 import { Badge } from "@kumix/ui/reui/badge";
+import { Frame, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
@@ -36,43 +45,50 @@ export function StreamAnalyticsPage() {
   if (streamQuery.isLoading) {
     return (
       <AppShell title={t("title")} description={t("description")}>
-        <p className="text-muted-foreground text-sm">{common("loading")}</p>
+        <Alert variant="info">
+          <CircleAlertIcon />
+          <AlertTitle>{common("loading")}</AlertTitle>
+        </Alert>
       </AppShell>
     );
   }
 
   if (streamQuery.isError) {
     return (
-      <AppShell title={t("title")} description={t("description")}>
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="py-6">
-              <p className="text-destructive text-sm">{t("streamNotFound")}</p>
-            </CardContent>
-          </Card>
+      <AppShell
+        title={t("title")}
+        description={t("description")}
+        actions={
           <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
             <ArrowLeft className="size-4" />
             {t("backToStreams")}
           </Button>
-        </div>
+        }
+      >
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>{t("streamNotFound")}</AlertTitle>
+        </Alert>
       </AppShell>
     );
   }
 
   if (!stream) {
     return (
-      <AppShell title={t("title")} description={t("description")}>
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="py-6">
-              <p className="text-destructive text-sm">{t("streamNotFound")}</p>
-            </CardContent>
-          </Card>
+      <AppShell
+        title={t("title")}
+        description={t("description")}
+        actions={
           <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
             <ArrowLeft className="size-4" />
             {t("backToStreams")}
           </Button>
-        </div>
+        }
+      >
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>{t("streamNotFound")}</AlertTitle>
+        </Alert>
       </AppShell>
     );
   }
@@ -81,18 +97,20 @@ export function StreamAnalyticsPage() {
     const error =
       analyticsQuery.error instanceof Error ? analyticsQuery.error.message : t("noData");
     return (
-      <AppShell title={t("title")} description={t("description")}>
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="py-6">
-              <p className="text-destructive text-sm">{error}</p>
-            </CardContent>
-          </Card>
+      <AppShell
+        title={t("title")}
+        description={t("description")}
+        actions={
           <Button variant="outline" render={<Link to="/streams" />} nativeButton={false}>
             <ArrowLeft className="size-4" />
             {t("backToStreams")}
           </Button>
-        </div>
+        }
+      >
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
       </AppShell>
     );
   }
@@ -154,9 +172,9 @@ export function StreamAnalyticsPage() {
       }
     >
       <div className="space-y-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-3">
+        <Frame>
+          <FrameHeader>
+            <FrameTitle className="flex flex-wrap items-center gap-3">
               <span>{stream.title}</span>
               <StatusBadge status={stream.status} />
               {analytics ? (
@@ -174,9 +192,9 @@ export function StreamAnalyticsPage() {
                   </Badge>
                 )
               ) : null}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </FrameTitle>
+          </FrameHeader>
+          <FramePanel>
             <div className="flex flex-wrap items-center gap-4">
               {analytics?.thumbnailUrl ? (
                 <img
@@ -204,23 +222,19 @@ export function StreamAnalyticsPage() {
                 ) : null}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </FramePanel>
+        </Frame>
 
         {statCards.length > 0 ? (
           <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {statCards.map(({ key, label, value, icon: Icon, tone }) => (
-              <Card key={key}>
-                <CardContent className="flex items-center justify-between p-5">
-                  <div>
-                    <p className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                      {label}
-                    </p>
-                    <p className="mt-2 font-bold text-2xl tracking-tight">{value}</p>
-                  </div>
+              <Frame key={key}>
+                <FrameHeader>{label}</FrameHeader>
+                <FramePanel className="flex items-center justify-between p-5">
+                  <p className="font-bold text-2xl tracking-tight">{value}</p>
                   <Icon className={`h-6 w-6 ${tone}`} />
-                </CardContent>
-              </Card>
+                </FramePanel>
+              </Frame>
             ))}
           </section>
         ) : analyticsQuery.isLoading ? (

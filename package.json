@@ -1,6 +1,6 @@
 {
   "name": "@kumix/worker",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Kumix Worker is a self-hosted live-stream runner that schedules and broadcasts video sources to RTMP platforms with always-on source looping, monitoring, crash recovery, and a local dashboard.",
   "author": "Kumix Labs <hai@kumix.io>",
   "license": "MIT",
@@ -80,7 +80,7 @@
     "@vitest/coverage-v8": "4.1.10",
     "bumpp": "^12.1.1",
     "concurrently": "^10.0.4",
-    "tsx": "^4.23.1",
+    "tsx": "^4.23.4",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },

@@ -158,9 +158,23 @@ export function registerSourceRoutes(app: Hono) {
       if (isSourceDownloadActive(source.id)) {
         return fail("CONFLICT", "Source download already in progress", 409);
       }
-      void downloadAndProbeSource(source.id).catch((error) => {
-        console.error(`[worker] Retry failed for source ${source.id}:`, error);
-      });
+      void downloadAndProbeSource(source.id)
+        .then((result) => {
+          if (result?.status === "invalid") {
+            console.error(`[worker] Source ${source.id} invalid: ${result.invalidReason}`);
+          } else if (result?.status === "ready") {
+            console.log(`[worker] Source ${source.id} is ready for streaming`);
+          }
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : "Download failed";
+          console.error(`[worker] Retry failed for source ${source.id}: ${message}`);
+          updateSourceProbe(source.id, { status: "invalid", invalidReason: message });
+          addEvent(null, "source_download_failed", `Source download failed: ${source.name}`, {
+            sourceId: source.id,
+            message,
+          });
+        });
       return c.json(ok(source), 202);
     },
   );

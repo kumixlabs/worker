@@ -1,17 +1,10 @@
 {
   "Shell": {
     "logout": "Keluar",
-    "closeSidebar": "Tutup sidebar",
     "toggleSidebar": "Buka/tutup sidebar",
     "logoutTitle": "Keluar",
     "logoutDescription": "Anda akan membutuhkan password dashboard lagi untuk masuk kembali.",
     "language": "Bahasa",
-    "mode": {
-      "toggle": "Ganti tema",
-      "light": "Terang",
-      "dark": "Gelap",
-      "system": "Sistem"
-    },
     "navigation": {
       "dashboard": "Dashboard",
       "overview": "Ringkasan",
@@ -67,13 +60,12 @@
     "status": "Status",
     "empty": "Belum ada data",
     "search": "Cari",
+    "clearSearch": "Hapus pencarian",
     "close": "Tutup",
     "confirm": "Konfirmasi",
     "cancel": "Batal",
     "loading": "Memuat...",
     "loadError": "Gagal memuat data. Periksa koneksi worker dan coba lagi.",
-    "selectAll": "Pilih semua baris",
-    "selectRow": "Pilih baris",
     "pickDateTime": "Pilih tanggal dan waktu",
     "clearDate": "Hapus tanggal",
     "statuses": {
@@ -400,7 +392,6 @@
     "changePasswordSubmit": "Perbarui password",
     "apiToken": "Token API",
     "apiTokenDescription": "Kunci Bearer untuk integrasi, enkripsi stream key, dan signed URL. Bukan untuk login dashboard.",
-    "apiTokenLength": "Panjang saat ini: {length} karakter",
     "apiTokenRegenerate": "Regenerate",
     "apiTokenConfirmTitle": "Regenerate token API?",
     "apiTokenConfirmDescription": "Integrasi yang memakai token lama akan berhenti. Stream key dienkripsi ulang. Password dashboard tidak berubah. Anda tetap masuk dengan token baru.",

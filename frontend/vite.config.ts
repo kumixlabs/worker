@@ -12,14 +12,21 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, "index.html"),
+        main: resolve(import.meta.dirname, "index.html"),
       },
       output: {
         manualChunks(id) {
-          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom"))
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom"))
             return "react";
           if (id.includes("node_modules/@tanstack")) return "router";
-          if (id.includes("node_modules/@kumix") || id.includes("node_modules/lucide-react"))
+          if (id.includes("node_modules/lucide-react")) return "icons";
+          if (
+            id.includes("node_modules/framer-motion") ||
+            id.includes("node_modules/@kumix/ui/dist/components/motion") ||
+            id.includes("node_modules/@kumix/ui/dist/components/custom")
+          )
+            return "motion";
+          if (id.includes("node_modules/@kumix") || id.includes("node_modules/@base-ui"))
             return "ui";
         },
       },
@@ -36,7 +43,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": resolve(__dirname, "./src"),
+      "@": resolve(import.meta.dirname, "./src"),
     },
   },
 });

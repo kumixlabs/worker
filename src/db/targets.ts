@@ -124,8 +124,7 @@ export function patchTarget(id: string, input: TargetPatchInput): TargetRecord |
       nowIso(),
       id,
     );
-  const { streamKey, ...rest } = getTarget(id)!;
-  return rest;
+  return getTarget(id);
 }
 
 /**

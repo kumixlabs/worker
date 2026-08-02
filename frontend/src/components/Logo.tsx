@@ -1,5 +1,3 @@
-import { Link } from "react-router-dom";
-
 import { cn } from "@kumix/utils";
 
 export function Logo({ className }: { className?: string }) {
@@ -23,16 +21,5 @@ export function Logo({ className }: { className?: string }) {
         <path d="M2500 3342 c-19 -16 -155 -121 -302 -236 -269 -208 -296 -233 -339 -316 l-24 -45 -3 -1039 -2 -1039 22 -24 c12 -12 31 -23 42 -23 12 0 62 33 112 73 50 39 178 140 285 222 255 198 263 206 301 283 l33 67 3 1029 c2 913 1 1032 -13 1052 -22 33 -70 31 -115 -4z" />
       </g>
     </svg>
-  );
-}
-
-export function LogoWithHref() {
-  return (
-    <Link to="/" className="flex items-center gap-1">
-      <Logo />
-      <span className="font-semibold text-lg text-mono">
-        Kumix<span className="font-bold text-primary">Worker</span>
-      </span>
-    </Link>
   );
 }

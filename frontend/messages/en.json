@@ -1,17 +1,10 @@
 {
   "Shell": {
     "logout": "Sign out",
-    "closeSidebar": "Close sidebar",
     "toggleSidebar": "Toggle sidebar",
     "logoutTitle": "Sign out",
     "logoutDescription": "You will need the dashboard password again to sign back in.",
     "language": "Language",
-    "mode": {
-      "toggle": "Toggle theme",
-      "light": "Light",
-      "dark": "Dark",
-      "system": "System"
-    },
     "navigation": {
       "dashboard": "Dashboard",
       "overview": "Overview",
@@ -67,13 +60,12 @@
     "status": "Status",
     "empty": "No data yet",
     "search": "Search",
+    "clearSearch": "Clear search",
     "close": "Close",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "loading": "Loading...",
     "loadError": "Failed to load data. Check the worker connection and try again.",
-    "selectAll": "Select all rows",
-    "selectRow": "Select row",
     "pickDateTime": "Pick date and time",
     "clearDate": "Clear date",
     "statuses": {
@@ -400,7 +392,6 @@
     "changePasswordSubmit": "Update password",
     "apiToken": "API Token",
     "apiTokenDescription": "Bearer key for integrations, stream-key encryption, and signed URLs. Not used for dashboard login.",
-    "apiTokenLength": "Current length: {length} characters",
     "apiTokenRegenerate": "Regenerate",
     "apiTokenConfirmTitle": "Regenerate API token?",
     "apiTokenConfirmDescription": "Integrations using the old token will stop working. Stream keys are re-encrypted. Your dashboard password is unchanged. You will stay signed in with the new token.",

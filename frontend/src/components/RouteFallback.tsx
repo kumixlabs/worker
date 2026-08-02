@@ -1,8 +1,8 @@
 import { Link, useRouteError } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { Frame, FramePanel } from "@kumix/ui/reui/frame";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent } from "@kumix/ui/ui/card";
 import { getApiToken } from "@/lib/api";
 
 export function NotFound() {
@@ -11,8 +11,8 @@ export function NotFound() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="max-w-md text-center">
-        <CardContent className="p-8">
+      <Frame className="max-w-md text-center">
+        <FramePanel className="p-8">
           <h1 className="font-bold text-7xl text-foreground">404</h1>
           <h2 className="mt-4 font-semibold text-foreground text-xl">{t("notFoundTitle")}</h2>
           <p className="mt-2 text-muted-foreground text-sm">{t("notFoundDescription")}</p>
@@ -21,8 +21,8 @@ export function NotFound() {
               {t("goHome")}
             </Button>
           ) : null}
-        </CardContent>
-      </Card>
+        </FramePanel>
+      </Frame>
     </div>
   );
 }
@@ -34,8 +34,8 @@ export function RouteError() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="max-w-md text-center">
-        <CardContent className="p-8">
+      <Frame className="max-w-md text-center">
+        <FramePanel className="p-8">
           <h1 className="font-semibold text-foreground text-xl tracking-tight">
             {t("errorTitle")}
           </h1>
@@ -46,8 +46,8 @@ export function RouteError() {
               {t("goHome")}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </FramePanel>
+      </Frame>
     </div>
   );
 }

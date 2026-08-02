@@ -70,9 +70,11 @@ async function workerRequestOnce<T>(
 ): Promise<T> {
   const fetcher = options.fetch ?? fetch;
   const controller = new AbortController();
-  const timeout = options.timeoutMs
-    ? setTimeout(() => controller.abort(), options.timeoutMs).unref?.()
-    : null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  if (options.timeoutMs) {
+    timeout = setTimeout(() => controller.abort(), options.timeoutMs);
+    timeout.unref?.();
+  }
   let response: Response;
   try {
     response = await fetcher(`${normalizeBaseUrl(options.baseUrl)}${path}`, {

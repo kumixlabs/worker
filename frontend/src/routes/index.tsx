@@ -4,12 +4,12 @@ import { AlertTriangle, Clock, Plus, Radio, Square } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
+import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Badge } from "@kumix/ui/reui/badge";
+import { Frame, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
-import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EventKindBadge } from "@/components/EventKindBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
@@ -74,7 +74,6 @@ export function Dashboard() {
     () => events.filter((event) => event.kind === "failed" || event.kind === "restart_failed"),
     [events],
   );
-  // Count entities only — failure events can multi-fire per stream.
   const attentionCount = failedStreams.length + invalidSources.length;
 
   const refresh = () => {
@@ -84,10 +83,10 @@ export function Dashboard() {
   const stopStream = useMutation({
     mutationFn: api.stopStream,
     onSuccess: () => {
-      AlertSuccess({ message: t("stopped") });
+      toastSuccess({ message: t("stopped") });
       refresh();
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const confirmStop = () => {
     if (!stopId) return;
@@ -102,7 +101,7 @@ export function Dashboard() {
       value: liveStreams.length,
       icon: Radio,
       to: "/streams",
-      tone: "text-green-500",
+      tone: "text-success",
     },
     {
       key: "scheduled",
@@ -110,7 +109,7 @@ export function Dashboard() {
       value: streams.filter((stream) => stream.status === "pending").length,
       icon: Clock,
       to: "/streams",
-      tone: "text-amber-500",
+      tone: "text-info",
     },
     {
       key: "attention",
@@ -118,7 +117,7 @@ export function Dashboard() {
       value: attentionCount,
       icon: AlertTriangle,
       to: "/log",
-      tone: attentionCount > 0 ? "text-red-500" : "text-muted-foreground",
+      tone: attentionCount > 0 ? "text-warning" : "text-muted-foreground",
     },
   ];
 
@@ -135,46 +134,45 @@ export function Dashboard() {
     >
       <div className="space-y-5">
         {recentFailures.length > 0 ? (
-          <Card className="border-destructive">
-            <CardHeader>
-              <CardTitle>{t("failureAlert")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+          <Frame className="border-destructive">
+            <FrameHeader>
+              <FrameTitle>{t("failureAlert")}</FrameTitle>
+            </FrameHeader>
+            <FramePanel className="space-y-2">
               {recentFailures.slice(0, 3).map((event) => (
                 <div key={event.id} className="text-sm">
                   {event.message}
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
         ) : null}
+
         <section className="grid gap-5 sm:grid-cols-3">
           {statusCards.map(({ key, label, value, icon: Icon, to, tone }) => (
             <Link key={key} to={to}>
-              <Card className="transition hover:border-primary/40">
-                <CardContent className="flex items-center justify-between p-5">
-                  <div>
-                    <p className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                      {label}
-                    </p>
-                    <p className="mt-3 font-bold text-3xl tracking-tight">{value}</p>
-                  </div>
-                  <Icon className={`h-6 w-6 ${tone}`} />
-                </CardContent>
-              </Card>
+              <Frame>
+                <FrameHeader>
+                  <FrameTitle>{label}</FrameTitle>
+                </FrameHeader>
+                <FramePanel className="flex items-center justify-between p-5">
+                  <p className="font-bold text-3xl tracking-tight">{value}</p>
+                  <Icon className={`size-6 ${tone}`} />
+                </FramePanel>
+              </Frame>
             </Link>
           ))}
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[1.4fr_0.6fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Radio className="h-4 w-4" />
+          <Frame>
+            <FrameHeader>
+              <FrameTitle className="flex items-center gap-2">
+                <Radio className="size-4 text-destructive" />
                 {t("liveTitle")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+              </FrameTitle>
+            </FrameHeader>
+            <FramePanel className="space-y-3">
               {liveStreams.length === 0 ? (
                 <p className="py-6 text-center text-muted-foreground text-sm">{t("liveEmpty")}</p>
               ) : (
@@ -212,18 +210,18 @@ export function Dashboard() {
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
 
           <div className="space-y-5">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
+            <Frame>
+              <FrameHeader>
+                <FrameTitle className="flex items-center gap-2">
+                  <AlertTriangle className="size-4 text-warning" />
                   {t("attentionTitle")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
+                </FrameTitle>
+              </FrameHeader>
+              <FramePanel className="space-y-2">
                 {attentionCount === 0 ? (
                   <p className="py-2 text-muted-foreground text-sm">{t("attentionEmpty")}</p>
                 ) : (
@@ -248,17 +246,17 @@ export function Dashboard() {
                     ))}
                   </>
                 )}
-              </CardContent>
-            </Card>
+              </FramePanel>
+            </Frame>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
+            <Frame>
+              <FrameHeader>
+                <FrameTitle className="flex items-center gap-2">
+                  <Clock className="size-4 text-info" />
                   {t("nextTitle")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
+                </FrameTitle>
+              </FrameHeader>
+              <FramePanel className="space-y-2">
                 {scheduledStreams.length === 0 ? (
                   <p className="py-2 text-muted-foreground text-sm">{t("nextEmpty")}</p>
                 ) : (
@@ -273,24 +271,24 @@ export function Dashboard() {
                     </div>
                   ))
                 )}
-              </CardContent>
-            </Card>
+              </FramePanel>
+            </Frame>
           </div>
         </section>
 
         <section>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("activityTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+          <Frame>
+            <FrameHeader>
+              <FrameTitle>{t("activityTitle")}</FrameTitle>
+            </FrameHeader>
+            <FramePanel className="space-y-4">
               {recentEvents.length === 0 ? (
                 <p className="py-2 text-muted-foreground text-sm">{t("activityEmpty")}</p>
               ) : (
                 recentEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center gap-3 border-border border-b pb-2 text-sm last:border-0"
+                    className="flex items-center gap-3 border-border border-b text-sm last:border-0"
                   >
                     <span className="shrink-0 text-muted-foreground text-xs">
                       {timeFormatter.format(new Date(event.createdAt))}
@@ -300,10 +298,11 @@ export function Dashboard() {
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
         </section>
       </div>
+
       <ConfirmDialog
         open={!!stopId}
         onOpenChange={(value) => !value && setStopId(null)}

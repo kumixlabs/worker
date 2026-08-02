@@ -4,8 +4,16 @@ import { Calendar, PlayCircle, Radio } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
+import { Frame, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "@kumix/ui/reui/number-field";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import {
   Combobox,
   ComboboxContent,
@@ -18,7 +26,6 @@ import {
 } from "@kumix/ui/ui/combobox";
 import { Input } from "@kumix/ui/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
-import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
 import { api, queryClient } from "@/lib/api";
@@ -118,7 +125,7 @@ export function NewStreamPage() {
               : null,
       }),
     onSuccess: (stream) => {
-      AlertSuccess({ message: t("streamCreated") });
+      toastSuccess({ message: t("streamCreated") });
       const refresh = async () => {
         await queryClient.invalidateQueries({ queryKey: ["streams"] });
         await queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -127,7 +134,7 @@ export function NewStreamPage() {
         api.startStream(stream.id).then(
           () => refresh().then(() => navigate("/streams")),
           (error) => {
-            AlertError({ message: error.message });
+            toastError({ message: error.message });
             refresh().then(() => navigate("/streams"));
           },
         );
@@ -135,7 +142,7 @@ export function NewStreamPage() {
         refresh().then(() => navigate("/streams"));
       }
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const readySources: SourceOption[] = (sourcesQuery.data ?? [])
     .filter((source) => source.status === "ready")
@@ -153,11 +160,11 @@ export function NewStreamPage() {
   if (queryError) {
     return (
       <AppShell title={t("title")} description={t("description")}>
-        <Card>
-          <CardContent className="py-6">
+        <Frame>
+          <FramePanel className="py-6">
             <p className="text-destructive text-sm">{queryError}</p>
-          </CardContent>
-        </Card>
+          </FramePanel>
+        </Frame>
       </AppShell>
     );
   }
@@ -165,14 +172,14 @@ export function NewStreamPage() {
   return (
     <AppShell title={t("title")} description={t("description")}>
       <div className="grid gap-6 xl:grid-cols-5">
-        <Card className="xl:col-span-3">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Frame className="xl:col-span-3">
+          <FrameHeader>
+            <FrameTitle className="flex items-center gap-2">
               <Radio className="h-4 w-4" />
               {t("details")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </FrameTitle>
+          </FrameHeader>
+          <FramePanel className="space-y-4">
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("titleLabel")}</span>
               <Input
@@ -251,16 +258,16 @@ export function NewStreamPage() {
                 onChange={(event) => setYoutubeLiveUrl(event.target.value)}
               />
             </label>
-          </CardContent>
-        </Card>
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          </FramePanel>
+        </Frame>
+        <Frame className="xl:col-span-2">
+          <FrameHeader>
+            <FrameTitle className="flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               {t("scheduleTitle")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </FrameTitle>
+          </FrameHeader>
+          <FramePanel className="space-y-4">
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">{t("startAt")}</span>
               <DateTimePicker
@@ -300,22 +307,33 @@ export function NewStreamPage() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">{t("durationHours")}</span>
-                  <Input
-                    type="number"
+                  <NumberField
+                    value={Number(durationHours)}
                     min={0}
-                    value={durationHours}
-                    onChange={(event) => setDurationHours(event.target.value)}
-                  />
+                    max={99}
+                    onValueChange={(value) => setDurationHours(String(value))}
+                  >
+                    <NumberFieldGroup>
+                      <NumberFieldInput className="text-left" />
+                      <NumberFieldDecrement className="rounded-none!" />
+                      <NumberFieldIncrement />
+                    </NumberFieldGroup>
+                  </NumberField>
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">{t("durationMinutes")}</span>
-                  <Input
-                    type="number"
+                  <NumberField
+                    value={Number(durationMinutes)}
                     min={0}
                     max={59}
-                    value={durationMinutes}
-                    onChange={(event) => setDurationMinutes(event.target.value)}
-                  />
+                    onValueChange={(value) => setDurationMinutes(String(value))}
+                  >
+                    <NumberFieldGroup>
+                      <NumberFieldInput className="text-left" />
+                      <NumberFieldDecrement className="rounded-none!" />
+                      <NumberFieldIncrement />
+                    </NumberFieldGroup>
+                  </NumberField>
                 </label>
               </div>
             ) : null}
@@ -433,8 +451,8 @@ export function NewStreamPage() {
               <PlayCircle />
               {t("submit")}
             </Button>
-          </CardContent>
-        </Card>
+          </FramePanel>
+        </Frame>
       </div>
     </AppShell>
   );

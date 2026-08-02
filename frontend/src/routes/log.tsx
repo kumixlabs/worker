@@ -6,7 +6,6 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  type HeaderContext,
   type PaginationState,
   type SortingState,
   useReactTable,
@@ -27,12 +26,17 @@ import {
 import { useSearchParams } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
+import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Badge } from "@kumix/ui/reui/badge";
 import { DataGrid } from "@kumix/ui/reui/data-grid/data-grid";
+import { DataGridColumnHeader } from "@kumix/ui/reui/data-grid/data-grid-column-header";
 import { DataGridPagination } from "@kumix/ui/reui/data-grid/data-grid-pagination";
+import { DataGridScrollArea } from "@kumix/ui/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@kumix/ui/reui/data-grid/data-grid-table";
+import { Frame, FrameFooter, FrameHeader, FramePanel } from "@kumix/ui/reui/frame";
+import { IconTile } from "@kumix/ui/reui/icon-tile";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardFooter } from "@kumix/ui/ui/card";
 import {
   Command,
   CommandEmpty,
@@ -44,10 +48,7 @@ import {
 import { Input } from "@kumix/ui/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@kumix/ui/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
-import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SortableHeader } from "@/components/DataTable";
 import { EventKindBadge, knownEventKinds } from "@/components/EventKindBadge";
 import { api, getApiToken, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
@@ -205,10 +206,10 @@ export function LogPage() {
     onSuccess: (result) => {
       setLiveEvents([]);
       setOlderEvents([]);
-      AlertSuccess({ message: t("cleared", { count: result.deleted }) });
+      toastSuccess({ message: t("cleared", { count: result.deleted }) });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const confirmClearEvents = () => {
     clearEvents.mutate();
@@ -256,7 +257,7 @@ export function LogPage() {
       const signed = await api.signedUrl(api.eventsExportPath());
       window.location.href = signed.url;
     } catch (error) {
-      AlertError({ message: error instanceof Error ? error.message : common("loadError") });
+      toastError({ message: error instanceof Error ? error.message : common("loadError") });
     }
   }, [common]);
   const columns = useMemo<ColumnDef<EventRecord>[]>(
@@ -304,8 +305,8 @@ export function LogPage() {
         const title = column.header;
         return {
           ...column,
-          header: ({ column: tableColumn }: HeaderContext<EventRecord, unknown>) => (
-            <SortableHeader column={tableColumn} title={title} />
+          header: ({ column: tableColumn }) => (
+            <DataGridColumnHeader title={title} column={tableColumn} />
           ),
         } as ColumnDef<EventRecord>;
       }),
@@ -352,35 +353,30 @@ export function LogPage() {
       <div className="space-y-5">
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {summary.map(({ label, value, icon: Icon }) => (
-            <Card key={label}>
-              <CardContent className="flex items-center justify-between p-5">
-                <div>
-                  <p className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                    {label}
-                  </p>
-                  <p className="mt-3 font-bold text-3xl tracking-tight">{value}</p>
-                </div>
-                <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground">
-                  <Icon className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
+            <Frame key={label}>
+              <FrameHeader>{label}</FrameHeader>
+              <FramePanel className="flex items-center justify-between p-5">
+                <p className="font-bold text-3xl tracking-tight">{value}</p>
+                <IconTile
+                  aria-hidden="true"
+                  className="border-primary/10 bg-primary/10 text-primary dark:border-primary/25 dark:bg-primary/15"
+                >
+                  <Icon className="size-5" />
+                </IconTile>
+              </FramePanel>
+            </Frame>
           ))}
-          <Card>
-            <CardContent className="flex items-center justify-between p-5">
-              <div>
-                <p className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                  {t("summary.connection")}
-                </p>
-                <p className="mt-3 font-bold text-3xl tracking-tight">
-                  {paused ? t("paused") : connected ? t("live") : t("reconnecting")}
-                </p>
-              </div>
+          <Frame>
+            <FrameHeader>{t("summary.connection")}</FrameHeader>
+            <FramePanel className="flex items-center justify-between p-5">
+              <p className="font-bold text-3xl tracking-tight">
+                {paused ? t("paused") : connected ? t("live") : t("reconnecting")}
+              </p>
               <Badge variant={paused ? "warning" : connected ? "success" : "destructive"}>
                 {paused ? t("paused") : connected ? t("live") : t("reconnecting")}
               </Badge>
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
         </section>
 
         <DataGrid
@@ -395,8 +391,8 @@ export function LogPage() {
           }}
           emptyMessage={t("waiting")}
         >
-          <Card className="overflow-hidden">
-            <div className="flex flex-wrap items-center gap-2 border-border border-b p-3">
+          <Frame stacked dense>
+            <FrameHeader className="flex w-full flex-row flex-wrap items-center gap-2 p-3">
               <div className="relative min-w-55 flex-1">
                 <Search className="absolute inset-s-3 top-2.5 size-4 text-muted-foreground" />
                 <Input
@@ -491,16 +487,19 @@ export function LogPage() {
                   {common("refresh")}
                 </Button>
               </div>
-            </div>
-            <CardContent className="overflow-x-auto p-0">
-              <DataGridTable />
-            </CardContent>
-            <CardFooter>
+            </FrameHeader>
+            <FramePanel className="p-0 shadow-none">
+              <DataGridScrollArea>
+                <DataGridTable />
+              </DataGridScrollArea>
+            </FramePanel>
+            <FrameFooter className="py-1.5 pr-2 pl-2.5">
               <DataGridPagination />
-            </CardFooter>
-          </Card>
+            </FrameFooter>
+          </Frame>
         </DataGrid>
       </div>
+
       <ConfirmDialog
         open={confirmClear}
         onOpenChange={setConfirmClear}

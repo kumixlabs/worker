@@ -4,6 +4,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
+import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Badge } from "@kumix/ui/reui/badge";
 import { Button } from "@kumix/ui/ui/button";
 import {
@@ -21,9 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@kumix/ui/ui/dropdown-menu";
 import { Input } from "@kumix/ui/ui/input";
-import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
@@ -71,11 +71,11 @@ export function TargetsPage() {
     onSuccess: () => {
       resetForm();
       setOpen(false);
-      AlertSuccess({ message: task("targetCreated") });
+      toastSuccess({ message: task("targetCreated") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const updateTarget = useMutation({
     mutationFn: () =>
@@ -87,32 +87,32 @@ export function TargetsPage() {
     onSuccess: () => {
       resetForm();
       setOpen(false);
-      AlertSuccess({ message: t("targetUpdated") });
+      toastSuccess({ message: t("targetUpdated") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
       void queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const deleteTarget = useMutation({
     mutationFn: api.deleteTarget,
     onSuccess: () => {
-      AlertSuccess({ message: t("targetDeleted") });
+      toastSuccess({ message: t("targetDeleted") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
       void queryClient.invalidateQueries({ queryKey: ["streams"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const deleteTargets = useMutation({
     mutationFn: api.deleteTargets,
     onSuccess: (result) => {
-      AlertSuccess({ message: t("targetDeleted") });
-      for (const failed of result.failed) AlertError({ message: failed.message });
+      toastSuccess({ message: t("targetDeleted") });
+      for (const failed of result.failed) toastError({ message: failed.message });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
       void queryClient.invalidateQueries({ queryKey: ["streams"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const confirmDelete = () => {
     if (!deleteId) return;
@@ -126,11 +126,11 @@ export function TargetsPage() {
   const toggleTarget = useMutation({
     mutationFn: (target: TargetRecord) => api.patchTarget(target.id, { active: !target.active }),
     onSuccess: () => {
-      AlertSuccess({ message: t("targetUpdated") });
+      toastSuccess({ message: t("targetUpdated") });
       void queryClient.invalidateQueries({ queryKey: ["targets"] });
       void queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const columns = useMemo<ColumnDef<TargetRecord>[]>(
     () => [
@@ -146,7 +146,7 @@ export function TargetsPage() {
         header: task("targetColumns.status"),
         size: 130,
         cell: ({ row }) => (
-          <Badge variant={row.original.active ? "success" : "secondary"}>
+          <Badge variant={row.original.active ? "success-light" : "warning-light"}>
             {row.original.active ? task("targetColumns.active") : task("targetColumns.disabled")}
           </Badge>
         ),
@@ -198,16 +198,7 @@ export function TargetsPage() {
   );
 
   return (
-    <AppShell
-      title={t("title")}
-      description={t("description")}
-      actions={
-        <Button onClick={openCreate}>
-          <Plus />
-          {t("createTitle")}
-        </Button>
-      }
-    >
+    <AppShell title={t("title")} description={t("description")}>
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -271,6 +262,12 @@ export function TargetsPage() {
         </DialogContent>
       </Dialog>
       <DataTable
+        actions={
+          <Button onClick={openCreate}>
+            <Plus />
+            {t("createTitle")}
+          </Button>
+        }
         columns={columns}
         data={targets}
         empty={task("emptyTargets")}
@@ -278,10 +275,9 @@ export function TargetsPage() {
         isError={targetsQuery.isError}
         errorMessage={common("loadError")}
         searchPlaceholder={common("search")}
+        clearSearchLabel={common("clearSearch")}
         initialSorting={[{ id: "createdAt", desc: true }]}
         selectedActionLabel={common("deleteSelected")}
-        selectAllLabel={common("selectAll")}
-        selectRowLabel={common("selectRow")}
         onDeleteSelected={setDeleteIds}
       />
       <ConfirmDialog

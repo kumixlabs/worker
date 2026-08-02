@@ -1,9 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { Cpu, HardDrive, MemoryStick, Network, RefreshCw, Server, Timer } from "lucide-react";
+import {
+  CircleAlertIcon,
+  Cpu,
+  HardDrive,
+  MemoryStick,
+  Network,
+  RefreshCw,
+  Server,
+  Timer,
+} from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { Alert, AlertTitle } from "@kumix/ui/reui/alert";
+import { Frame, FrameFooter, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
+import { IconTile } from "@kumix/ui/reui/icon-tile";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/api";
 import { useTimeFormatter } from "@/lib/date";
@@ -98,55 +109,57 @@ export function MonitoringPage() {
       description={t("description")}
       actions={
         <Button size="sm" variant="outline" onClick={refresh} disabled={isLoading}>
-          <RefreshCw className={isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          <RefreshCw className={isLoading ? "size-4 animate-spin" : "size-4"} />
           {t("refresh")}
         </Button>
       }
     >
       <div className="space-y-5">
         {hasError ? (
-          <Card>
-            <CardContent className="py-6">
-              <p className="text-destructive text-sm">{common("loadError")}</p>
-            </CardContent>
-          </Card>
+          <Frame>
+            <FramePanel className="py-6">
+              <Alert variant="destructive">
+                <CircleAlertIcon />
+                <AlertTitle>{common("loadError")}</AlertTitle>
+              </Alert>
+            </FramePanel>
+          </Frame>
         ) : null}
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {summary.map(({ label, value, detail, percent: progress, icon: Icon }) => (
-            <Card key={label}>
-              <CardContent className="space-y-4 p-5">
+            <Frame key={label}>
+              <FrameHeader>{label}</FrameHeader>
+              <FramePanel className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                      {label}
-                    </p>
-                    <p className="mt-3 font-bold text-3xl tracking-tight">{value}</p>
-                  </div>
-                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground">
-                    <Icon className="h-5 w-5" />
-                  </div>
+                  <p className="font-bold text-3xl tracking-tight">{value}</p>
+                  <IconTile
+                    aria-hidden="true"
+                    className="border-primary/10 bg-primary/10 text-primary dark:border-primary/25 dark:bg-primary/15"
+                  >
+                    <Icon className="size-5" />
+                  </IconTile>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 text-muted-foreground text-xs">
-                    <span>{detail}</span>
-                    {typeof progress === "number" ? <span>{progress}%</span> : null}
-                  </div>
-                  {typeof progress === "number" ? <ProgressBar value={progress} /> : null}
+              </FramePanel>
+              <FrameFooter className="space-y-2">
+                <div className="flex items-center justify-between gap-2 text-muted-foreground text-xs">
+                  <span>{detail}</span>
+                  {typeof progress === "number" ? <span>{progress}%</span> : null}
                 </div>
-              </CardContent>
-            </Card>
+                {typeof progress === "number" ? <ProgressBar value={progress} /> : null}
+              </FrameFooter>
+            </Frame>
           ))}
         </section>
 
         <section className="grid gap-5">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HardDrive className="h-4 w-4" />
+          <Frame>
+            <FrameHeader>
+              <FrameTitle className="flex items-center gap-2">
+                <HardDrive className="size-4 text-primary" />
                 {t("disk")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+              </FrameTitle>
+            </FrameHeader>
+            <FramePanel className="space-y-3">
               <div className="flex items-center justify-between gap-4 text-sm">
                 <span className="text-muted-foreground">{t("diskUsage")}</span>
                 <span className="font-medium">
@@ -158,33 +171,33 @@ export function MonitoringPage() {
               <p className="text-muted-foreground text-xs">
                 {t("diskDescription", { used: formatBytes(runtime?.storage.disk?.usedBytes) })}
               </p>
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Server className="h-4 w-4" />
+          <Frame>
+            <FrameHeader>
+              <FrameTitle className="flex items-center gap-2">
+                <Server className="size-4 text-success" />
                 {t("server")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+              </FrameTitle>
+            </FrameHeader>
+            <FramePanel className="space-y-3 text-sm">
               <DetailRow label={t("platform")} value={runtime?.process.platform ?? "-"} />
               <DetailRow label={t("pid")} value={String(runtime?.process.pid ?? "-")} />
               <DetailRow label={t("uptime")} value={formatUptime(runtime?.process.uptimeSec)} />
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Timer className="h-4 w-4" />
+          <Frame>
+            <FrameHeader>
+              <FrameTitle className="flex items-center gap-2">
+                <Timer className="size-4 text-info" />
                 {t("runtime")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+              </FrameTitle>
+            </FrameHeader>
+            <FramePanel className="space-y-3 text-sm">
               <DetailRow
                 label={t("scheduler")}
                 value={runtime?.scheduler.running ? t("schedulerRunning") : t("schedulerStopped")}
@@ -213,8 +226,8 @@ export function MonitoringPage() {
                 label={t("lastUpdated")}
                 value={updatedAt ? timeFormatter.format(new Date(updatedAt)) : "-"}
               />
-            </CardContent>
-          </Card>
+            </FramePanel>
+          </Frame>
         </section>
       </div>
     </AppShell>

@@ -2,7 +2,7 @@ import { type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { IntlProvider } from "use-intl";
 
-import { Toaster as Sonner } from "@kumix/ui/ui/sonner";
+import { ToastContainer } from "@kumix/ui/custom/toast";
 import { TooltipProvider } from "@kumix/ui/ui/tooltip";
 import { DEFAULT_THEME_MODE, THEME_MODES } from "@kumix/utils";
 import { LOCALES, type Locale, LocaleContext, type LocaleContextType } from "@/hooks/use-locale";
@@ -16,7 +16,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <ThemeProvider>
         <AuthGate>
           <Suspense>{children}</Suspense>
-          <Sonner position="top-center" />
+          <ToastContainer />
         </AuthGate>
       </ThemeProvider>
     </I18nProvider>

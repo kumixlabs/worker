@@ -15,6 +15,8 @@ import {
 import { Link } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
+import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
+import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Button } from "@kumix/ui/ui/button";
 import {
   Combobox,
@@ -41,9 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@kumix/ui/ui/dropdown-menu";
 import { Input } from "@kumix/ui/ui/input";
-import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -110,18 +110,18 @@ export function StreamsPage() {
   const startStream = useMutation({
     mutationFn: api.startStream,
     onSuccess: () => {
-      AlertSuccess({ message: t("started") });
+      toastSuccess({ message: t("started") });
       refresh();
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const stopStream = useMutation({
     mutationFn: api.stopStream,
     onSuccess: () => {
-      AlertSuccess({ message: t("stopped") });
+      toastSuccess({ message: t("stopped") });
       refresh();
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const updateStream = useMutation({
     mutationFn: () => {
@@ -138,28 +138,28 @@ export function StreamsPage() {
       return api.patchStream(editStream?.id ?? "", body);
     },
     onSuccess: () => {
-      AlertSuccess({ message: t("updated") });
+      toastSuccess({ message: t("updated") });
       setEditStream(null);
       refresh();
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const deleteStream = useMutation({
     mutationFn: api.deleteStream,
     onSuccess: () => {
-      AlertSuccess({ message: t("deleted") });
+      toastSuccess({ message: t("deleted") });
       refresh();
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const deleteStreams = useMutation({
     mutationFn: api.deleteStreams,
     onSuccess: (result) => {
-      AlertSuccess({ message: t("deleted") });
-      for (const failed of result.failed) AlertError({ message: failed.message });
+      toastSuccess({ message: t("deleted") });
+      for (const failed of result.failed) toastError({ message: failed.message });
       refresh();
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const confirmDelete = () => {
     if (!deleteId) return;
@@ -198,7 +198,7 @@ export function StreamsPage() {
         const signed = await api.signedUrl(api.streamEventsExportPath(id));
         window.location.href = signed.url;
       } catch (error) {
-        AlertError({ message: error instanceof Error ? error.message : common("loadError") });
+        toastError({ message: error instanceof Error ? error.message : common("loadError") });
       }
     },
     [common],
@@ -346,16 +346,7 @@ export function StreamsPage() {
   );
 
   return (
-    <AppShell
-      title={t("title")}
-      description={t("description")}
-      actions={
-        <Button render={<Link to="/streams/new" />} nativeButton={false}>
-          <Plus />
-          {t("create")}
-        </Button>
-      }
-    >
+    <AppShell title={t("title")} description={t("description")}>
       <Dialog
         open={!!editStream}
         onOpenChange={(open) => {
@@ -490,6 +481,12 @@ export function StreamsPage() {
         </DialogContent>
       </Dialog>
       <DataTable
+        actions={
+          <Button render={<Link to="/streams/new" />} nativeButton={false}>
+            <Plus />
+            {t("create")}
+          </Button>
+        }
         columns={columns}
         data={streams}
         empty={t("empty")}
@@ -497,10 +494,9 @@ export function StreamsPage() {
         isError={streamsQuery.isError}
         errorMessage={common("loadError")}
         searchPlaceholder={common("search")}
+        clearSearchLabel={common("clearSearch")}
         initialSorting={[{ id: "time", desc: true }]}
         selectedActionLabel={common("deleteSelected")}
-        selectAllLabel={common("selectAll")}
-        selectRowLabel={common("selectRow")}
         onDeleteSelected={setDeleteIds}
         getCanSelectRow={(stream) => stream.status !== "running" && stream.status !== "stopping"}
       />

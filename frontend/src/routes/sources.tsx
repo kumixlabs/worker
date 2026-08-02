@@ -16,8 +16,17 @@ import {
 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
+import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
+import {
+  Frame,
+  FrameDescription,
+  FrameFooter,
+  FrameHeader,
+  FramePanel,
+  FrameTitle,
+} from "@kumix/ui/reui/frame";
 import { Button } from "@kumix/ui/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kumix/ui/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +44,7 @@ import {
 } from "@kumix/ui/ui/dropdown-menu";
 import { Input } from "@kumix/ui/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
-import { AlertError, AlertSuccess } from "@/components/Alert";
 import { AppShell } from "@/components/AppShell";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
@@ -115,59 +122,59 @@ export function SourcesPage() {
       setUrl("");
       setKind("gdrive");
       setOpen(false);
-      AlertSuccess({ message: t("sourceCreated") });
+      toastSuccess({ message: t("sourceCreated") });
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const deleteSource = useMutation({
     mutationFn: api.deleteSource,
     onSuccess: () => {
-      AlertSuccess({ message: t("sourceDeleted") });
+      toastSuccess({ message: t("sourceDeleted") });
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const deleteSources = useMutation({
     mutationFn: api.deleteSources,
     onSuccess: (result) => {
-      AlertSuccess({ message: t("sourceDeleted") });
-      for (const failed of result.failed) AlertError({ message: failed.message });
+      toastSuccess({ message: t("sourceDeleted") });
+      for (const failed of result.failed) toastError({ message: failed.message });
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const cancelSource = useMutation({
     mutationFn: api.cancelSource,
     onSuccess: () => {
-      AlertSuccess({ message: t("sourceCancelled") });
+      toastSuccess({ message: t("sourceCancelled") });
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const retrySource = useMutation({
     mutationFn: api.retrySource,
     onSuccess: () => {
-      AlertSuccess({ message: t("sourceRetrying") });
+      toastSuccess({ message: t("sourceRetrying") });
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
       void queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const patchSource = useMutation({
     mutationFn: () => api.patchSource(editId ?? "", { name: editName.trim() }),
     onSuccess: () => {
-      AlertSuccess({ message: t("sourceUpdated") });
+      toastSuccess({ message: t("sourceUpdated") });
       setEditId(null);
       setEditName("");
       void queryClient.invalidateQueries({ queryKey: ["sources"] });
       void queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
-    onError: (error) => AlertError({ message: error.message }),
+    onError: (error) => toastError({ message: error.message }),
   });
   const confirmDelete = () => {
     if (!deleteId) return;
@@ -191,7 +198,7 @@ export function SourcesPage() {
         const { url } = await api.previewUrl(source.id);
         setPreviewUrl(url);
       } catch (error) {
-        AlertError({ message: error instanceof Error ? error.message : t("preview.loadError") });
+        toastError({ message: error instanceof Error ? error.message : t("preview.loadError") });
         setPreviewSource(null);
       }
     },
@@ -326,16 +333,7 @@ export function SourcesPage() {
   );
 
   return (
-    <AppShell
-      title={t("title")}
-      description={t("description")}
-      actions={
-        <Button onClick={() => setOpen(true)}>
-          <Plus />
-          {t("addTitle")}
-        </Button>
-      }
-    >
+    <AppShell title={t("title")} description={t("description")}>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -523,43 +521,51 @@ export function SourcesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Card>
-        <CardHeader className="min-h-0 py-4">
-          <CardTitle className="flex items-center gap-2">
+      <Frame>
+        <FrameHeader>
+          <FrameTitle className="flex items-center gap-2">
             <Database className="h-4 w-4" />
             {t("storageTitle")}
-          </CardTitle>
-          <CardDescription>{t("storageDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="font-bold text-3xl tracking-tight">{usedGb} GB</p>
-              <p className="mt-1 text-muted-foreground text-sm">{t("cacheUsed")}</p>
-            </div>
-            <div className="text-right">
-              <p className="font-semibold text-2xl tracking-tight">{readyCount}</p>
-              <p className="text-muted-foreground text-xs">{t("readySources")}</p>
+          </FrameTitle>
+          <FrameDescription>{t("storageDescription")}</FrameDescription>
+        </FrameHeader>
+        <FramePanel>
+          <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="font-bold text-3xl tracking-tight">{usedGb} GB</p>
+                <p className="mt-1 text-muted-foreground text-sm">{t("cacheUsed")}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold text-2xl tracking-tight">{readyCount}</p>
+                <p className="text-muted-foreground text-xs">{t("readySources")}</p>
+              </div>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{t("diskUsage")}</span>
-              <span className={nearLimit ? "font-medium text-destructive" : "font-medium"}>
-                {diskUsedPercent}% / {diskLimit}%
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full transition-all ${nearLimit ? "bg-destructive" : "bg-primary"}`}
-                style={{ width: `${Math.min(diskUsedPercent, 100)}%` }}
-              />
-            </div>
-            {nearLimit ? <p className="text-destructive text-xs">{t("diskNearLimit")}</p> : null}
+        </FramePanel>
+        <FrameFooter className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">{t("diskUsage")}</span>
+            <span className={nearLimit ? "font-medium text-destructive" : "font-medium"}>
+              {diskUsedPercent}% / {diskLimit}%
+            </span>
           </div>
-        </CardContent>
-      </Card>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={`h-full rounded-full transition-all ${nearLimit ? "bg-destructive" : "bg-primary"}`}
+              style={{ width: `${Math.min(diskUsedPercent, 100)}%` }}
+            />
+          </div>
+          {nearLimit ? <p className="text-destructive text-xs">{t("diskNearLimit")}</p> : null}
+        </FrameFooter>
+      </Frame>
       <DataTable
+        actions={
+          <Button onClick={() => setOpen(true)}>
+            <Plus />
+            {t("addTitle")}
+          </Button>
+        }
         columns={columns}
         data={sources}
         empty={common("empty")}
@@ -567,10 +573,9 @@ export function SourcesPage() {
         isError={sourcesQuery.isError}
         errorMessage={common("loadError")}
         searchPlaceholder={common("search")}
+        clearSearchLabel={common("clearSearch")}
         initialSorting={[{ id: "createdAt", desc: true }]}
         selectedActionLabel={common("deleteSelected")}
-        selectAllLabel={common("selectAll")}
-        selectRowLabel={common("selectRow")}
         onDeleteSelected={setDeleteIds}
       />
       <ConfirmDialog

@@ -29,10 +29,10 @@ describe("frontend smoke", () => {
     expect(log).toContain("loadOlderEvents");
   });
 
-  it("uses starter Checkbox for selectable tables", () => {
+  it("uses DataGrid row selection for selectable tables", () => {
     const table = read("frontend/src/components/DataTable.tsx");
-    expect(table).toContain("Checkbox");
-    expect(table).toContain("onCheckedChange");
+    expect(table).toContain("DataGridTableRowSelect");
+    expect(table).toContain("DataGridTableRowSelectAll");
   });
 
   it("keeps stream edit available while locking non-URL fields when live", () => {

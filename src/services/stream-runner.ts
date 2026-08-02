@@ -101,6 +101,18 @@ function emit(streamId: string, event: unknown): void {
  * @returns Stop request summary with remaining tracked streams.
  */
 export async function stopAllStreams(timeoutMs = 12_000): Promise<StopAllStreamsResult> {
+  for (const [id, timer] of restartTimers) {
+    clearTimeout(timer);
+    restartTimers.delete(id);
+    stopRequested.delete(id);
+    forceSetStreamStatus(id, "stopped", {
+      stoppedAt: new Date().toISOString(),
+      pid: null,
+      lastError: null,
+    });
+    addEvent(id, "stopped", "Stopped during shutdown", null);
+    emit(id, { type: "status", status: "stopped" });
+  }
   const streamIds = Array.from(processes.keys());
   for (const streamId of streamIds) stopStream(streamId);
   if (streamIds.length === 0) return { requested: [], remaining: [] };

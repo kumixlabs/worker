@@ -2,6 +2,60 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.0] - 2026-08-02
+
+Dashboard redesign: animated collapsible sidebar, Frame-based card system, enhanced DataTable with DataGrid, animated toast system, and UI library upgrade to `@kumix/ui` 0.3.x.
+
+### Breaking
+
+- `@kumix/ui` peer dependency bumped to `^0.3.1`; `@kumix/utils` bumped to `^0.1.3`.
+- `sonner` dependency removed from the frontend bundle. All toast notifications now use `@kumix/ui/custom/toast` (`toastSuccess`, `toastError`).
+- `shadcn` moved from `dependencies` to `devDependencies` in the frontend package (CSS resolution only).
+- Local `Alert.tsx`, `ConfirmDialog.tsx`, `MaxWidthWrapper.tsx`, `ModeSwitcher.tsx` components deleted from the frontend. Replaced by `@kumix/ui` equivalents.
+- `LogoWithHref` export removed from `Logo.tsx` (dead code).
+
+### Added
+
+#### Dashboard UI
+
+- Animated collapsible sidebar (`@kumix/ui/motion/animated-sidebar`): icon rail mode, mobile overlay, keyboard shortcut (⌘B), active-route highlighting, and a header breadcrumb showing the current page name.
+- `ThemeToggle` from `@kumix/ui/motion/theme-toggle` replaces the local `ModeSwitcher` component.
+- `ConfirmSignOut` from `@kumix/ui/custom/confirm-dialog` replaces the local `ConfirmDialog` for sign-out confirmation.
+- `Frame` / `FramePanel` / `FrameHeader` / `FrameFooter` / `FrameTitle` card system (`@kumix/ui/reui/frame`) replaces `Card` / `CardContent` across all 9 route pages.
+- Animated toast system (`@kumix/ui/custom/toast`) with `ToastContainer`, `toastSuccess`, and `toastError` helpers — mounted in `Providers.tsx`.
+- `InputGroup`-based search bar in `DataTable` with a clear-search button.
+- i18n key `Common.clearSearch` added to both `en.json` and `id.json`.
+
+### Changed
+
+- All `Card`/`CardContent`/`CardFooter` usage across the frontend replaced with `Frame`/`FramePanel`/`FrameFooter`.
+- All `@kumix/ui/ui/button` and `@kumix/ui/ui/input` imports in `AuthGate.tsx` replaced with `@kumix/ui/motion/button/base` and `@kumix/ui/motion/input`.
+- `StatusBadge` variants changed to `-light` suffix (`success-light`, `warning-light`, `destructive-light`) for softer dashboard appearance.
+- `DataTable` rewritten to use `DataGridTable`, `DataGridScrollArea`, `DataGridTableRowSelect`, `DataGridTableRowSelectAll` from `@kumix/ui/reui/data-grid` instead of manual `Checkbox`/`ScrollArea` wrappers.
+- `DataTable` restores local non-memoized `SortableHeader` to fix sort UI freeze caused by `DataGridColumnHeader`'s `memo()` wrapper (stable column ref blocks re-render on sort state change).
+- Mobile sidebar width `--sidebar-width-mobile` set to `26rem` in `:root` (`styles.css`) because CSS vars on the sidebar/provider don't reach `createPortal` content.
+- `vite.config.ts` manual chunks split: `framer-motion`/motion components → `motion` chunk, `lucide-react` → `icons` chunk. All chunks now under 500 KB.
+- `vite.config.ts` `__dirname` → `import.meta.dirname` (Vite 8 ESM).
+- `vitest.config.ts` `__dirname` → `import.meta.dirname`.
+- Stale frontend smoke test updated: `Checkbox`/`onCheckedChange` assertions → `DataGridTableRowSelect`/`DataGridTableRowSelectAll`.
+- `NumberField` `onValueChange` handler fixed: Base UI passes `(value: number, event?)`, not a DOM event — was using `event.target.value`.
+
+### Removed
+
+- 8 dead i18n keys: `Shell.closeSidebar`, `Shell.mode.{toggle,light,dark,system}`, `Common.selectAll`, `Common.selectRow`, `Settings.apiTokenLength` (all orphaned by UI migration).
+- Unused `NumberFieldScrubArea` import from `settings.tsx`.
+- Removed `--text-2xs`, `--text-2sm` custom font-size CSS variables and `container`/`container-fluid` utilities from `styles.css` (unused after Frame migration).
+
+### Fixed
+
+#### Backend bugs
+
+- **`stopAllStreams` now clears pending restart timers** (`stream-runner.ts`): previously, streams in the FFmpeg reconnect window (exited process, pending restart timer) were missed during graceful shutdown. The restart timer could fire after `process.exit`, spawning an orphaned FFmpeg process and causing double-start on auto-resume. Restart timers are now cleared and those streams marked `stopped`.
+- **PATCH target response now includes `streamKeyMasked`** (`db/targets.ts`): `patchTarget` destructured out the `streamKey` cipher before returning, so `safeTarget()` received no cipher to decrypt/mask. Now returns the full row; `safeTarget` correctly produces the masked key.
+- **`clearTimeout` in `client.ts` actually fires**: `.unref?.()` returned `undefined`, making the `timeout` variable always falsy so `clearTimeout` in the `finally` block was dead code. Timer handle is now stored before calling `.unref()`.
+- **Source retry marks invalid on failure** (`routes/sources.ts`): the retry endpoint (`POST /api/sources/:id/retry`) only logged to console on failure, leaving the source stuck in its prior state. Now mirrors the create path: marks `invalid`, emits `source_download_failed` event.
+- **Stream PATCH/start return 404 instead of `ok(null)` on race** (`routes/streams.ts`): if a stream was deleted between the existence check and `patchStream`/`startStream`, the route returned `ok(null)` (HTTP 200 with `{ ok: true }` and no data). Now returns 404.
+
 ## [0.3.2] - 2026-07-28
 
 Patch: auth token now persists in `localStorage` (survives tab close) and the restart-exhausted failure path includes the same FFmpeg stderr diagnostic as `restart_scheduled`.
