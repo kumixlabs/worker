@@ -2,6 +2,12 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.1] - [Unreleased]
+
+### Fixed
+
+- CSP `img-src` now allows `https://*.ytimg.com` and `https://*.ggpht.com` so YouTube thumbnails render on the stream analytics page.
+
 ## [0.4.0] - 2026-08-02
 
 Dashboard redesign: animated collapsible sidebar, Frame-based card system, enhanced DataTable with DataGrid, animated toast system, and UI library upgrade to `@kumix/ui` 0.3.x.
