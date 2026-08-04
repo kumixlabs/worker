@@ -118,7 +118,10 @@
     "nextTitle": "Jadwal Berikutnya",
     "nextEmpty": "Belum ada stream terjadwal.",
     "activityTitle": "Aktivitas Terbaru",
-    "activityEmpty": "Belum ada aktivitas."
+    "activityEmpty": "Belum ada aktivitas.",
+    "bandwidthToday": "Upload Hari Ini",
+    "bandwidthMonth": "Upload Bulan Ini",
+    "bandwidthAllTime": "Total Upload"
   },
   "CreateTask": {
     "title": "Buat Tugas Live",

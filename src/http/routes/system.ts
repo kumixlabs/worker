@@ -2,6 +2,7 @@
 
 import type { Hono } from "hono";
 
+import { getBandwidthSummary } from "../../db/bandwidth";
 import { stats } from "../../db/stats";
 import { listStreams } from "../../db/streams";
 import { hashPassword, isDefaultPasswordHash, verifyPassword } from "../../lib/password";
@@ -63,6 +64,16 @@ export function registerSystemRoutes(app: Hono) {
       "Returns CPU, memory, storage, live stream throughput, scheduler, and process metrics.",
     ),
     (c) => c.json(ok(runtimeMetrics(listStreams(), schedulerState()))),
+  );
+
+  app.get(
+    "/api/bandwidth",
+    doc(
+      "System",
+      "Read bandwidth summary",
+      "Returns bandwidth usage: today, this month, all-time, per-stream, and 30-day daily breakdown.",
+    ),
+    (c) => c.json(ok(getBandwidthSummary())),
   );
 
   app.get(

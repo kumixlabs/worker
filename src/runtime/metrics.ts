@@ -177,10 +177,14 @@ export function runtimeMetrics(streams: StreamRecord[] = [], scheduler = default
   const storage = storageMetrics(cacheDir);
   const usage = process.resourceUsage();
   const coreCount = cpus().length;
+  const runningStreams = streams.filter((stream) => stream.status === "running");
   const outboundMbps =
-    streams
-      .filter((stream) => stream.status === "running")
-      .reduce((total, stream) => total + (stream.lastMetrics?.bitrateKbps ?? 0), 0) / 1000;
+    runningStreams.reduce((total, stream) => total + (stream.lastMetrics?.bitrateKbps ?? 0), 0) /
+    1000;
+  const sessionBytes = runningStreams.reduce(
+    (total, stream) => total + (stream.lastMetrics?.totalBytes ?? 0),
+    0,
+  );
   return {
     cpu: {
       cores: coreCount,
@@ -197,6 +201,7 @@ export function runtimeMetrics(streams: StreamRecord[] = [], scheduler = default
     storage,
     network: {
       outboundMbps,
+      sessionBytes,
     },
     scheduler,
     process: {

@@ -46,7 +46,7 @@ export const publicWorkerStatsSchema = z.object({
     }),
     disk: diskSchema,
     cacheBytes: z.number(),
-    network: z.object({ outboundMbps: z.number() }),
+    network: z.object({ outboundMbps: z.number(), sessionBytes: z.number() }),
     process: z.object({
       pid: z.number(),
       startedAt: z.string(),

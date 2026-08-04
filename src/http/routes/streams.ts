@@ -3,6 +3,7 @@
 import type { Hono } from "hono";
 import { z } from "zod";
 
+import { getStreamBytes } from "../../db/bandwidth";
 import { getSource } from "../../db/sources";
 import { createStream, deleteStream, getStream, listStreams, patchStream } from "../../db/streams";
 import { getTarget } from "../../db/targets";
@@ -108,6 +109,7 @@ export function registerStreamRoutes(app: Hono) {
   app.get("/api/streams/:id", doc("Streams", "Read stream", "Returns one stream job."), (c) => {
     const stream = getStream(c.req.param("id"));
     if (!stream) return fail("NOT_FOUND", "Stream not found", 404);
+    stream.bytesSent = getStreamBytes(stream.id);
     return c.json(ok(stream));
   });
 

@@ -13,6 +13,26 @@ CLI: `kumix-worker`
 
 ## Quick Start
 
+### One-line install (Ubuntu / Debian VPS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kumixlabs/worker/main/install.sh | sudo bash
+```
+
+This runs `apt update && upgrade`, installs Node.js 24 + FFmpeg, installs the worker, configures systemd with auto-start, and prints the dashboard URL. Everything in one command — just open `http://<server-ip>:8080` when it's done.
+
+**Must run as root** (`sudo`). Without sudo it will refuse and tell you to re-run with `sudo`.
+
+Options:
+
+```bash
+# Custom port + timezone
+curl -fsSL https://raw.githubusercontent.com/kumixlabs/worker/main/install.sh | sudo bash -s -- --port 9090 --timezone UTC
+
+# Uninstall everything (service + package + data)
+curl -fsSL https://raw.githubusercontent.com/kumixlabs/worker/main/install.sh | sudo bash -s -- --uninstall
+```
+
 ### NPM (global install)
 
 ```bash

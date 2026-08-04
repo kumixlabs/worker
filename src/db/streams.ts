@@ -8,6 +8,7 @@ import { nowIso, parseJson } from "../lib/utils";
 import type { StreamCreateInput, StreamPatchInput } from "../schemas/stream";
 import type { SourceRecord } from "../types/source";
 import type { StreamMetrics, StreamRecord } from "../types/stream";
+import { getAllStreamBytes } from "./bandwidth";
 import { getDb } from "./client";
 
 /**
@@ -58,11 +59,13 @@ export function listStreams(): StreamRecord[] {
        ORDER BY s.created_at DESC`,
     )
     .all() as Record<string, unknown>[];
+  const bytesMap = getAllStreamBytes();
   return rows.map((row) => {
     const s = mapStreamRow(row);
     const sourceName = row.source_name as string | undefined;
     return {
       ...s,
+      bytesSent: bytesMap.get(s.id) ?? 0,
       source: sourceName
         ? {
             id: s.sourceId,

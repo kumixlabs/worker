@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Clock, Plus, Radio, Square } from "lucide-react";
+import { AlertTriangle, Clock, HardDriveUpload, Plus, Radio, Square } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
@@ -14,6 +14,7 @@ import { EventKindBadge } from "@/components/EventKindBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter, useTimeFormatter } from "@/lib/date";
+import { formatBytes } from "@/lib/format";
 
 export function Dashboard() {
   const t = useTranslations("Dashboard");
@@ -38,6 +39,12 @@ export function Dashboard() {
     refetchIntervalInBackground: false,
   });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const bandwidthQuery = useQuery({
+    queryKey: ["bandwidth"],
+    queryFn: api.bandwidth,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
   const timeFormatter = useTimeFormatter(settingsQuery.data);
 
@@ -161,6 +168,38 @@ export function Dashboard() {
                 </FramePanel>
               </Frame>
             </Link>
+          ))}
+        </section>
+
+        <section className="grid gap-5 sm:grid-cols-3">
+          {[
+            {
+              key: "today",
+              label: t("bandwidthToday"),
+              value: bandwidthQuery.data?.today,
+            },
+            {
+              key: "month",
+              label: t("bandwidthMonth"),
+              value: bandwidthQuery.data?.thisMonth,
+            },
+            {
+              key: "allTime",
+              label: t("bandwidthAllTime"),
+              value: bandwidthQuery.data?.allTime,
+            },
+          ].map(({ key, label, value }) => (
+            <Frame key={key}>
+              <FrameHeader>
+                <FrameTitle className="flex items-center gap-2">
+                  <HardDriveUpload className="size-4 text-muted-foreground" />
+                  {label}
+                </FrameTitle>
+              </FrameHeader>
+              <FramePanel className="p-5">
+                <p className="font-bold text-2xl tracking-tight">{formatBytes(value ?? 0)}</p>
+              </FramePanel>
+            </Frame>
           ))}
         </section>
 

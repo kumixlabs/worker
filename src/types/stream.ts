@@ -19,6 +19,7 @@ export interface StreamMetrics {
   fps: number | null;
   bitrateKbps: number | null;
   droppedFrames: number | null;
+  totalBytes: number | null;
 }
 
 /**
@@ -43,6 +44,7 @@ export interface StreamRecord {
   lastMetrics: StreamMetrics | null;
   createdAt: string;
   updatedAt: string;
+  bytesSent?: number;
   source?: Pick<SourceRecord, "id" | "name" | "status" | "kind">;
   target?: Pick<TargetRecord, "id" | "label" | "active" | "ingestUrl">;
 }

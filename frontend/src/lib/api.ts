@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
 import type { YouTubeAnalytics } from "../../../src/services/youtube";
+import type { BandwidthSummary } from "../../../src/types/bandwidth";
 import type { EventRecord } from "../../../src/types/event";
 import type { SourceRecord } from "../../../src/types/source";
 import type { StreamRecord } from "../../../src/types/stream";
@@ -301,4 +302,6 @@ export const api = {
   streamEventsPath: (id: string) => `/api/streams/${id}/events/stream`,
   streamAnalytics: (id: string, { signal }: { signal?: AbortSignal } = {}) =>
     request<YouTubeAnalytics>(`/api/streams/${id}/analytics`, { signal }),
+  bandwidth: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<BandwidthSummary>("/api/bandwidth", { signal }),
 };

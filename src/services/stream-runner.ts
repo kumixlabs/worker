@@ -4,6 +4,7 @@
 
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 
+import { recordBandwidth } from "../db/bandwidth";
 import { getDb } from "../db/client";
 import { addEvent } from "../db/events";
 import { getSource } from "../db/sources";
@@ -170,11 +171,24 @@ export function parseMetrics(line: string, previous: StreamMetrics | null): Stre
   const fps = line.match(/fps=\s*([\d.]+)/)?.[1];
   const bitrate = line.match(/bitrate=\s*([\d.]+)kbits\/s/)?.[1];
   const dropped = line.match(/drop=\s*(\d+)/)?.[1];
-  if (!fps && !bitrate && !dropped) return previous;
+  const sizeMatch = line.match(/size=\s*([\d.]+)\s*(kB|MB|GB)?/);
+  if (!fps && !bitrate && !dropped && !sizeMatch) return previous;
+  let totalBytes = previous?.totalBytes ?? null;
+  if (sizeMatch) {
+    const n = Number(sizeMatch[1]);
+    const unit = sizeMatch[2];
+    totalBytes =
+      unit === "GB"
+        ? Math.round(n * 1_073_741_824)
+        : unit === "MB"
+          ? Math.round(n * 1_048_576)
+          : Math.round(n * 1024);
+  }
   return {
     fps: fps ? Number(fps) : (previous?.fps ?? null),
     bitrateKbps: bitrate ? Number(bitrate) : (previous?.bitrateKbps ?? null),
     droppedFrames: dropped ? Number(dropped) : (previous?.droppedFrames ?? null),
+    totalBytes,
   };
 }
 
@@ -392,6 +406,8 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
 
     let lastMetrics: StreamMetrics | null = null;
     let lastMetricsPersistAt = 0;
+    let lastRecordedBytes: number | null = null;
+    let bandwidthLogAt = 0;
     const diagnosticLines: string[] = [];
     let stderrBuffer = "";
     const rememberDiagnostic = (line: string) => {
@@ -411,6 +427,19 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
         if (metrics && metrics !== lastMetrics) {
           lastMetrics = metrics;
           emit(streamId, { type: "metrics", metrics });
+          if (metrics.totalBytes != null) {
+            if (Date.now() - bandwidthLogAt >= 60_000) {
+              if (lastRecordedBytes !== null && metrics.totalBytes > lastRecordedBytes) {
+                try {
+                  recordBandwidth(streamId, metrics.totalBytes - lastRecordedBytes);
+                } catch {
+                  // ignore bandwidth write failure
+                }
+              }
+              lastRecordedBytes = metrics.totalBytes;
+              bandwidthLogAt = Date.now();
+            }
+          }
           if (Date.now() - lastMetricsPersistAt >= 5_000) {
             lastMetricsPersistAt = Date.now();
             if (getStream(streamId)?.status === "running")
@@ -429,6 +458,14 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
     const settle = (status: "stopped" | "failed", message: string, payload: unknown) => {
       if (settled) return;
       settled = true;
+      const finalBytes = lastMetrics?.totalBytes;
+      if (finalBytes != null && lastRecordedBytes !== null && finalBytes > lastRecordedBytes) {
+        try {
+          recordBandwidth(streamId, finalBytes - lastRecordedBytes);
+        } catch {
+          // ignore final bandwidth flush failure
+        }
+      }
       processes.delete(streamId);
       processStartedAt.delete(streamId);
       stopRequested.delete(streamId);

@@ -2,7 +2,16 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
-## [0.4.1] - [Unreleased]
+## [0.4.1] - 2026-08-04
+
+### Added
+
+- One-line VPS installer (`install.sh`): `sudo curl | bash` — auto `apt update + upgrade`, installs Node.js 24 + system FFmpeg, sets `KUMIX_WORKER_FFMPEG_PATH`/`FFPROBE_PATH` env vars, creates systemd service with auto-start. Requires root. Includes `--uninstall`.
+- Bandwidth/data usage tracking: FFmpeg `size=` output parsed to track total bytes sent per stream. Dashboard shows upload today, this month, and all-time totals.
+- `GET /api/bandwidth` endpoint returns aggregated bandwidth summary (today, month, all-time, per-stream breakdown, 30-day daily series).
+- `bandwidth_log` table stores periodic byte deltas (60s interval) with 90-day auto-prune.
+- `network.sessionBytes` added to `/api/metrics` for live session outbound total.
+- `bytesSent` field on stream records (list + detail) shows per-stream cumulative upload.
 
 ### Fixed
 

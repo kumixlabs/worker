@@ -118,7 +118,10 @@
     "nextTitle": "Next Scheduled",
     "nextEmpty": "No upcoming scheduled streams.",
     "activityTitle": "Recent Activity",
-    "activityEmpty": "No recent events."
+    "activityEmpty": "No recent events.",
+    "bandwidthToday": "Upload Today",
+    "bandwidthMonth": "Upload This Month",
+    "bandwidthAllTime": "Total Upload"
   },
   "CreateTask": {
     "title": "Create Live Task",

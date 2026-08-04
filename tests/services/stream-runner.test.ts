@@ -10,10 +10,28 @@ import {
 describe("FFmpeg runner helpers", () => {
   it("parses ffmpeg metrics incrementally", () => {
     const first = parseMetrics("frame=10 fps=29.97 bitrate=2500.5kbits/s drop=2", null);
-    expect(first).toEqual({ bitrateKbps: 2500.5, droppedFrames: 2, fps: 29.97 });
+    expect(first).toEqual({
+      bitrateKbps: 2500.5,
+      droppedFrames: 2,
+      fps: 29.97,
+      totalBytes: null,
+    });
 
     const second = parseMetrics("frame=11 fps=30.01", first);
-    expect(second).toEqual({ bitrateKbps: 2500.5, droppedFrames: 2, fps: 30.01 });
+    expect(second).toEqual({
+      bitrateKbps: 2500.5,
+      droppedFrames: 2,
+      fps: 30.01,
+      totalBytes: null,
+    });
+  });
+
+  it("parses totalBytes from ffmpeg size field", () => {
+    const result = parseMetrics("frame=100 fps=30 size=  51200kB bitrate=2000kbits/s", null);
+    expect(result?.totalBytes).toBe(52_428_800);
+
+    const mb = parseMetrics("frame=100 fps=30 size=10.5MB", null);
+    expect(mb?.totalBytes).toBe(Math.round(10.5 * 1_048_576));
   });
 
   it("detects progress lines so they are never stored as events", () => {

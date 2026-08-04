@@ -170,5 +170,14 @@ function ensureSchema(database: SqliteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_targets_active ON targets(active);
     CREATE INDEX IF NOT EXISTS idx_streams_status ON streams(status);
     CREATE INDEX IF NOT EXISTS idx_events_stream ON events(stream_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS bandwidth_log (
+      id TEXT PRIMARY KEY,
+      stream_id TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+      bytes INTEGER NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_bandwidth_stream ON bandwidth_log(stream_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_bandwidth_recorded ON bandwidth_log(recorded_at);
   `);
 }

@@ -152,7 +152,7 @@ export type WorkerMetrics = {
     cacheBytes: number;
     disk?: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };
   };
-  network: { outboundMbps: number };
+  network: { outboundMbps: number; sessionBytes: number };
   scheduler: {
     running: boolean;
     intervalMs: number;
