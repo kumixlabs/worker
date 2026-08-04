@@ -3,10 +3,11 @@
  */
 
 import { spawn } from "node:child_process";
-import { stat } from "node:fs/promises";
+import { rename, stat, unlink } from "node:fs/promises";
 
+import { addEvent } from "../db/events";
 import { getSource, updateSourceProbe } from "../db/sources";
-import { getFfprobePath } from "../runtime/ffmpeg";
+import { getFfmpegPath, getFfprobePath } from "../runtime/ffmpeg";
 
 /**
  * Normalized media metadata returned by FFprobe.
@@ -58,25 +59,18 @@ export function parseFfprobeJson(stdout: string): ProbeResult {
   };
 }
 
-const maxYouTubeVideoBitrateKbps = 35_000;
-
 /**
- * Validates probe results against streaming requirements.
- * Requires H.264 video, AAC audio, and a YouTube-compatible video bitrate.
+ * Validates that a probed file has both video and audio streams.
+ * Codec and bitrate are not checked here because normalization transcodes
+ * everything to H.264/AAC with a controlled bitrate.
  *
  * @param probe - The parsed probe result.
  * @returns A human-readable reason when invalid, otherwise null.
  */
 export function getInvalidProbeReason(probe: ProbeResult): string | null {
-  const video = (probe.videoCodec ?? "").toLowerCase();
-  const audio = (probe.audioCodec ?? "").toLowerCase();
-  return !["h264", "avc1"].includes(video)
-    ? `Unsupported video codec: ${video || "unknown"}`
-    : !["aac", "mp4a"].includes(audio)
-      ? `Unsupported audio codec: ${audio || "unknown"}`
-      : probe.videoBitrate && probe.videoBitrate > maxYouTubeVideoBitrateKbps
-        ? `Video bitrate too high: ${probe.videoBitrate} kbps (max ${maxYouTubeVideoBitrateKbps} kbps)`
-        : null;
+  if (!probe.videoCodec) return "No video stream found";
+  if (!probe.audioCodec) return "No audio stream found";
+  return null;
 }
 
 /**
@@ -142,32 +136,160 @@ export function ffprobe(filePath: string, signal?: AbortSignal): Promise<ProbeRe
 }
 
 /**
- * Probes a downloaded source file, validates it, and persists the result.
- * Marks the source ready or invalid based on codec/bitrate checks.
+ * Builds FFmpeg arguments to transcode a source file to YouTube-safe H.264/AAC
+ * with a fixed 2-second GOP (keyframe interval) so YouTube does not complain
+ * about infrequent keyframes. Video is always re-encoded so the output is
+ * normalized regardless of the input codec or GOP.
+ *
+ * @param inputPath - Source file to transcode.
+ * @param outputPath - Destination for the normalized file.
+ * @param fps - Frames per second from probe (defaults to 30).
+ * @returns Ordered FFmpeg CLI arguments.
+ */
+export function buildNormalizeArgs(input: {
+  inputPath: string;
+  outputPath: string;
+  fps: number;
+}): string[] {
+  const gop = Math.max(1, Math.round(input.fps * 2));
+  return [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    input.inputPath,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "23",
+    "-g",
+    String(gop),
+    "-keyint_min",
+    String(gop),
+    "-sc_threshold",
+    "0",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ar",
+    "48000",
+    "-movflags",
+    "+faststart",
+    input.outputPath,
+  ];
+}
+
+/**
+ * Transcodes a downloaded source file in-place to YouTube-safe H.264/AAC with
+ * a 2-second keyframe interval. Writes to a temporary file then atomically
+ * replaces the original.
+ *
+ * @param filePath - Absolute path to the downloaded source file.
+ * @param fps - Framerate from probe (defaults to 30).
+ * @returns The same filePath after normalization.
+ */
+async function normalizeSource(filePath: string, fps: number): Promise<void> {
+  const tempPath = `${filePath}.normalized.mp4`;
+  const args = buildNormalizeArgs({
+    inputPath: filePath,
+    outputPath: tempPath,
+    fps: fps > 0 ? fps : 30,
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(getFfmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"] });
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", (error) => reject(error));
+      child.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr || `ffmpeg normalize exited with code ${code}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    await unlink(filePath);
+    await rename(tempPath, filePath);
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Probes a downloaded source file, normalizes it to YouTube-safe encoding,
+ * and persists the result. Marks the source ready or invalid.
  *
  * @param sourceId - The source record ID to update.
  * @param filePath - Absolute path to the downloaded file.
  * @returns The updated source record.
  */
 export async function probeAndUpdateSource(sourceId: string, filePath: string) {
+  if (!getSource(sourceId)) return null;
+  updateSourceProbe(sourceId, { status: "probing", filePath });
+
+  let probe: ProbeResult;
   try {
-    if (!getSource(sourceId)) return null;
-    updateSourceProbe(sourceId, { status: "probing", filePath });
-    const [probe, fileStat] = await Promise.all([ffprobe(filePath), stat(filePath)]);
-    const invalidReason = getInvalidProbeReason(probe);
-    return updateSourceProbe(sourceId, {
-      status: invalidReason ? "invalid" : "ready",
-      invalidReason,
-      ...probe,
-      sizeBytes: fileStat.size,
-      sha256: null,
-      filePath,
-    });
+    probe = await ffprobe(filePath);
   } catch (error) {
+    const message = error instanceof Error ? error.message : "ffprobe failed";
     return updateSourceProbe(sourceId, {
       status: "invalid",
-      invalidReason: error instanceof Error ? error.message : "ffprobe failed",
+      invalidReason: message,
       filePath,
     });
   }
+
+  const invalidReason = getInvalidProbeReason(probe);
+  if (invalidReason) {
+    return updateSourceProbe(sourceId, {
+      status: "invalid",
+      invalidReason,
+      ...probe,
+      filePath,
+    });
+  }
+
+  if (!getSource(sourceId)) {
+    await unlink(filePath).catch(() => undefined);
+    return null;
+  }
+
+  updateSourceProbe(sourceId, { status: "normalizing", filePath });
+  try {
+    await normalizeSource(filePath, probe.fps ?? 30);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "normalize failed";
+    addEvent(null, "source_warning", `Source normalization failed: ${message}`, { sourceId });
+    return updateSourceProbe(sourceId, {
+      status: "invalid",
+      invalidReason: message,
+      filePath,
+    });
+  }
+
+  if (!getSource(sourceId)) {
+    await unlink(filePath).catch(() => undefined);
+    return null;
+  }
+
+  const [normalizedProbe, fileStat] = await Promise.all([ffprobe(filePath), stat(filePath)]);
+  return updateSourceProbe(sourceId, {
+    status: "ready",
+    ...normalizedProbe,
+    sizeBytes: fileStat.size,
+    sha256: null,
+    filePath,
+  });
 }

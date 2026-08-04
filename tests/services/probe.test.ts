@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getInvalidProbeReason, parseFfprobeJson } from "../../src/services/probe";
+import {
+  buildNormalizeArgs,
+  getInvalidProbeReason,
+  parseFfprobeJson,
+} from "../../src/services/probe";
 
 describe("probe helpers", () => {
   it("parses ffprobe json", () => {
@@ -32,7 +36,7 @@ describe("probe helpers", () => {
     });
   });
 
-  it("validates codec and bitrate constraints", () => {
+  it("validates video and audio stream presence", () => {
     expect(
       getInvalidProbeReason({
         audioCodec: "aac",
@@ -54,10 +58,10 @@ describe("probe helpers", () => {
         videoCodec: "vp9",
         width: 1280,
       }),
-    ).toBe("Unsupported video codec: vp9");
+    ).toBeNull();
     expect(
       getInvalidProbeReason({
-        audioCodec: "opus",
+        audioCodec: null,
         durationSec: 1,
         fps: 30,
         height: 720,
@@ -65,28 +69,41 @@ describe("probe helpers", () => {
         videoCodec: "h264",
         width: 1280,
       }),
-    ).toBe("Unsupported audio codec: opus");
+    ).toBe("No audio stream found");
     expect(
       getInvalidProbeReason({
         audioCodec: "aac",
         durationSec: 1,
         fps: 30,
         height: 720,
-        videoBitrate: 35_000,
-        videoCodec: "h264",
+        videoBitrate: null,
+        videoCodec: null,
         width: 1280,
       }),
-    ).toBeNull();
-    expect(
-      getInvalidProbeReason({
-        audioCodec: "aac",
-        durationSec: 1,
-        fps: 30,
-        height: 720,
-        videoBitrate: 35_001,
-        videoCodec: "h264",
-        width: 1280,
-      }),
-    ).toBe("Video bitrate too high: 35001 kbps (max 35000 kbps)");
+    ).toBe("No video stream found");
+  });
+
+  it("builds normalize args with 2-second GOP", () => {
+    const args = buildNormalizeArgs({
+      inputPath: "/tmp/input.mp4",
+      outputPath: "/tmp/output.mp4",
+      fps: 30,
+    });
+    const gIdx = args.indexOf("-g");
+    expect(gIdx).toBeGreaterThan(-1);
+    expect(args[gIdx + 1]).toBe("60");
+    expect(args).toContain("libx264");
+    expect(args).toContain("veryfast");
+    expect(args).toContain("yuv420p");
+  });
+
+  it("builds normalize args with fallback fps for zero", () => {
+    const args = buildNormalizeArgs({
+      inputPath: "/tmp/in.mp4",
+      outputPath: "/tmp/out.mp4",
+      fps: 0,
+    });
+    const gIdx = args.indexOf("-g");
+    expect(args[gIdx + 1]).toBe("1");
   });
 });

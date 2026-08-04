@@ -75,6 +75,7 @@
       "pending": "Pending",
       "downloading": "Downloading",
       "probing": "Probing",
+      "normalizing": "Normalizing",
       "stopping": "Stopping",
       "failed": "Failed",
       "invalid": "Invalid",

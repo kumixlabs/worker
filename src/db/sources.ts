@@ -182,7 +182,12 @@ export function patchSource(id: string, input: SourcePatchInput): SourceRecord |
 export function deleteSource(id: string, force = false): boolean {
   const existing = getSource(id);
   if (!existing) return false;
-  if (!force && (existing.status === "downloading" || existing.status === "probing")) {
+  if (
+    !force &&
+    (existing.status === "downloading" ||
+      existing.status === "probing" ||
+      existing.status === "normalizing")
+  ) {
     throw new Error("Cannot delete a source while it is being processed");
   }
   const row = getDb().query("SELECT COUNT(*) AS count FROM streams WHERE source_id = ?").get(id) as

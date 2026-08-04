@@ -7,7 +7,13 @@
 export type SourceKind = "url" | "gdrive";
 
 /** Lifecycle states of a source as it is downloaded and validated. */
-export type SourceStatus = "pending" | "downloading" | "probing" | "ready" | "invalid";
+export type SourceStatus =
+  | "pending"
+  | "downloading"
+  | "probing"
+  | "normalizing"
+  | "ready"
+  | "invalid";
 
 /** Live download progress for a source that is currently downloading. */
 export interface SourceDownloadProgress {

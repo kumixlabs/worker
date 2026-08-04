@@ -2,6 +2,23 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.2] - Unreleased
+
+### Added
+
+- Source normalization: downloaded videos are now automatically transcoded to YouTube-safe H.264/AAC with a fixed 2-second keyframe interval (GOP) during the download phase. This fixes YouTube's "infrequent keyframes" warning and prevents buffering. Normalization runs once per source — streaming stays `-c:v copy` with zero live CPU overhead.
+- New source status `normalizing` shown in the dashboard during the transcode step (with i18n support in en/id).
+- `buildNormalizeArgs()` exported from `probe.ts` for testability — generates FFmpeg args with `libx264 -preset veryfast -crf 23 -g fps*2 -keyint_min fps*2 -sc_threshold 0 -pix_fmt yuv420p`.
+
+### Changed
+
+- `getInvalidProbeReason()` no longer rejects non-H.264 codecs or high bitrates — normalization handles all codec conversions. Only checks for presence of video and audio streams.
+- `probeAndUpdateSource()` flow is now: probe → normalize → re-probe → ready. Temp file (`.normalized.mp4`) is cleaned up on failure.
+
+### Fixed
+
+- `@tanstack/react-table` pinned to 8.21.3 via workspace catalog to prevent accidental v9 upgrade (incompatible with `@kumix/ui` DataGrid).
+
 ## [0.4.1] - 2026-08-04
 
 ### Added

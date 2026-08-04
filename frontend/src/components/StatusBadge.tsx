@@ -9,6 +9,7 @@ const variantByStatus: Record<string, NonNullable<BadgeProps["variant"]>> = {
   pending: "warning-light",
   downloading: "warning-light",
   probing: "warning-light",
+  normalizing: "warning-light",
   stopping: "warning-light",
   failed: "destructive-light",
   invalid: "destructive-light",

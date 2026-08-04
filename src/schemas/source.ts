@@ -13,7 +13,14 @@ export const sourceKindSchema = z.enum(["url", "gdrive"]);
 /**
  * Lifecycle states of a stream source.
  */
-export const sourceStatusSchema = z.enum(["pending", "ready", "invalid", "downloading", "probing"]);
+export const sourceStatusSchema = z.enum([
+  "pending",
+  "ready",
+  "invalid",
+  "downloading",
+  "probing",
+  "normalizing",
+]);
 
 /**
  * Payload to create a new source.
