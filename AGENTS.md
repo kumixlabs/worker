@@ -14,7 +14,7 @@ Package `@kumix/worker`, CLI `kumix-worker`. Node `>=24`, package manager `bun@1
 | `tests/`       | Vitest (`tests/vitest.config.ts`; `@` → `../src`)  |
 | `src/index.ts` | Public package API — renames/removals are breaking |
 
-Entrypoints: `src/cli.ts` (CLI), `src/http/app.ts` (routes). Schema bootstrapped in `getDb()` via `CREATE TABLE IF NOT EXISTS` — **no migration runner**. Schema changes need manual `ALTER` or drop-recreate. One ad-hoc helper: `tryColumnMigration` (e.g. `youtube_live_url`).
+Entrypoints: `src/cli.ts` (CLI), `src/http/app.ts` (routes). Schema bootstrapped in `getDb()` via `CREATE TABLE IF NOT EXISTS` — **no migration runner**. Schema changes need manual `ALTER` or drop-recreate. One ad-hoc helper: `tryColumnMigration` (e.g. `youtube_live_url`, `keyframe_interval`).
 
 ## Install & commands
 

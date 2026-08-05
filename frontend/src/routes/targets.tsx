@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@kumix/ui/ui/dropdown-menu";
 import { Input } from "@kumix/ui/ui/input";
+import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
 import { DataTable } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
@@ -139,8 +140,14 @@ export function TargetsPage() {
         header: task("targetColumns.label"),
         size: 260,
         cell: ({ row }) => <span className="font-medium">{row.original.label}</span>,
+        meta: { skeleton: <Skeleton className="h-6 w-28" /> },
       },
-      { accessorKey: "ingestUrl", header: task("targetColumns.ingest"), size: 420 },
+      {
+        accessorKey: "ingestUrl",
+        header: task("targetColumns.ingest"),
+        size: 420,
+        meta: { skeleton: <Skeleton className="h-6 w-48" /> },
+      },
       {
         accessorKey: "active",
         header: task("targetColumns.status"),
@@ -150,12 +157,14 @@ export function TargetsPage() {
             {row.original.active ? task("targetColumns.active") : task("targetColumns.disabled")}
           </Badge>
         ),
+        meta: { skeleton: <Skeleton className="h-6 w-16" /> },
       },
       {
         accessorKey: "createdAt",
         header: task("targetColumns.createdAt"),
         size: 190,
         cell: ({ row }) => dateTimeFormatter.format(new Date(row.original.createdAt)),
+        meta: { skeleton: <Skeleton className="h-6 w-28" /> },
       },
       {
         id: "actions",
@@ -192,6 +201,7 @@ export function TargetsPage() {
           </DropdownMenu>
         ),
         enableSorting: false,
+        meta: { skeleton: <Skeleton className="h-6 w-14" /> },
       },
     ],
     [dateTimeFormatter, task, t, toggleTarget, openEdit],

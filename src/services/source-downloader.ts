@@ -527,14 +527,14 @@ async function downloadAndProbeSourceInner(sourceId: string) {
   const effectiveKind: "url" | "gdrive" =
     source.kind === "gdrive" || extractGDriveFileId(source.url) ? "gdrive" : "url";
 
+  updateSourceProbe(sourceId, { status: "downloading" });
+
   if (!(await validateUrl(source.url))) {
     return updateSourceProbe(sourceId, {
       status: "invalid",
       invalidReason: "Blocked by SSRF protection",
     });
   }
-
-  updateSourceProbe(sourceId, { status: "downloading" });
 
   const controller = new AbortController();
   sourceAborts.set(sourceId, controller);

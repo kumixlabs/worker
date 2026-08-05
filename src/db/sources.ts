@@ -34,6 +34,7 @@ function mapSourceRow(row: Record<string, unknown>): SourceRecord {
     width: (row.width as number | null) ?? null,
     height: (row.height as number | null) ?? null,
     fps: (row.fps as number | null) ?? null,
+    keyframeInterval: (row.keyframe_interval as number | null) ?? null,
     sha256: (row.sha256 as string | null) ?? null,
     invalidReason: (row.invalid_reason as string | null) ?? null,
     createdAt: row.created_at as string,
@@ -117,6 +118,7 @@ export function updateSourceProbe(
       | "width"
       | "height"
       | "fps"
+      | "keyframeInterval"
       | "sha256"
       | "sizeBytes"
       | "filePath"
@@ -136,7 +138,7 @@ export function updateSourceProbe(
   }
   getDb()
     .query(
-      "UPDATE sources SET status = ?, invalid_reason = ?, duration_sec = ?, video_codec = ?, audio_codec = ?, video_bitrate = ?, width = ?, height = ?, fps = ?, sha256 = ?, size_bytes = ?, file_path = ?, updated_at = ? WHERE id = ?",
+      "UPDATE sources SET status = ?, invalid_reason = ?, duration_sec = ?, video_codec = ?, audio_codec = ?, video_bitrate = ?, width = ?, height = ?, fps = ?, keyframe_interval = ?, sha256 = ?, size_bytes = ?, file_path = ?, updated_at = ? WHERE id = ?",
     )
     .run(
       data.status ?? existing.status,
@@ -148,6 +150,7 @@ export function updateSourceProbe(
       data.width !== undefined ? data.width : existing.width,
       data.height !== undefined ? data.height : existing.height,
       data.fps !== undefined ? data.fps : existing.fps,
+      data.keyframeInterval !== undefined ? data.keyframeInterval : existing.keyframeInterval,
       data.sha256 !== undefined ? data.sha256 : existing.sha256,
       data.sizeBytes !== undefined ? data.sizeBytes : existing.sizeBytes,
       data.filePath !== undefined ? data.filePath : existing.filePath,
@@ -182,12 +185,7 @@ export function patchSource(id: string, input: SourcePatchInput): SourceRecord |
 export function deleteSource(id: string, force = false): boolean {
   const existing = getSource(id);
   if (!existing) return false;
-  if (
-    !force &&
-    (existing.status === "downloading" ||
-      existing.status === "probing" ||
-      existing.status === "normalizing")
-  ) {
+  if (!force && (existing.status === "downloading" || existing.status === "probing")) {
     throw new Error("Cannot delete a source while it is being processed");
   }
   const row = getDb().query("SELECT COUNT(*) AS count FROM streams WHERE source_id = ?").get(id) as

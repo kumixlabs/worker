@@ -75,7 +75,6 @@
       "pending": "Pending",
       "downloading": "Downloading",
       "probing": "Probing",
-      "normalizing": "Normalizing",
       "stopping": "Stopping",
       "failed": "Failed",
       "invalid": "Invalid",
@@ -233,6 +232,7 @@
       "videoCodec": "Video Codec",
       "audioCodec": "Audio Codec",
       "bitrate": "Bitrate",
+      "keyframeInterval": "Keyframe Interval",
       "sha256": "SHA-256"
     },
     "preview": {

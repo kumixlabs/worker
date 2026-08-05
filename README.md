@@ -94,7 +94,7 @@ Sources support:
 - Codec and bitrate validation with `format.bit_rate` fallback.
 - Local cache storage, removed from disk when a source is deleted.
 - Concurrent download+probe limited to protect disk/CPU.
-- Details dialog with duration, resolution, FPS, codecs, bitrate, and invalid reason.
+- Details dialog with duration, resolution, FPS, codecs, bitrate, keyframe interval, and invalid reason.
 
 Validation rules:
 

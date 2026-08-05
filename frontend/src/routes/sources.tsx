@@ -44,6 +44,7 @@ import {
 } from "@kumix/ui/ui/dropdown-menu";
 import { Input } from "@kumix/ui/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
+import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
 import { DataTable } from "@/components/DataTable";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -223,18 +224,21 @@ export function SourcesPage() {
         header: t("columns.name"),
         size: 320,
         cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        meta: { skeleton: <Skeleton className="h-6 w-32" /> },
       },
       {
         accessorKey: "kind",
         header: t("columns.kind"),
         size: 140,
         cell: ({ row }) => (row.original.kind === "gdrive" ? t("kindGdrive") : t("kindUrl")),
+        meta: { skeleton: <Skeleton className="h-6 w-20" /> },
       },
       {
         accessorKey: "sizeBytes",
         header: t("columns.size"),
         size: 120,
         cell: ({ row }) => formatBytes(row.original.sizeBytes),
+        meta: { skeleton: <Skeleton className="h-6 w-16" /> },
       },
       {
         accessorKey: "status",
@@ -257,12 +261,14 @@ export function SourcesPage() {
             </div>
           );
         },
+        meta: { skeleton: <Skeleton className="h-6 w-20" /> },
       },
       {
         accessorKey: "createdAt",
         header: t("columns.createdAt"),
         size: 190,
         cell: ({ row }) => dateTimeFormatter.format(new Date(row.original.createdAt)),
+        meta: { skeleton: <Skeleton className="h-6 w-28" /> },
       },
       {
         id: "actions",
@@ -327,6 +333,7 @@ export function SourcesPage() {
           </DropdownMenu>
         ),
         enableSorting: false,
+        meta: { skeleton: <Skeleton className="h-6 w-14" /> },
       },
     ],
     [common, dateTimeFormatter, openPreview, t, retrySource.mutate],
@@ -425,6 +432,12 @@ export function SourcesPage() {
                 ) : null}
                 {infoSource.fps ? (
                   <InfoRow label={t("info.fps")} value={`${infoSource.fps} fps`} />
+                ) : null}
+                {infoSource.keyframeInterval ? (
+                  <InfoRow
+                    label={t("info.keyframeInterval")}
+                    value={`${infoSource.keyframeInterval}s`}
+                  />
                 ) : null}
                 {infoSource.videoCodec ? (
                   <InfoRow

@@ -75,7 +75,6 @@
       "pending": "Tertunda",
       "downloading": "Mengunduh",
       "probing": "Menganalisis",
-      "normalizing": "Menormalkan",
       "stopping": "Menghentikan",
       "failed": "Gagal",
       "invalid": "Tidak valid",
@@ -233,6 +232,7 @@
       "videoCodec": "Codec Video",
       "audioCodec": "Codec Audio",
       "bitrate": "Bitrate",
+      "keyframeInterval": "Interval Keyframe",
       "sha256": "SHA-256"
     },
     "preview": {

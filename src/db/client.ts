@@ -74,6 +74,7 @@ export function getDb(): SqliteDatabase {
     };
     ensureSchema(wrapper);
     tryColumnMigration(wrapper, "streams", "youtube_live_url", "TEXT");
+    tryColumnMigration(wrapper, "sources", "keyframe_interval", "REAL");
     dbInstance = instance;
     dbWrapper = wrapper;
     return wrapper;

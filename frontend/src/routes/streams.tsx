@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@kumix/ui/ui/dropdown-menu";
 import { Input } from "@kumix/ui/ui/input";
+import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
 import { DataTable } from "@/components/DataTable";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
@@ -210,12 +211,14 @@ export function StreamsPage() {
         header: t("columns.title"),
         size: 280,
         cell: ({ row }) => <span className="font-medium">{row.original.title}</span>,
+        meta: { skeleton: <Skeleton className="h-6 w-32" /> },
       },
       {
         accessorKey: "status",
         header: t("columns.status"),
         size: 130,
         cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        meta: { skeleton: <Skeleton className="h-6 w-20" /> },
       },
       {
         id: "source",
@@ -223,6 +226,7 @@ export function StreamsPage() {
         header: t("columns.source"),
         size: 220,
         cell: ({ row }) => row.original.source?.name ?? "-",
+        meta: { skeleton: <Skeleton className="h-6 w-28" /> },
       },
       {
         id: "target",
@@ -230,6 +234,7 @@ export function StreamsPage() {
         header: t("columns.target"),
         size: 180,
         cell: ({ row }) => row.original.target?.label ?? "-",
+        meta: { skeleton: <Skeleton className="h-6 w-24" /> },
       },
       {
         id: "time",
@@ -261,6 +266,7 @@ export function StreamsPage() {
             </div>
           );
         },
+        meta: { skeleton: <Skeleton className="h-6 w-28" /> },
       },
       {
         id: "actions",
@@ -340,6 +346,7 @@ export function StreamsPage() {
           </DropdownMenu>
         ),
         enableSorting: false,
+        meta: { skeleton: <Skeleton className="h-6 w-14" /> },
       },
     ],
     [dateTimeFormatter, exportStreamLog, openEdit, startStream, stopStream, t],

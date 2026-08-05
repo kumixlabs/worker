@@ -43,10 +43,12 @@ export function createApiApp() {
     c.header("X-Content-Type-Options", "nosniff");
     c.header("X-Frame-Options", "DENY");
     c.header("Referrer-Policy", "no-referrer");
-    c.header(
-      "Content-Security-Policy",
-      "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob: https://*.ytimg.com https://*.ggpht.com; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'",
-    );
+    if (!c.res.headers.get("Content-Security-Policy")) {
+      c.header(
+        "Content-Security-Policy",
+        "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob: https://*.ytimg.com https://*.ggpht.com; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'",
+      );
+    }
   });
 
   app.use(
@@ -97,7 +99,13 @@ export function createApiApp() {
     }),
   );
 
-  app.get("/docs", Scalar({ theme: "kepler", url: "/openapi" }));
+  app.get("/docs", (c) => {
+    c.header(
+      "Content-Security-Policy",
+      "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' data: https:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://api.scalar.com https://cdn.jsdelivr.net",
+    );
+    return Scalar({ theme: "kepler", url: "/openapi" })(c, () => Promise.resolve());
+  });
   app.get(
     "/api/bootstrap",
     doc(

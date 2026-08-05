@@ -2,7 +2,26 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
-## [0.4.2] - Unreleased
+## [0.4.3] - Unreleased
+
+### Added
+
+- Keyframe interval detection: FFprobe now samples the first 11 I-frames of each source to calculate the average keyframe interval. Displayed in the source detail dialog (e.g. "2s", "8s") so operators can identify sources that may trigger YouTube's "infrequent keyframes" warning before streaming.
+- `keyframe_interval` column added to the sources table via automatic `tryColumnMigration` (no manual ALTER required).
+- DataTable skeleton loading: all tables (sources, streams, targets, log) now show shimmer placeholders per-column while data is loading instead of empty rows.
+- TanStack DevTools integration: React Query inspector panel available in development mode (bottom-right floating button). Fully tree-shaken from production builds.
+
+### Changed
+
+- Source download status now set to `"downloading"` immediately before DNS validation, eliminating the brief `"pending"` delay that appeared in the dashboard after adding a source.
+
+### Fixed
+
+- Source normalization / re-encoding feature removed. Downloaded sources are probed and used as-is — no transcoding, no quality loss, no wait time. The previous CRF 23 + veryfast preset degraded source bitrate by ~40%. Keyframe compliance will be handled at stream/render time instead.
+- `/docs` (Scalar API reference) now loads correctly — CSP relaxed for the Scalar CDN and inline scripts on that route only.
+- Keyframe probe uses `pkt_pts_time,pict_type` format compatible with both ffprobe-static 4.0.2 and system ffprobe 7.x.
+
+## [0.4.2] - 2026-08-05
 
 ### Added
 

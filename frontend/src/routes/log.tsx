@@ -48,6 +48,7 @@ import {
 import { Input } from "@kumix/ui/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@kumix/ui/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
+import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
 import { EventKindBadge, knownEventKinds } from "@/components/EventKindBadge";
 import { api, getApiToken, queryClient } from "@/lib/api";
@@ -267,6 +268,7 @@ export function LogPage() {
         header: t("columns.kind"),
         cell: ({ row }) => <EventKindBadge kind={row.original.kind} />,
         size: 120,
+        meta: { skeleton: <Skeleton className="h-6 w-16" /> },
       },
       {
         id: "stream",
@@ -278,12 +280,14 @@ export function LogPage() {
         },
         size: 180,
         enableSorting: false,
+        meta: { skeleton: <Skeleton className="h-5 w-24" /> },
       },
       {
         accessorKey: "message",
         header: t("columns.message"),
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.message}</span>,
         size: 520,
+        meta: { skeleton: <Skeleton className="h-5 w-full" /> },
       },
       {
         accessorKey: "createdAt",
@@ -294,6 +298,7 @@ export function LogPage() {
           </span>
         ),
         size: 190,
+        meta: { skeleton: <Skeleton className="h-5 w-28" /> },
       },
     ],
     [dateTimeFormatter, streams, t],
