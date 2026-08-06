@@ -2,20 +2,21 @@ import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import {
   type Column,
   type ColumnDef,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   type HeaderContext,
   type PaginationState,
   type Row,
+  type RowData,
   type RowSelectionState,
   type SortingState,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search, Trash2, X } from "lucide-react";
 
-import { DataGrid } from "@kumix/ui/reui/data-grid/data-grid";
+import {
+  DataGrid,
+  type DataGridFeatures,
+  dataGridFeatures,
+} from "@kumix/ui/reui/data-grid/data-grid";
 import { DataGridPagination } from "@kumix/ui/reui/data-grid/data-grid-pagination";
 import { DataGridScrollArea } from "@kumix/ui/reui/data-grid/data-grid-scroll-area";
 import {
@@ -32,6 +33,8 @@ import {
   InputGroupInput,
 } from "@kumix/ui/ui/input-group";
 
+export type GridColumnDef<T extends RowData> = ColumnDef<DataGridFeatures, T>;
+
 function stringifyValue(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
@@ -46,7 +49,13 @@ function searchableRow(row: unknown): string {
   return stringifyValue(row).toLowerCase();
 }
 
-function SortableHeader<T>({ column, title }: { column: Column<T, unknown>; title: string }) {
+function SortableHeader<T extends RowData>({
+  column,
+  title,
+}: {
+  column: Column<DataGridFeatures, T>;
+  title: string;
+}) {
   const sorted = column.getIsSorted();
   if (!column.getCanSort()) {
     return (
@@ -96,7 +105,7 @@ export function DataTable<T extends { id: string }>({
   getCanSelectRow,
 }: {
   actions?: ReactNode;
-  columns: ColumnDef<T>[];
+  columns: GridColumnDef<T>[];
   data: T[];
   empty: ReactNode;
   isLoading?: boolean;
@@ -124,7 +133,7 @@ export function DataTable<T extends { id: string }>({
     if (!term) return data;
     return data.filter((row) => (searchableCache.get(row) ?? "").includes(term));
   }, [data, deferredSearch, searchableCache]);
-  const gridColumns = useMemo<ColumnDef<T>[]>(
+  const gridColumns = useMemo<GridColumnDef<T>[]>(
     () => [
       ...(onDeleteSelected
         ? [
@@ -132,10 +141,12 @@ export function DataTable<T extends { id: string }>({
               id: "select",
               size: 35,
               header: () => <DataGridTableRowSelectAll />,
-              cell: ({ row }: { row: Row<T> }) => <DataGridTableRowSelect row={row} />,
+              cell: ({ row }: { row: Row<DataGridFeatures, T> }) => (
+                <DataGridTableRowSelect row={row} />
+              ),
               enableSorting: false,
               enableResizing: false,
-            } satisfies ColumnDef<T>,
+            } satisfies GridColumnDef<T>,
           ]
         : []),
       ...columns.map((column) => {
@@ -143,15 +154,16 @@ export function DataTable<T extends { id: string }>({
         const headerTitle = column.header as string;
         return {
           ...column,
-          header: ({ column: tableColumn }: HeaderContext<T, unknown>) => (
+          header: ({ column: tableColumn }: HeaderContext<DataGridFeatures, T>) => (
             <SortableHeader column={tableColumn} title={headerTitle} />
           ),
-        } as ColumnDef<T>;
+        } as GridColumnDef<T>;
       }),
     ],
     [columns, onDeleteSelected],
   );
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     columns: gridColumns,
     data: filteredData,
     state: { pagination, sorting, rowSelection },
@@ -160,16 +172,12 @@ export function DataTable<T extends { id: string }>({
     onRowSelectionChange: setRowSelection,
     getRowId: (row) => row.id,
     enableRowSelection: (row) => getCanSelectRow?.(row.original) ?? true,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
   const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
 
   return (
     <DataGrid
-      table={table as never}
+      table={table}
       recordCount={filteredData.length}
       isLoading={isLoading}
       tableLayout={{

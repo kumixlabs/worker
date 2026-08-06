@@ -1,6 +1,5 @@
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import {
   CircleAlert,
   Database,
@@ -46,7 +45,7 @@ import { Input } from "@kumix/ui/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
-import { DataTable } from "@/components/DataTable";
+import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
@@ -217,7 +216,7 @@ export function SourcesPage() {
   const diskUsedPercent = storage?.disk?.usedPercent ?? 0;
   const diskLimit = settingsQuery.data?.diskUsageLimitPercent ?? 90;
   const nearLimit = diskUsedPercent >= diskLimit;
-  const columns = useMemo<ColumnDef<SourceRecord>[]>(
+  const columns = useMemo<GridColumnDef<SourceRecord>[]>(
     () => [
       {
         accessorKey: "name",

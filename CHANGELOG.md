@@ -2,6 +2,12 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.4] - Unreleased
+
+### Changed
+
+- TanStack Table upgraded from v8 to v9: `useReactTable` → `useTable`, row model getters (`getCoreRowModel`, `getFilteredRowModel`, etc.) replaced by `features: dataGridFeatures` bundle from `@kumix/ui`. Exposed `GridColumnDef<T>` helper type from `DataTable` so route files no longer import `ColumnDef` directly.
+
 ## [0.4.3] - Unreleased
 
 ### Added

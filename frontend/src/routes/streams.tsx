@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import {
   BarChart3,
   Download,
@@ -45,7 +44,7 @@ import {
 import { Input } from "@kumix/ui/ui/input";
 import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
-import { DataTable } from "@/components/DataTable";
+import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, queryClient } from "@/lib/api";
@@ -204,7 +203,7 @@ export function StreamsPage() {
     },
     [common],
   );
-  const columns = useMemo<ColumnDef<StreamRecord>[]>(
+  const columns = useMemo<GridColumnDef<StreamRecord>[]>(
     () => [
       {
         accessorKey: "title",

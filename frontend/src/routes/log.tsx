@@ -2,13 +2,9 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "rea
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   type ColumnDef,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   type PaginationState,
   type SortingState,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import {
   ChevronsUpDown,
@@ -29,7 +25,11 @@ import { useTranslations } from "use-intl";
 import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
 import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Badge } from "@kumix/ui/reui/badge";
-import { DataGrid } from "@kumix/ui/reui/data-grid/data-grid";
+import {
+  DataGrid,
+  type DataGridFeatures,
+  dataGridFeatures,
+} from "@kumix/ui/reui/data-grid/data-grid";
 import { DataGridColumnHeader } from "@kumix/ui/reui/data-grid/data-grid-column-header";
 import { DataGridPagination } from "@kumix/ui/reui/data-grid/data-grid-pagination";
 import { DataGridScrollArea } from "@kumix/ui/reui/data-grid/data-grid-scroll-area";
@@ -261,7 +261,7 @@ export function LogPage() {
       toastError({ message: error instanceof Error ? error.message : common("loadError") });
     }
   }, [common]);
-  const columns = useMemo<ColumnDef<EventRecord>[]>(
+  const columns = useMemo<ColumnDef<DataGridFeatures, EventRecord>[]>(
     () => [
       {
         accessorKey: "kind",
@@ -313,21 +313,18 @@ export function LogPage() {
           header: ({ column: tableColumn }) => (
             <DataGridColumnHeader title={title} column={tableColumn} />
           ),
-        } as ColumnDef<EventRecord>;
+        } as ColumnDef<DataGridFeatures, EventRecord>;
       }),
     [columns],
   );
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     columns: gridColumns,
     data: events,
     getRowId: (row) => row.id,
     state: { pagination, sorting },
     onPaginationChange: setPagination,
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
   return (

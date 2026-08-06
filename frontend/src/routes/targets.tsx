@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
@@ -25,7 +24,7 @@ import {
 import { Input } from "@kumix/ui/ui/input";
 import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
-import { DataTable } from "@/components/DataTable";
+import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
 import type { TargetRecord } from "../../../src/types/target";
@@ -133,7 +132,7 @@ export function TargetsPage() {
     },
     onError: (error) => toastError({ message: error.message }),
   });
-  const columns = useMemo<ColumnDef<TargetRecord>[]>(
+  const columns = useMemo<GridColumnDef<TargetRecord>[]>(
     () => [
       {
         accessorKey: "label",
