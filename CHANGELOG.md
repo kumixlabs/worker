@@ -2,13 +2,18 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
-## [0.4.4] - Unreleased
+## [0.4.4] - 2026-08-07
+
+### Fixed
+
+- Keyframe interval not detected on VPS / system ffprobe 5.0+. Switched from deprecated `frame=pkt_pts_time,pict_type` to `packet=pts_time,flags` which works across all ffprobe versions (4.0.2 through 7.x). Keyframe packets detected via `flags=K_` instead of `pict_type=I`.
+- Audio timestamp drift causing FFmpeg `Conversion failed!` after 9–14 hours on certain sources. Audio was unnecessarily re-encoded (`aac → aac` with `aresample` filter) even though all sources are already validated AAC. Now copies audio (`-c:a copy`) alongside video (`-c:v copy`), eliminating drift at loop boundaries entirely.
 
 ### Changed
 
 - TanStack Table upgraded from v8 to v9: `useReactTable` → `useTable`, row model getters (`getCoreRowModel`, `getFilteredRowModel`, etc.) replaced by `features: dataGridFeatures` bundle from `@kumix/ui`. Exposed `GridColumnDef<T>` helper type from `DataTable` so route files no longer import `ColumnDef` directly.
 
-## [0.4.3] - Unreleased
+## [0.4.3] - 2026-08-06
 
 ### Added
 

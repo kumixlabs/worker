@@ -83,7 +83,7 @@ export function getInvalidProbeReason(probe: ProbeResult): string | null {
 
 /**
  * Probes the average keyframe interval (in seconds) by sampling the first 11
- * I-frames of the video stream. Returns null if it cannot be determined.
+ * keyframe packets of the video stream. Returns null if it cannot be determined.
  *
  * @param filePath - Absolute path to the media file.
  * @returns The average interval between keyframes, or null.
@@ -96,13 +96,13 @@ function probeKeyframeInterval(filePath: string): Promise<number | null> {
       "-select_streams",
       "v:0",
       "-show_entries",
-      "frame=pkt_pts_time,pict_type",
+      "packet=pts_time,flags",
       "-of",
       "csv=p=0",
       filePath,
     ];
     const child = spawn(getFfprobePath(), args);
-    const iFrameTimes: number[] = [];
+    const keyframeTimes: number[] = [];
     let leftover = "";
     let settled = false;
     const timer = setTimeout(() => {
@@ -120,11 +120,11 @@ function probeKeyframeInterval(filePath: string): Promise<number | null> {
 
       for (const line of lines) {
         const parts = line.trim().split(",");
-        if (parts.length >= 2 && parts[1] === "I") {
+        if (parts.length >= 2 && parts[1].includes("K")) {
           const t = Number.parseFloat(parts[0]);
-          if (!Number.isNaN(t)) iFrameTimes.push(t);
+          if (!Number.isNaN(t)) keyframeTimes.push(t);
         }
-        if (iFrameTimes.length >= 11) {
+        if (keyframeTimes.length >= 11) {
           child.kill("SIGKILL");
           return;
         }
@@ -141,7 +141,7 @@ function probeKeyframeInterval(filePath: string): Promise<number | null> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      const times = iFrameTimes;
+      const times = keyframeTimes;
       if (times.length < 2) {
         resolve(null);
         return;

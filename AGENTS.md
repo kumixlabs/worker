@@ -101,7 +101,7 @@ Server blocks delete on `running`/`stopping`. Manual stop → `stopped` (not `fa
 - Zod-validate bodies before DB writes; `ok()` / `fail()` envelopes.
 - No legacy migrations unless explicitly required.
 - Scheduler: overlap guarded; re-entry guard on `startScheduler`; recurring may auto-start from `failed` when due.
-- Sources: H.264/AAC, max video bitrate 35000 kbps (fallback `format.bit_rate`). Concurrent download+probe capped at 2.
+- Sources: H.264/AAC, max video bitrate 35000 kbps (fallback `format.bit_rate`). Concurrent download+probe capped at 2. Keyframe probing uses `packet=pts_time,flags` with `csv=p=0` (version-agnostic; works ffprobe 4.0.2–7.x), filters `K`-flagged packets in JS, kills child after 11 samples.
 - SQLite: WAL + `busy_timeout=5000` + foreign keys + prepared-statement cache in `getDb()`.
 - Stats: `GROUP BY` counts, not full table loads.
 - GDrive: resolve confirmation URL or fail; never fall back to HTML quarantine page.

@@ -215,7 +215,7 @@ export function redactFfmpegLog(line: string): string {
 /**
  * Builds the FFmpeg argument list to remux a local file to an RTMP destination.
  * Always loops the source; schedule/auto-stop owns when the broadcast ends.
- * Copies video while re-encoding audio for reliable AAC/FLV output.
+ * Copies both video and audio — sources are already validated as H.264/AAC.
  *
  * Note: the RTMP URL containing the plaintext stream key is passed as a
  * positional argv. On multi-user hosts, `ps aux` or `/proc/<pid>/cmdline`
@@ -249,13 +249,7 @@ export function buildFfmpegArgs(input: {
     "-c:v",
     "copy",
     "-c:a",
-    "aac",
-    "-b:a",
-    "128k",
-    "-ar",
-    "48000",
-    "-af",
-    "aresample=async=1:first_pts=0",
+    "copy",
     "-flvflags",
     "no_duration_filesize",
     "-f",
