@@ -28,6 +28,7 @@ import { Input } from "@kumix/ui/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { AppShell } from "@/components/AppShell";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
+import { WheelPicker, type WheelPickerOption, WheelPickerWrapper } from "@/components/WheelPicker";
 import { api, queryClient } from "@/lib/api";
 
 type SourceOption = { id: string; name: string };
@@ -37,9 +38,14 @@ function toSchedule(value: string) {
   return value ? value : null;
 }
 
-const pad = (value: number) => String(value).padStart(2, "0");
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => pad(i));
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => pad(i));
+const HOUR_WHEEL_OPTIONS: WheelPickerOption<number>[] = Array.from({ length: 24 }, (_, i) => ({
+  label: String(i).padStart(2, "0"),
+  value: i,
+}));
+const MINUTE_WHEEL_OPTIONS: WheelPickerOption<number>[] = Array.from({ length: 60 }, (_, i) => ({
+  label: String(i).padStart(2, "0"),
+  value: i,
+}));
 
 function durationStopAt(startAt: string, hours: string, minutes: string, timeZone?: string) {
   const totalMinutes = Number(hours || 0) * 60 + Number(minutes || 0);
@@ -94,7 +100,7 @@ export function NewStreamPage() {
   const [durationHours, setDurationHours] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("");
   const [recurrence, setRecurrence] = useState<"none" | "daily" | "weekly" | "monthly">("none");
-  const [recurrenceTime, setRecurrenceTime] = useState("");
+  const [recurrenceTime, setRecurrenceTime] = useState("00:00");
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const sourcesQuery = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const targetsQuery = useQuery({ queryKey: ["targets"], queryFn: api.targets });
@@ -380,43 +386,28 @@ export function NewStreamPage() {
             {recurrence !== "none" ? (
               <div className="grid gap-1.5 text-sm">
                 <span className="font-medium">{t("recurrenceTime")}</span>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={recurrenceTime.slice(0, 2) || "00"}
-                    onValueChange={(hour) =>
-                      setRecurrenceTime(`${hour}:${recurrenceTime.slice(3, 5) || "00"}`)
+                <WheelPickerWrapper>
+                  <WheelPicker
+                    options={HOUR_WHEEL_OPTIONS}
+                    value={Number(recurrenceTime.slice(0, 2))}
+                    infinite
+                    onValueChange={(hour: number) =>
+                      setRecurrenceTime(
+                        `${String(hour).padStart(2, "0")}:${recurrenceTime.slice(3, 5)}`,
+                      )
                     }
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {HOUR_OPTIONS.map((hour) => (
-                        <SelectItem key={hour} value={hour}>
-                          {hour}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <span className="font-medium text-muted-foreground">:</span>
-                  <Select
-                    value={recurrenceTime.slice(3, 5) || "00"}
-                    onValueChange={(minute) =>
-                      setRecurrenceTime(`${recurrenceTime.slice(0, 2) || "00"}:${minute}`)
+                  />
+                  <WheelPicker
+                    options={MINUTE_WHEEL_OPTIONS}
+                    value={Number(recurrenceTime.slice(3, 5))}
+                    infinite
+                    onValueChange={(minute: number) =>
+                      setRecurrenceTime(
+                        `${recurrenceTime.slice(0, 2)}:${String(minute).padStart(2, "0")}`,
+                      )
                     }
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {MINUTE_OPTIONS.map((minute) => (
-                        <SelectItem key={minute} value={minute}>
-                          {minute}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  />
+                </WheelPickerWrapper>
               </div>
             ) : null}
             {recurrence === "weekly" ? (

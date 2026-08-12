@@ -2,6 +2,14 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.5] - 2026-08-12
+
+### Changed
+
+- DateTimePicker redesigned: calendar (left) + scrollable 15-minute time slot grid (right, 00:00–23:45) replacing the hour/minute dropdown selects. Selected time slot auto-scrolls to center when popover opens or date changes.
+- Recurrence time picker replaced with infinite-scroll WheelPicker (hour + minute wheels) for a more natural mobile-friendly UX.
+- `recurrenceTime` state now initializes to `"00:00"` instead of empty string, matching the displayed default and preventing `undefined` from reaching the backend.
+
 ## [0.4.4] - 2026-08-07
 
 ### Fixed
