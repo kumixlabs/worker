@@ -2,6 +2,17 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.6] - 2026-08-17
+
+### Changed
+
+- Recurrence time WheelPicker migrated from local `@ncdai/react-wheel-picker` wrapper to `@kumix/ui/motion/wheel-picker` (3D drum, keyboard + touch support). Wheels now stretch to full container width; dependency `@ncdai/react-wheel-picker` removed.
+- Hour and minute wheels get distinct `aria-label`s (localized `Hour` / `Minute`) instead of sharing the recurrence time label.
+
+### Added
+
+- Create-stream form validation hints: a "Still needed" line under the submit button lists missing fields (title, source, target, stop duration, weekdays) instead of silently disabling the button.
+
 ## [0.4.5] - 2026-08-12
 
 ### Changed
