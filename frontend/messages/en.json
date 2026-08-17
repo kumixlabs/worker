@@ -169,6 +169,8 @@
     "weekly": "Weekly",
     "monthly": "Monthly",
     "recurrenceTime": "Recurrence time",
+    "hour": "Hour",
+    "minute": "Minute",
     "weekdays": "Repeat on",
     "weekday": {
       "sun": "Sun",
@@ -179,7 +181,8 @@
       "fri": "Fri",
       "sat": "Sat"
     },
-    "submit": "Create and Start"
+    "submit": "Create and Start",
+    "missingFields": "Still needed"
   },
   "Sources": {
     "title": "Video Sources",

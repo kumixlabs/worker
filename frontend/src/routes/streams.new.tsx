@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
 import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
+import { WheelPicker } from "@kumix/ui/motion/wheel-picker";
 import { Frame, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
 import {
   NumberField,
@@ -28,7 +29,6 @@ import { Input } from "@kumix/ui/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { AppShell } from "@/components/AppShell";
 import { DateTimePicker, toWallClockInput } from "@/components/DateTimePicker";
-import { WheelPicker, type WheelPickerOption, WheelPickerWrapper } from "@/components/WheelPicker";
 import { api, queryClient } from "@/lib/api";
 
 type SourceOption = { id: string; name: string };
@@ -38,14 +38,8 @@ function toSchedule(value: string) {
   return value ? value : null;
 }
 
-const HOUR_WHEEL_OPTIONS: WheelPickerOption<number>[] = Array.from({ length: 24 }, (_, i) => ({
-  label: String(i).padStart(2, "0"),
-  value: i,
-}));
-const MINUTE_WHEEL_OPTIONS: WheelPickerOption<number>[] = Array.from({ length: 60 }, (_, i) => ({
-  label: String(i).padStart(2, "0"),
-  value: i,
-}));
+const HOUR_WHEEL_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTE_WHEEL_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
 
 function durationStopAt(startAt: string, hours: string, minutes: string, timeZone?: string) {
   const totalMinutes = Number(hours || 0) * 60 + Number(minutes || 0);
@@ -160,7 +154,14 @@ export function NewStreamPage() {
   const selectedTarget = activeTargets.find((target) => target.id === targetId) ?? null;
   const hasValidStop = stopMode !== "duration" || Boolean(effectiveStopAt);
   const hasValidWeekdays = recurrence !== "weekly" || weekdays.length > 0;
-  const canSubmit = title.trim() && sourceId && targetId && hasValidStop && hasValidWeekdays;
+  const missingFields = [
+    !title.trim() && t("titleLabel"),
+    !sourceId && t("sourceLabel"),
+    !targetId && t("targetLabel"),
+    !hasValidStop && t("stopMode"),
+    !hasValidWeekdays && t("weekdays"),
+  ].filter((field): field is string => Boolean(field));
+  const canSubmit = missingFields.length === 0;
   const queryError = sourcesQuery.isError || targetsQuery.isError ? common("loadError") : null;
 
   if (queryError) {
@@ -386,28 +387,30 @@ export function NewStreamPage() {
             {recurrence !== "none" ? (
               <div className="grid gap-1.5 text-sm">
                 <span className="font-medium">{t("recurrenceTime")}</span>
-                <WheelPickerWrapper>
+                <div className="flex items-stretch gap-1 rounded-3xl border border-border bg-background p-2">
                   <WheelPicker
                     options={HOUR_WHEEL_OPTIONS}
-                    value={Number(recurrenceTime.slice(0, 2))}
-                    infinite
-                    onValueChange={(hour: number) =>
-                      setRecurrenceTime(
-                        `${String(hour).padStart(2, "0")}:${recurrenceTime.slice(3, 5)}`,
-                      )
+                    value={recurrenceTime.slice(0, 2)}
+                    onValueChange={(hour) =>
+                      setRecurrenceTime(`${hour}:${recurrenceTime.slice(3, 5)}`)
                     }
+                    className="flex-1 border-0 bg-transparent"
+                    visibleCount={7}
+                    itemHeight={42}
+                    aria-label={t("hour")}
                   />
                   <WheelPicker
                     options={MINUTE_WHEEL_OPTIONS}
-                    value={Number(recurrenceTime.slice(3, 5))}
-                    infinite
-                    onValueChange={(minute: number) =>
-                      setRecurrenceTime(
-                        `${recurrenceTime.slice(0, 2)}:${String(minute).padStart(2, "0")}`,
-                      )
+                    value={recurrenceTime.slice(3, 5)}
+                    onValueChange={(minute) =>
+                      setRecurrenceTime(`${recurrenceTime.slice(0, 2)}:${minute}`)
                     }
+                    className="flex-1 border-0 bg-transparent"
+                    visibleCount={7}
+                    itemHeight={42}
+                    aria-label={t("minute")}
                   />
-                </WheelPickerWrapper>
+                </div>
               </div>
             ) : null}
             {recurrence === "weekly" ? (
@@ -442,6 +445,11 @@ export function NewStreamPage() {
               <PlayCircle />
               {t("submit")}
             </Button>
+            {missingFields.length > 0 ? (
+              <p className="text-muted-foreground text-xs">
+                {t("missingFields")}: {missingFields.join(", ")}
+              </p>
+            ) : null}
           </FramePanel>
         </Frame>
       </div>

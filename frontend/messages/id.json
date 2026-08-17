@@ -169,6 +169,8 @@
     "weekly": "Mingguan",
     "monthly": "Bulanan",
     "recurrenceTime": "Jam pengulangan",
+    "hour": "Jam",
+    "minute": "Menit",
     "weekdays": "Ulang pada",
     "weekday": {
       "sun": "Min",
@@ -179,7 +181,8 @@
       "fri": "Jum",
       "sat": "Sab"
     },
-    "submit": "Buat dan Mulai"
+    "submit": "Buat dan Mulai",
+    "missingFields": "Masih diperlukan"
   },
   "Sources": {
     "title": "Sumber Video",
