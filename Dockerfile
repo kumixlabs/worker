@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global bun@1.3.14
+    && npm install --global bun@1.4.0
 
 COPY package.json bun.lock ./
 COPY scripts/postinstall.js ./scripts/postinstall.js

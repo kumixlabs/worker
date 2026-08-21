@@ -138,7 +138,7 @@ function parseToken(value: string): string {
  * @param port - HTTP port.
  * @returns Dashboard origin URL.
  */
-export function dashboardUrl(host: string, port: number, _token?: string): string {
+export function dashboardUrl(host: string, port: number): string {
   const dashboardHost = host === "0.0.0.0" ? "localhost" : host;
   return `http://${dashboardHost}:${port}`;
 }

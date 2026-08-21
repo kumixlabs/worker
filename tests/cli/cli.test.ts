@@ -14,6 +14,6 @@ describe("CLI", () => {
 
   it("builds dashboard URLs without embedding the token", () => {
     expect(dashboardUrl("0.0.0.0", 8080)).toBe("http://localhost:8080");
-    expect(dashboardUrl("192.0.2.10", 8080, "token with space")).toBe("http://192.0.2.10:8080");
+    expect(dashboardUrl("192.0.2.10", 8080)).toBe("http://192.0.2.10:8080");
   });
 });

@@ -2,7 +2,7 @@
 
 Self-hosted Kumix live-stream runner: local dashboard + API, SQLite, source cache, scheduler, FFmpeg/FFprobe.
 
-Package `@kumix/worker`, CLI `kumix-worker`. Node `>=24`, package manager `bun@1.3+`. Runtime is Node (not Bun) even though scripts use Bun.
+Package `@kumix/worker`, CLI `kumix-worker`. Node `>=24`, package manager `bun@1.4+`. Runtime is Node (not Bun) even though scripts use Bun.
 
 ## Layout
 
@@ -59,7 +59,7 @@ Public routes: `GET /health`, `/api/bootstrap`, `/openapi`, `/docs`, `/auth?toke
 
 Dashboard login uses a **password** (scrypt hash in `config.json`, factory default `123456`). First login with default forces password change in the SPA (`passwordIsDefault`). Change via `POST /api/settings/password` (Bearer) or CLI `kumix-worker password --password <pw>`. Password change does **not** re-encrypt stream keys or invalidate existing Bearer sessions.
 
-**Token** remains the API key + AES root for target stream keys + HMAC for signed URLs. Dashboard SPA stores the token in **sessionStorage** after password login (or CLI/core handoff). Never return raw token, password hash, stream keys, or YouTube API key. CLI `serve` prints Dashboard URL without embedding the token.
+**Token** remains the API key + AES root for target stream keys + HMAC for signed URLs. Dashboard SPA stores the token in **localStorage** after password login (or CLI/core handoff). Never return raw token, password hash, stream keys, or YouTube API key. CLI `serve` prints Dashboard URL without embedding the token.
 
 Core API (Bearer): `GET /api/v1/{health,stats,capabilities,link}`, `POST /api/v1/settings/token`.
 

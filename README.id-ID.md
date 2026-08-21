@@ -162,6 +162,7 @@ kumix-worker token --regenerate
 kumix-worker password --password <password-baru>
 kumix-worker reset --yes
 kumix-worker reset --all --yes
+kumix-worker reset --force --yes
 kumix-worker update
 ```
 
@@ -255,6 +256,7 @@ Route dashboard/private menggunakan Bearer token:
 - `/api/stats`
 - `/api/metrics`
 - `/api/health/details`
+- `/api/bandwidth`
 - `/api/sources`
 - `/api/targets`
 - `/api/streams`
@@ -280,7 +282,7 @@ URL signed dibuat oleh `POST /api/events/signed-url` dan `POST /api/sources/:id/
 
 - Login dashboard memakai password (default pabrik `123456`, di-hash scrypt). Login pertama dengan default memaksa ganti password di SPA. Ganti kapan saja di Settings atau lewat `kumix-worker password --password <pw>`. Ganti password tidak merotasi token API, tidak mengenkripsi ulang stream key, dan tidak mematikan sesi Bearer lain.
 - Hash password async scrypt dengan parameter biaya allowlisted (menolak `passwordHash` korup/malicious yang bisa DoS proses). `passwordHash` invalid fail-closed (tidak silent reset ke default).
-- Rute API membutuhkan auth Bearer token kecuali yang memang public. Setelah login password (atau handoff), SPA menyimpan worker token di **sessionStorage** dan mengirimkannya sebagai Bearer. Pada 401 SPA membersihkan sesi.
+- Rute API membutuhkan auth Bearer token kecuali yang memang public. Setelah login password (atau handoff), SPA menyimpan worker token di **localStorage** dan mengirimkannya sebagai Bearer. Pada 401 SPA membersihkan sesi.
 - Handoff core: `/auth?token=` memvalidasi token, lalu redirect `#code=` single-use yang ditukar lewat `POST /api/auth/exchange`. URL dashboard dari CLI tidak pernah menyematkan token (login password).
 - Rotasi token (`POST /api/v1/settings/token` atau `kumix-worker token --regenerate`) hanya mengembalikan `{ rotatedAt, tokenLength }` — tidak meng-echo token baru. Rotasi konkuren diserialisasi; stream key dienkripsi ulang dengan rollback jika tulis config gagal.
 - Percobaan auth invalid di-rate-limit (10 / 60s / IP), dengan lazy expiry dan prune. Header forwarded hanya dipercaya saat `KUMIX_WORKER_TRUST_PROXY=1` (hanya di belakang proxy yang strip XFF klien).
