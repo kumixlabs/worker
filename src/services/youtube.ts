@@ -1,19 +1,9 @@
 /** YouTube Data API v3 live stream analytics fetcher. */
 
-export interface YouTubeAnalytics {
-  videoId: string;
-  title: string;
-  channelTitle: string;
-  thumbnailUrl: string | null;
-  concurrentViewers: number | null;
-  actualStartTime: string | null;
-  scheduledStartTime: string | null;
-  viewCount: number | null;
-  likeCount: number | null;
-  commentCount: number | null;
-  isLive: boolean;
-  isUpcoming: boolean;
-}
+import type { YouTubeAnalytics } from "../types/youtube";
+import { safeFetch } from "./source-downloader";
+
+export type { YouTubeAnalytics } from "../types/youtube";
 
 export interface YouTubeVideoItem {
   id: string;
@@ -81,7 +71,7 @@ export async function fetchYouTubeAnalytics(
 ): Promise<YouTubeAnalytics> {
   const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,liveStreamingDetails&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(apiKey)}`;
 
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const response = await safeFetch(url, { signal: AbortSignal.timeout(10_000) });
   const body = (await response.json()) as YouTubeApiError & { items?: YouTubeVideoItem[] };
 
   if (!response.ok) {

@@ -2,6 +2,13 @@
 
 All notable changes to Kumix Worker will be documented in this file.
 
+## [0.4.7] - 2026-08-18
+
+### Fixed
+
+- YouTube analytics requests now go through the SSRF-safe `safeFetch` transport (pinned DNS lookup, `KUMIX_WORKER_IPV4_FIRST`) instead of global `fetch`, preventing IPv6 stalls on hosts with broken AAAA routing — the same issue that previously affected source downloads.
+- `YouTubeAnalytics` type moved to `src/types/youtube.ts` so the dashboard no longer type-checks the backend service module graph.
+
 ## [0.4.6] - 2026-08-17
 
 ### Changed

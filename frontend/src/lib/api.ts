@@ -1,6 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
 
-import type { YouTubeAnalytics } from "../../../src/services/youtube";
 import type { BandwidthSummary } from "../../../src/types/bandwidth";
 import type { EventRecord } from "../../../src/types/event";
 import type { SourceRecord } from "../../../src/types/source";
@@ -12,6 +11,7 @@ import type {
   WorkerSettings,
   WorkerStats,
 } from "../../../src/types/worker";
+import type { YouTubeAnalytics } from "../../../src/types/youtube";
 
 export const queryClient = new QueryClient({
   defaultOptions: {

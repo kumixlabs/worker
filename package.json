@@ -1,6 +1,6 @@
 {
   "name": "@kumix/worker",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Kumix Worker is a self-hosted live-stream runner that schedules and broadcasts video sources to RTMP platforms with always-on source looping, monitoring, crash recovery, and a local dashboard.",
   "author": "Kumix Labs <hai@kumix.io>",
   "license": "MIT",
@@ -72,7 +72,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.9",
+    "@biomejs/biome": "^2.5.10",
     "@kumix/biome-config": "^0.1.0",
     "@kumix/tsconfig": "^0.1.0",
     "@types/better-sqlite3": "^9.6.0",
