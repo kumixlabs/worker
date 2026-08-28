@@ -72,7 +72,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.10",
+    "@biomejs/biome": "^2.5.11",
     "@kumix/biome-config": "^0.1.0",
     "@kumix/tsconfig": "^0.1.0",
     "@types/better-sqlite3": "^9.6.0",
