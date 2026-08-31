@@ -17,7 +17,8 @@
       "sources": "Sumber",
       "targets": "Target",
       "admin": "Admin",
-      "users": "Pengguna"
+      "users": "Pengguna",
+      "media": "Media"
     },
     "impersonating": "Meniru pengguna",
     "stopImpersonatingFailed": "Gagal berhenti meniru"
@@ -228,5 +229,43 @@
     "noUsers": "Tidak ada pengguna ditemukan.",
     "selfRoleLocked": "Anda tidak bisa mengubah role sendiri.",
     "createdAtColumn": "Dibuat"
+  },
+  "Media": {
+    "title": "Media",
+    "description": "Unggah dan kelola aset video, audio, dan gambar Anda.",
+    "upload": "Unggah",
+    "import": "Impor",
+    "importGdrive": "Impor dari Google Drive",
+    "imported": "Berhasil diimpor dari Google Drive",
+    "allMedia": "Semua media",
+    "rootFolder": "Root",
+    "newFolder": "Folder baru",
+    "renameFolder": "Ganti nama folder",
+    "folderNamePlaceholder": "Nama folder",
+    "folderDeleted": "Folder dihapus",
+    "searchPlaceholder": "Cari media...",
+    "gridView": "Tampilan grid",
+    "listView": "Tampilan daftar",
+    "emptyTitle": "Belum ada media",
+    "emptyDescription": "Unggah berkas atau impor dari Google Drive untuk memulai.",
+    "uploadTitle": "Unggah media",
+    "uploadDescription": "Tipe berkas diverifikasi dari isi berkas. Kuota penyimpanan berlaku.",
+    "dropzoneTitle": "Tarik dan lepas atau telusuri berkas",
+    "uploading": "Mengunggah:",
+    "gdriveDescription": "Tempel tautan berkas Google Drive yang dibagikan publik.",
+    "gdriveUrl": "URL Google Drive",
+    "gdriveNamePlaceholder": "Nama tampilan opsional",
+    "deleted": "Media dihapus",
+    "deleteTitle": "Hapus media?",
+    "deleteDescription": "\"{name}\" akan dihapus permanen.",
+    "deleteFolderTitle": "Hapus folder?",
+    "deleteFolderDescription": "\"{name}\" akan dihapus. Media di dalamnya dipindah ke Root.",
+    "moveTo": "Pindah ke folder",
+    "close": "Tutup",
+    "rename": "Ganti nama",
+    "colName": "Nama",
+    "colType": "Tipe",
+    "colSize": "Ukuran",
+    "colCreated": "Dibuat"
   }
 }

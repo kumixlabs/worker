@@ -74,6 +74,12 @@ export function getDb(): SqliteDatabase {
     };
     ensureSchema(wrapper);
     tryColumnMigration(wrapper, "events", "user_id", "TEXT");
+    tryColumnMigration(
+      wrapper,
+      "media",
+      "folder_id",
+      "TEXT REFERENCES media_folders(id) ON DELETE SET NULL",
+    );
     dbInstance = instance;
     dbWrapper = wrapper;
     return wrapper;
@@ -173,6 +179,7 @@ function ensureSchema(database: SqliteDatabase): void {
     CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
+      folder_id TEXT REFERENCES media_folders(id) ON DELETE SET NULL,
       name TEXT NOT NULL,
       media_type TEXT NOT NULL,
       mime_type TEXT NOT NULL,
@@ -180,9 +187,17 @@ function ensureSchema(database: SqliteDatabase): void {
       size_bytes INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS media_folders (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
 
     CREATE INDEX IF NOT EXISTS idx_events_stream ON events(stream_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_media_user ON media(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_media_folders_user ON media_folders(user_id);
+    CREATE INDEX IF NOT EXISTS idx_media_folder ON media(folder_id);
   `);
 }

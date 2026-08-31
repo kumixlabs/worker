@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
 import type { EventRecord } from "../../../src/types/event";
+import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 import type { WorkerMetrics, WorkerSettings, WorkerStats } from "../../../src/types/worker";
 
 export const queryClient = new QueryClient({
@@ -106,4 +107,53 @@ export const api = {
     }),
   eventsExportPath: () => "/api/events/export",
   eventsStreamPath: () => "/api/events/stream",
+  media: (folderId?: string, { signal }: { signal?: AbortSignal } = {}) =>
+    request<MediaRecord[]>(
+      `/api/media${folderId ? `?folderId=${encodeURIComponent(folderId)}` : ""}`,
+      {
+        signal,
+      },
+    ),
+  mediaFolders: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<MediaFolderRecord[]>("/api/media/folders", { signal }),
+  createMediaFolder: (name: string) =>
+    request<MediaFolderRecord>("/api/media/folders", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  renameMediaFolder: (id: string, name: string) =>
+    request<MediaFolderRecord>(`/api/media/folders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  deleteMediaFolder: (id: string) =>
+    request<{ deleted: boolean }>(`/api/media/folders/${id}`, { method: "DELETE" }),
+  patchMedia: (id: string, body: { name?: string; folderId?: string | null }) =>
+    request<MediaRecord>(`/api/media/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteMedia: (id: string) => request<MediaRecord>(`/api/media/${id}`, { method: "DELETE" }),
+  importGdrive: (body: { url: string; name?: string; folderId?: string }) =>
+    request<MediaRecord>("/api/media/import-gdrive", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  uploadMedia: async (file: File, options: { name?: string; folderId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (options.name) params.set("name", options.name);
+    if (options.folderId && options.folderId !== "root") params.set("folderId", options.folderId);
+    const query = params.size > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`/api/media${query}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: file,
+      credentials: "same-origin",
+    });
+    if (response.status === 401) {
+      queryClient.clear();
+      window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
+      throw new Error("Session expired");
+    }
+    const body = (await response.json().catch(() => null)) as ApiEnvelope<MediaRecord> | null;
+    if (!body || !body.ok) throw new Error(body && !body.ok ? body.error.message : "Upload failed");
+    return body.data;
+  },
 };

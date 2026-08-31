@@ -17,7 +17,8 @@
       "sources": "Sources",
       "targets": "Targets",
       "admin": "Admin",
-      "users": "Users"
+      "users": "Users",
+      "media": "Media"
     },
     "impersonating": "Impersonating",
     "stopImpersonatingFailed": "Could not stop impersonating"
@@ -228,5 +229,43 @@
     "noUsers": "No users found.",
     "selfRoleLocked": "You cannot change your own role.",
     "createdAtColumn": "Created"
+  },
+  "Media": {
+    "title": "Media",
+    "description": "Upload and organize your video, audio, and image assets.",
+    "upload": "Upload",
+    "import": "Import",
+    "importGdrive": "Import from Google Drive",
+    "imported": "Imported from Google Drive",
+    "allMedia": "All media",
+    "rootFolder": "Root",
+    "newFolder": "New folder",
+    "renameFolder": "Rename folder",
+    "folderNamePlaceholder": "Folder name",
+    "folderDeleted": "Folder deleted",
+    "searchPlaceholder": "Search media...",
+    "gridView": "Grid view",
+    "listView": "List view",
+    "emptyTitle": "No media yet",
+    "emptyDescription": "Upload files or import from Google Drive to get started.",
+    "uploadTitle": "Upload media",
+    "uploadDescription": "Files are type-checked from content. Quota applies.",
+    "dropzoneTitle": "Drag and drop or browse files",
+    "uploading": "Uploading:",
+    "gdriveDescription": "Paste a publicly shared Google Drive file link.",
+    "gdriveUrl": "Google Drive URL",
+    "gdriveNamePlaceholder": "Optional display name",
+    "deleted": "Media deleted",
+    "deleteTitle": "Delete media?",
+    "deleteDescription": "\"{name}\" will be removed permanently.",
+    "deleteFolderTitle": "Delete folder?",
+    "deleteFolderDescription": "\"{name}\" will be deleted. Media inside moves to Root.",
+    "moveTo": "Move to folder",
+    "close": "Close",
+    "rename": "Rename",
+    "colName": "Name",
+    "colType": "Type",
+    "colSize": "Size",
+    "colCreated": "Created"
   }
 }

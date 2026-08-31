@@ -9,6 +9,7 @@ import { AdminSettingsPage } from "@/routes/admin/settings";
 import { UsersPage } from "@/routes/admin/users";
 import { Dashboard } from "@/routes/index";
 import { LogPage } from "@/routes/log";
+import { MediaPage } from "@/routes/media";
 import { SettingsPage } from "@/routes/settings";
 
 function RequireAdmin({ children }: { children: ReactNode }) {
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
     ),
     errorElement: <RouteError />,
   },
+  { path: "/media", element: <MediaPage />, errorElement: <RouteError /> },
   { path: "/log", element: <LogPage />, errorElement: <RouteError /> },
   { path: "/users", element: <Navigate to="/admin/users" replace /> },
   {
