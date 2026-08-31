@@ -180,7 +180,7 @@ export const api = {
       throw new Error("Session expired");
     }
     const body = (await response.json().catch(() => null)) as ApiEnvelope<MediaRecord> | null;
-    if (!body || !body.ok) throw new Error(body && !body.ok ? body.error.message : "Upload failed");
+    if (!body?.ok) throw new Error(body && !body.ok ? body.error.message : "Upload failed");
     return body.data;
   },
 };

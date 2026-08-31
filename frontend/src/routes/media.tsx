@@ -189,7 +189,7 @@ export function MediaPage() {
         ),
       },
     ],
-    [t, common, dateTimeFormatter],
+    [t, dateTimeFormatter],
   );
 
   return (
@@ -893,9 +893,15 @@ function PreviewDialog({ media, onClose }: { media: MediaRecord | null; onClose:
             className="max-h-[70vh] w-full object-contain"
           />
         ) : media.mediaType === "video" ? (
-          <video src={mediaSrc(media)} controls className="max-h-[70vh] w-full" />
+          <video src={mediaSrc(media)} controls className="max-h-[70vh] w-full">
+            {/* ponytail: no caption track storage yet — add <track> when subtitle upload lands. */}
+            <track kind="captions" />
+          </video>
         ) : (
-          <audio src={mediaSrc(media)} controls className="w-full" />
+          <audio src={mediaSrc(media)} controls className="w-full">
+            {/* ponytail: no caption track storage yet — add <track> when subtitle upload lands. */}
+            <track kind="captions" />
+          </audio>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
