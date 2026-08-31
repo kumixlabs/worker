@@ -136,3 +136,5 @@ dist
 .vercel
 next-env.d.ts
 .vscode/folder.jsonc
+
+.tmp-smoke/
