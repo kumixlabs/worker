@@ -89,13 +89,7 @@ describe("impersonation lifecycle", () => {
     cookies.absorb(impersonateRes);
 
     // "browse other pages": hit session-scoped API routes like the SPA does
-    for (const path of [
-      "/api/streams",
-      "/api/sources",
-      "/api/targets",
-      "/api/events",
-      "/api/settings",
-    ]) {
+    for (const path of ["/api/events", "/api/settings"]) {
       const res = await app.request(path, { headers: { Cookie: cookies.header() } });
       expect([200, 403]).toContain(res.status);
       cookies.absorb(res);

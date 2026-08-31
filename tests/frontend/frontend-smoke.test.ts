@@ -35,16 +35,6 @@ describe("frontend smoke", () => {
     expect(table).toContain("DataGridTableRowSelectAll");
   });
 
-  it("keeps stream edit available while locking non-URL fields when live", () => {
-    const streams = read("frontend/src/routes/streams.tsx");
-    expect(streams).toContain("openEdit");
-    expect(streams).toContain('status === "running"');
-    expect(streams).toContain("streamLocked");
-    expect(streams).toContain("youtubeLiveUrl");
-    expect(streams).toContain("autoStopAt");
-    expect(streams).not.toMatch(/stoppedAt:\s*editStoppedAt/);
-  });
-
   it("clears SSE reconnect timer on log page unmount", () => {
     const log = read("frontend/src/routes/log.tsx");
     expect(log).toContain("clearTimeout(reconnectTimer)");

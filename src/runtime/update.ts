@@ -5,9 +5,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { listStreams } from "../db/streams";
 import { readSettings } from "./config";
-import { listTombstones, writeAutoStartMarker } from "./recovery";
 
 const execFileAsync = promisify(execFile);
 
@@ -135,22 +133,6 @@ async function installLatest(): Promise<void> {
 }
 
 /**
- * Lists streams that appear active from DB rows or crash-recovery tombstones.
- *
- * @returns Active stream IDs.
- */
-export function activeStreamIds(): string[] {
-  const activeIds = new Set<string>();
-  for (const stream of listStreams().filter(
-    (item) => item.status === "running" || item.status === "stopping",
-  )) {
-    activeIds.add(stream.id);
-  }
-  for (const tombstone of listTombstones()) activeIds.add(tombstone.streamId);
-  return Array.from(activeIds);
-}
-
-/**
  * Checks whether the kumix-worker systemd service is currently active.
  * Always false on non-Linux platforms.
  *
@@ -175,7 +157,6 @@ async function restartSystemdService(): Promise<void> {
 
 /**
  * Installs the latest worker package and conditionally restarts the service.
- * Restart is skipped when streams are active unless restartMode is "force".
  *
  * @param args - The current version and the desired restart behavior.
  * @returns A summary of what was installed and whether a restart occurred.
@@ -183,7 +164,6 @@ async function restartSystemdService(): Promise<void> {
 export async function performSelfUpdate(args: {
   currentVersion: string;
   restartMode: RestartMode;
-  autoStart: boolean;
 }): Promise<SelfUpdateResult> {
   const latest = await latestVersion();
   const result: SelfUpdateResult = {
@@ -214,15 +194,6 @@ export async function performSelfUpdate(args: {
   if (!active) {
     result.restartSkippedReason = "systemd service is not active";
     return result;
-  }
-
-  const activeStreams = activeStreamIds();
-  if (activeStreams.length > 0 && args.restartMode !== "force") {
-    result.restartSkippedReason = `${activeStreams.length} active stream(s) detected`;
-    return result;
-  }
-  if (activeStreams.length > 0 && args.autoStart) {
-    writeAutoStartMarker(activeStreams);
   }
 
   await restartSystemdService();

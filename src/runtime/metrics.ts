@@ -1,5 +1,5 @@
 /**
- * Runtime host, cache, disk, and stream metrics collection helpers.
+ * Runtime host, cache, and disk metrics collection helpers.
  */
 
 import { statfsSync } from "node:fs";
@@ -7,9 +7,7 @@ import { readdir, stat } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, totalmem } from "node:os";
 import path from "node:path";
 
-import type { StreamRecord } from "../types/stream";
 import { getCacheDir } from "./config";
-import { resolveFfmpegBinaryDetails } from "./ffmpeg";
 
 const processStartedAt = new Date().toISOString();
 
@@ -58,22 +56,6 @@ async function directorySizeAsync(dir: string): Promise<number> {
   }
 }
 
-type SchedulerMetrics = {
-  running: boolean;
-  intervalMs: number;
-  lastTickAt: string | null;
-  lastStarted: number;
-  lastStopped: number;
-};
-
-const defaultSchedulerMetrics: SchedulerMetrics = {
-  running: false,
-  intervalMs: 0,
-  lastTickAt: null,
-  lastStarted: 0,
-  lastStopped: 0,
-};
-
 const storageCacheTtlMs = 30_000;
 let cachedStorage: {
   expiresAt: number;
@@ -83,15 +65,6 @@ let storageRefreshInFlight = false;
 let lastCpuSample: { sampledAt: number; userMicros: number; systemMicros: number } | null = null;
 let smoothedCpuUsagePercent = 0;
 
-/**
- * Returns cached storage metrics, refreshing the cache in the background to
- * avoid blocking the event loop on large cache directories. The first call
- * returns immediately with a zero cache size and triggers an async scan so the
- * next request within the TTL window has the real value.
- *
- * @param cacheDir - The cache directory to measure.
- * @returns Cache and disk usage metrics.
- */
 /**
  * Refreshes the cached storage metrics in the background.
  *
@@ -163,28 +136,18 @@ function cpuUsagePercent(usage: NodeJS.ResourceUsage, coreCount: number): number
 }
 
 /**
- * Collects a snapshot of runtime system metrics including CPU, memory, cache size,
- * disk usage, aggregated outbound bandwidth, scheduler state, and process info.
+ * Collects a snapshot of runtime system metrics including CPU, memory, cache
+ * size, disk usage, and process info.
  *
- * @param streams - Active streams used to compute total outbound bitrate.
- * @param scheduler - Current scheduler state to include in the report.
  * @returns The aggregated runtime metrics object.
  */
-export function runtimeMetrics(streams: StreamRecord[] = [], scheduler = defaultSchedulerMetrics) {
+export function runtimeMetrics() {
   const totalMemoryBytes = totalmem();
   const freeMemoryBytes = freemem();
   const cacheDir = getCacheDir();
   const storage = storageMetrics(cacheDir);
   const usage = process.resourceUsage();
   const coreCount = cpus().length;
-  const runningStreams = streams.filter((stream) => stream.status === "running");
-  const outboundMbps =
-    runningStreams.reduce((total, stream) => total + (stream.lastMetrics?.bitrateKbps ?? 0), 0) /
-    1000;
-  const sessionBytes = runningStreams.reduce(
-    (total, stream) => total + (stream.lastMetrics?.totalBytes ?? 0),
-    0,
-  );
   return {
     cpu: {
       cores: coreCount,
@@ -200,10 +163,9 @@ export function runtimeMetrics(streams: StreamRecord[] = [], scheduler = default
     },
     storage,
     network: {
-      outboundMbps,
-      sessionBytes,
+      outboundMbps: 0,
+      sessionBytes: 0,
     },
-    scheduler,
     process: {
       pid: process.pid,
       startedAt: processStartedAt,
@@ -211,39 +173,4 @@ export function runtimeMetrics(streams: StreamRecord[] = [], scheduler = default
       platform: platform(),
     },
   };
-}
-
-/**
- * Reports FFmpeg/FFprobe availability and process uptime for health checks.
- *
- * @returns The runtime health details including binary paths and versions.
- */
-export function runtimeHealthDetails() {
-  try {
-    const binaries = resolveFfmpegBinaryDetails();
-    const ffmpegAvailable = Boolean(binaries.ffmpeg.version);
-    const ffprobeAvailable = Boolean(binaries.ffprobe.version);
-    return {
-      status: ffmpegAvailable && ffprobeAvailable ? "ok" : "degraded",
-      uptimeSec: Math.round(process.uptime()),
-      ffmpeg: {
-        ...binaries.ffmpeg,
-        available: ffmpegAvailable,
-        version: binaries.ffmpeg.version ?? "FFmpeg version unavailable",
-      },
-      ffprobe: {
-        ...binaries.ffprobe,
-        available: ffprobeAvailable,
-        version: binaries.ffprobe.version ?? "FFprobe version unavailable",
-      },
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "FFmpeg binaries unavailable";
-    return {
-      status: "degraded",
-      uptimeSec: Math.round(process.uptime()),
-      ffmpeg: { available: false, path: "", version: message },
-      ffprobe: { available: false, path: "", version: message },
-    };
-  }
 }

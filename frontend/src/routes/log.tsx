@@ -7,7 +7,6 @@ import {
   useTable,
 } from "@tanstack/react-table";
 import {
-  ChevronsUpDown,
   Download,
   Pause,
   Play,
@@ -16,10 +15,8 @@ import {
   ScrollText,
   Search,
   Trash2,
-  Wifi,
   X,
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
 import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
@@ -37,16 +34,7 @@ import { DataGridTable } from "@kumix/ui/reui/data-grid/data-grid-table";
 import { Frame, FrameFooter, FrameHeader, FramePanel } from "@kumix/ui/reui/frame";
 import { IconTile } from "@kumix/ui/reui/icon-tile";
 import { Button } from "@kumix/ui/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@kumix/ui/ui/command";
 import { Input } from "@kumix/ui/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@kumix/ui/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
@@ -67,13 +55,10 @@ function uniqueEvents(events: EventRecord[]) {
 export function LogPage() {
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user?.role === "admin";
-  const [searchParams] = useSearchParams();
   const [paused, setPaused] = useState(false);
-  const [streamId, setStreamId] = useState(searchParams.get("q") ?? "");
   const [kindFilter, setKindFilter] = useState(ALL);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [streamFilterOpen, setStreamFilterOpen] = useState(false);
   const [connected, setConnected] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [liveEvents, setLiveEvents] = useState<EventRecord[]>([]);
@@ -83,15 +68,8 @@ export function LogPage() {
   const t = useTranslations("Log");
   const common = useTranslations("Common");
   const eventT = useTranslations("Common.eventKinds");
-  const streamsQuery = useQuery({
-    queryKey: ["streams"],
-    queryFn: api.streams,
-    refetchIntervalInBackground: false,
-  });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
-  const streams = streamsQuery.data ?? [];
-  const selectedStream = streams.find((stream) => stream.id === streamId);
   const eventsQuery = useQuery({
     queryKey: ["events"],
     queryFn: () => api.events(),
@@ -132,7 +110,7 @@ export function LogPage() {
       }, delay);
     };
     const openSource = async () => {
-      const path = streamId ? api.streamEventsPath(streamId) : api.eventsStreamPath();
+      const path = api.eventsStreamPath();
       let signed: { url: string };
       try {
         signed = await api.signedUrl(path);
@@ -175,7 +153,7 @@ export function LogPage() {
             id:
               event.id ??
               `${event.type ?? "event"}_${event.createdAt ?? Date.now()}_${event.message ?? ""}`,
-            streamId: event.streamId ?? streamId,
+            streamId: event.streamId ?? null,
             kind: event.kind ?? event.type ?? "event",
             message: event.message ?? JSON.stringify(event),
             payload: event.payload ?? null,
@@ -199,7 +177,7 @@ export function LogPage() {
         flushTimer = null;
       }
     };
-  }, [paused, streamId]);
+  }, [paused]);
 
   const clearEvents = useMutation({
     mutationFn: api.clearEvents,
@@ -226,29 +204,22 @@ export function LogPage() {
   const events = useMemo(() => {
     const term = deferredSearch.trim().toLowerCase();
     return allEvents.filter((event) => {
-      if (streamId && event.streamId !== streamId) return false;
       if (kindFilter !== ALL && event.kind !== kindFilter) return false;
       if (!term) return true;
-      return [event.kind, event.message, event.streamId ?? ""].some((value) =>
-        value.toLowerCase().includes(term),
-      );
+      return [event.kind, event.message].some((value) => value.toLowerCase().includes(term));
     });
-  }, [allEvents, deferredSearch, kindFilter, streamId]);
+  }, [allEvents, deferredSearch, kindFilter]);
   const totalEvents = eventsQuery.data?.length ?? 0;
-  const streamEvents = events.filter((event) => event.streamId).length;
   const summary = [
     { label: t("summary.total"), value: totalEvents, icon: ScrollText },
     { label: t("summary.filtered"), value: events.length, icon: Radio },
-    { label: t("summary.streamEvents"), value: streamEvents, icon: Wifi },
   ];
-  const hasFilters = Boolean(search.trim()) || streamId !== "" || kindFilter !== ALL;
+  const hasFilters = Boolean(search.trim()) || kindFilter !== ALL;
   const refresh = () => {
-    void streamsQuery.refetch();
     void eventsQuery.refetch();
   };
   const resetFilters = () => {
     setSearch("");
-    setStreamId("");
     setKindFilter(ALL);
     setLiveEvents([]);
   };
@@ -270,18 +241,6 @@ export function LogPage() {
         meta: { skeleton: <Skeleton className="h-6 w-16" /> },
       },
       {
-        id: "stream",
-        accessorFn: (row) => row.streamId ?? "",
-        header: t("columns.stream"),
-        cell: ({ row }) => {
-          const stream = streams.find((item) => item.id === row.original.streamId);
-          return <span className="text-sm">{stream?.title ?? row.original.streamId ?? "-"}</span>;
-        },
-        size: 180,
-        enableSorting: false,
-        meta: { skeleton: <Skeleton className="h-5 w-24" /> },
-      },
-      {
         accessorKey: "message",
         header: t("columns.message"),
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.message}</span>,
@@ -300,7 +259,7 @@ export function LogPage() {
         meta: { skeleton: <Skeleton className="h-5 w-28" /> },
       },
     ],
-    [dateTimeFormatter, streams, t],
+    [dateTimeFormatter, t],
   );
   const gridColumns = useMemo(
     () =>
@@ -405,50 +364,6 @@ export function LogPage() {
                   className="ps-9"
                 />
               </div>
-
-              <Popover open={streamFilterOpen} onOpenChange={setStreamFilterOpen}>
-                <PopoverTrigger
-                  render={<Button variant="outline" className="w-55 justify-between" />}
-                >
-                  <span className="truncate">{selectedStream?.title ?? t("allSources")}</span>
-                  <ChevronsUpDown className="h-4 w-4 opacity-60" />
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder={t("searchStream")} />
-                    <CommandList>
-                      <CommandEmpty>{t("emptyStreams")}</CommandEmpty>
-                      <CommandGroup>
-                        <CommandItem
-                          value={t("allSources")}
-                          data-checked={!streamId || undefined}
-                          onSelect={() => {
-                            setStreamId("");
-                            setLiveEvents([]);
-                            setStreamFilterOpen(false);
-                          }}
-                        >
-                          <span className="truncate">{t("allSources")}</span>
-                        </CommandItem>
-                        {streams.map((stream) => (
-                          <CommandItem
-                            key={stream.id}
-                            value={stream.title}
-                            data-checked={streamId === stream.id || undefined}
-                            onSelect={() => {
-                              setStreamId(stream.id);
-                              setLiveEvents([]);
-                              setStreamFilterOpen(false);
-                            }}
-                          >
-                            <span className="truncate">{stream.title}</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
 
               <Select value={kindFilter} onValueChange={(value) => setKindFilter(value ?? ALL)}>
                 <SelectTrigger className="w-40">

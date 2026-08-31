@@ -9,18 +9,12 @@ import { openAPIRouteHandler } from "hono-openapi";
 
 import { requireAdmin, requireSession } from "../auth/middleware";
 import { getAuth, getAuthDb } from "../auth/server";
-import { listStreams } from "../db/streams";
 import { readPackageVersion } from "../lib/version";
-import { stopStream } from "../services/stream-runner";
 import { fail, ok, signedRequest } from "./middleware";
 import { registerAdminUserRoutes } from "./routes/admin-users";
 import { doc } from "./routes/common";
 import { registerEventRoutes } from "./routes/events";
-import { registerSourceRoutes } from "./routes/sources";
-import { registerStreamRoutes } from "./routes/streams";
 import { registerSystemRoutes } from "./routes/system";
-import { registerTargetRoutes } from "./routes/targets";
-import { registerYoutubeRoutes } from "./routes/youtube";
 import { findPublicDir, serveStatic } from "./static";
 
 /**
@@ -67,7 +61,7 @@ export function createApiApp() {
           title: "Kumix Worker API",
           version: readPackageVersion(),
           description:
-            "Multi-user streaming daemon for Kumix Worker: sources, targets, streams, logs, settings, and users.",
+            "Kumix Worker control daemon: authentication, user administration, audit log, and runtime settings.",
         },
         servers: [
           {
@@ -200,26 +194,6 @@ export function createApiApp() {
     }
     return getAuth().handler(c.req.raw);
   });
-  // Banning a user must also cut off their live streams, not just sessions.
-  app.on("POST", "/api/auth/admin/ban-user", async (c) => {
-    const raw = (await c.req.raw
-      .clone()
-      .json()
-      .catch(() => null)) as { userId?: string } | null;
-    const res = await getAuth().handler(c.req.raw);
-    if (res.ok && raw?.userId) {
-      for (const s of listStreams(raw.userId)) {
-        if (s.status === "running" || s.status === "stopping") {
-          try {
-            stopStream(s.id);
-          } catch {
-            // best-effort cutoff
-          }
-        }
-      }
-    }
-    return res;
-  });
   app.all("/api/auth/*", (c) => getAuth().handler(c.req.raw));
 
   // Dashboard /api/* routes: require a Better Auth session unless explicitly public.
@@ -233,10 +207,6 @@ export function createApiApp() {
 
   registerSystemRoutes(app);
   registerAdminUserRoutes(app);
-  registerSourceRoutes(app);
-  registerTargetRoutes(app);
-  registerYoutubeRoutes(app);
-  registerStreamRoutes(app);
   registerEventRoutes(app);
 
   app.all("/api/*", (c) => fail("NOT_FOUND", "Unknown API route", 404));

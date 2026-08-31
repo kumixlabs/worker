@@ -1,17 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
-import type { BandwidthSummary } from "../../../src/types/bandwidth";
 import type { EventRecord } from "../../../src/types/event";
-import type { SourceRecord } from "../../../src/types/source";
-import type { StreamRecord } from "../../../src/types/stream";
-import type { TargetRecord } from "../../../src/types/target";
-import type {
-  WorkerHealthDetails,
-  WorkerMetrics,
-  WorkerSettings,
-  WorkerStats,
-} from "../../../src/types/worker";
-import type { YouTubeAnalytics } from "../../../src/types/youtube";
+import type { WorkerMetrics, WorkerSettings, WorkerStats } from "../../../src/types/worker";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,85 +83,10 @@ export const api = {
     request<WorkerMetrics>("/api/admin/metrics", { signal }),
   adminStats: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<WorkerStats>("/api/admin/stats", { signal }),
-  adminBandwidth: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<BandwidthSummary>("/api/admin/bandwidth", { signal }),
-  healthDetails: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<WorkerHealthDetails>("/api/health/details", { signal }),
   settings: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<PublicSettings>("/api/settings", { signal }),
   patchSettings: (body: Partial<Pick<WorkerSettings, "timezone" | "diskUsageLimitPercent">>) =>
     request<PublicSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
-  sources: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<SourceRecord[]>("/api/sources", { signal }),
-  createSource: (body: { name: string; kind: "url" | "gdrive"; url: string }) =>
-    request<SourceRecord>("/api/sources", { method: "POST", body: JSON.stringify(body) }),
-  deleteSource: (id: string) => request<unknown>(`/api/sources/${id}`, { method: "DELETE" }),
-  cancelSource: (id: string) => request<unknown>(`/api/sources/${id}/cancel`, { method: "POST" }),
-  retrySource: (id: string) =>
-    request<SourceRecord>(`/api/sources/${id}/retry`, { method: "POST" }),
-  patchSource: (id: string, body: Partial<{ name: string }>) =>
-    request<SourceRecord>(`/api/sources/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  previewUrl: (id: string) =>
-    request<{ url: string }>(`/api/sources/${id}/preview-url`, { method: "POST" }),
-  deleteSources: (ids: string[]) =>
-    request<{ deleted: string[]; failed: { id: string; message: string }[] }>("/api/sources", {
-      method: "DELETE",
-      body: JSON.stringify({ ids }),
-    }),
-  targets: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<TargetRecord[]>("/api/targets", { signal }),
-  createTarget: (body: { label: string; ingestUrl: string; streamKey: string }) =>
-    request<TargetRecord>("/api/targets", { method: "POST", body: JSON.stringify(body) }),
-  patchTarget: (
-    id: string,
-    body: Partial<{ label: string; ingestUrl: string; streamKey: string; active: boolean }>,
-  ) => request<TargetRecord>(`/api/targets/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteTarget: (id: string) => request<unknown>(`/api/targets/${id}`, { method: "DELETE" }),
-  deleteTargets: (ids: string[]) =>
-    request<{ deleted: string[]; failed: { id: string; message: string }[] }>("/api/targets", {
-      method: "DELETE",
-      body: JSON.stringify({ ids }),
-    }),
-  streams: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<StreamRecord[]>("/api/streams", { signal }),
-  createStream: (body: {
-    title: string;
-    sourceId: string;
-    targetId?: string;
-    mode?: "rtmp" | "youtube";
-    youtubeConnectionId?: string;
-    ytTitle?: string;
-    ytDescription?: string;
-    ytTags?: string;
-    ytPrivacy?: "public" | "unlisted" | "private";
-    ytMadeForKids?: boolean;
-    ytDvr?: boolean;
-    youtubeLiveUrl?: string | null;
-    scheduledFor?: string | null;
-    autoStopAt?: string | null;
-    recurrence: "none" | "daily" | "weekly" | "monthly";
-    recurrenceRule?: { time?: string; weekdays?: number[]; day?: number } | null;
-  }) => request<StreamRecord>("/api/streams", { method: "POST", body: JSON.stringify(body) }),
-  startStream: (id: string) => request<unknown>(`/api/streams/${id}/start`, { method: "POST" }),
-  stopStream: (id: string) => request<unknown>(`/api/streams/${id}/stop`, { method: "POST" }),
-  patchStream: (
-    id: string,
-    body: Partial<{
-      title: string;
-      sourceId: string;
-      targetId: string;
-      youtubeLiveUrl: string | null;
-      scheduledFor: string | null;
-      autoStopAt: string | null;
-      stoppedAt: string | null;
-    }>,
-  ) => request<StreamRecord>(`/api/streams/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteStream: (id: string) => request<unknown>(`/api/streams/${id}`, { method: "DELETE" }),
-  deleteStreams: (ids: string[]) =>
-    request<{ deleted: string[]; failed: { id: string; message: string }[] }>("/api/streams", {
-      method: "DELETE",
-      body: JSON.stringify({ ids }),
-    }),
   events: (
     before?: { createdAt: string; id: string },
     { signal }: { signal?: AbortSignal } = {},
@@ -190,39 +105,5 @@ export const api = {
       body: JSON.stringify({ path }),
     }),
   eventsExportPath: () => "/api/events/export",
-  streamEventsExportPath: (id: string) => `/api/streams/${id}/events/export`,
   eventsStreamPath: () => "/api/events/stream",
-  streamEventsPath: (id: string) => `/api/streams/${id}/events/stream`,
-  streamAnalytics: (id: string, { signal }: { signal?: AbortSignal } = {}) =>
-    request<YouTubeAnalytics>(`/api/streams/${id}/analytics`, { signal }),
-  bandwidth: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<BandwidthSummary>("/api/bandwidth", { signal }),
-  youtubeConnections: () =>
-    request<
-      Array<{
-        id: string;
-        userId: string;
-        clientIdMasked: string;
-        hasClientSecret: boolean;
-        channelId?: string;
-        channelTitle?: string;
-        channelThumbnail?: string;
-        subscriberCount?: number;
-        status: "pending" | "connected" | "expired";
-        createdAt: string;
-        updatedAt: string;
-      }>
-    >("/api/youtube/connections"),
-  createYoutubeConnection: (body: { clientId: string; clientSecret: string }) =>
-    request<{
-      connection: { id: string };
-      authUrl: string;
-    }>("/api/youtube/connections", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  deleteYoutubeConnection: (id: string) =>
-    request<{ deleted: boolean }>(`/api/youtube/connections/${id}`, {
-      method: "DELETE",
-    }),
 };

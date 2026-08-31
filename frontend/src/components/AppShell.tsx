@@ -1,14 +1,5 @@
 import { type ReactNode, useEffect, useMemo } from "react";
-import {
-  Film,
-  KeyRound,
-  LayoutDashboard,
-  PanelLeft,
-  Radio,
-  Settings,
-  Terminal,
-  X,
-} from "lucide-react";
+import { LayoutDashboard, PanelLeft, Settings, Terminal, X } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
@@ -35,7 +26,6 @@ import { queryClient } from "@/lib/api";
 import { authClient } from "@/lib/auth";
 import { useSidebarOpen } from "@/lib/sidebar-state";
 import packageJson from "../../../package.json";
-import { EngineStatus } from "./EngineStatus";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { Logo } from "./Logo";
 import { UserMenu } from "./UserMenu";
@@ -45,12 +35,7 @@ const navItems = [
   { to: "/log", key: "log", icon: Terminal },
 ] as const;
 
-const navItemsSecondary = [
-  { to: "/streams", key: "streams", icon: Radio },
-  { to: "/sources", key: "sources", icon: Film },
-  { to: "/targets", key: "targets", icon: KeyRound },
-  { to: "/settings", key: "settings", icon: Settings },
-] as const;
+const navItemsSecondary = [{ to: "/settings", key: "settings", icon: Settings }] as const;
 
 function isPathActive(pathname: string, to: string) {
   return to === "/" ? pathname === "/" : pathname.startsWith(to);
@@ -157,8 +142,7 @@ export function AppShell({
         </AnimatedSidebarContent>
 
         <AnimatedSidebarFooter className="gap-3 border-none p-3">
-          <div className="flex min-h-9 items-center justify-between gap-2 px-2 group-data-[state=collapsed]/sidebar:hidden">
-            <EngineStatus />
+          <div className="flex min-h-9 items-center justify-end gap-2 px-2 group-data-[state=collapsed]/sidebar:hidden">
             <Badge variant="primary-light" radius="full" className="font-normal">
               v{packageJson.version}
             </Badge>

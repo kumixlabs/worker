@@ -12,31 +12,11 @@ import { Command } from "commander";
 
 import { closeAuthDb, getAuth, getAuthDb } from "./auth/server";
 import { closeDb } from "./db/client";
-import { listStreams } from "./db/streams";
 import { createApiApp } from "./http/app";
 import { readPackageVersion } from "./lib/version";
 import { ensureDataDir, readSettings, resetWorkerData } from "./runtime/config";
-import { resolveFfmpegBinaries } from "./runtime/ffmpeg";
-import { runtimeHealthDetails, runtimeMetrics } from "./runtime/metrics";
-import {
-  consumeAutoStartMarker,
-  recoverInterruptedStreams,
-  writeAutoStartMarker,
-} from "./runtime/recovery";
-import { startScheduler } from "./runtime/scheduler";
-import {
-  activeStreamIds,
-  latestVersion,
-  performSelfUpdate,
-  type RestartMode,
-} from "./runtime/update";
-import { startStream, stopAllStreams } from "./services/stream-runner";
-
-function autoResumeEnabled(): boolean {
-  const raw = process.env.KUMIX_WORKER_AUTO_RESUME?.trim().toLowerCase();
-  if (!raw) return true;
-  return raw !== "0" && raw !== "false" && raw !== "no" && raw !== "off";
-}
+import { runtimeMetrics } from "./runtime/metrics";
+import { latestVersion, performSelfUpdate, type RestartMode } from "./runtime/update";
 
 function gigabytes(bytes: number): string {
   return (bytes / (1024 * 1024 * 1024)).toFixed(2);
@@ -47,7 +27,7 @@ export function buildCli(): Command {
 
   program
     .name("kumix-worker")
-    .description("Multi-user live stream worker with local dashboard and API")
+    .description("Multi-user Kumix Worker daemon with local dashboard and API")
     .version(readPackageVersion());
 
   program
@@ -63,7 +43,7 @@ export function buildCli(): Command {
 
   program
     .command("serve")
-    .description("Start the Kumix Worker HTTP server and stream scheduler")
+    .description("Start the Kumix Worker HTTP server")
     .option("-p, --port <port>", "Port to bind to")
     .option("-H, --host <host>", "Host to bind to")
     .action(async (options) => {
@@ -72,46 +52,17 @@ export function buildCli(): Command {
       const port = options.port ? Number(options.port) : settings.port;
       const hostname = options.host ?? "localhost";
 
-      recoverInterruptedStreams();
       const app = createApiApp();
-      startScheduler();
 
       const server = serve({ fetch: app.fetch, port, hostname }, () => {
         console.log(`Kumix Worker running on http://${hostname}:${port}`);
       });
-
-      const autoResume = autoResumeEnabled();
-      if (autoResume) {
-        const toResume = consumeAutoStartMarker();
-        if (toResume.length > 0) {
-          console.log(`[worker] Auto-resuming ${toResume.length} stream(s) from previous run...`);
-          for (const id of toResume) {
-            startStream(id).catch((err) => {
-              console.error(
-                `[worker] Auto-resume failed for stream ${id}:`,
-                err instanceof Error ? err.message : err,
-              );
-            });
-          }
-        }
-      }
 
       let shuttingDown = false;
       const shutdown = async (signal: string) => {
         if (shuttingDown) return;
         shuttingDown = true;
         console.log(`\nReceived ${signal}, shutting down...`);
-
-        if (autoResume) {
-          const active = activeStreamIds();
-          if (active.length > 0) writeAutoStartMarker(active);
-        }
-
-        try {
-          await stopAllStreams();
-        } catch (error) {
-          console.error("[worker] Error stopping streams during shutdown:", error);
-        }
 
         server.close(() => {
           closeDb();
@@ -136,9 +87,7 @@ export function buildCli(): Command {
     .description("Display the current state and health of the worker")
     .action(async () => {
       const settings = readSettings();
-      const health = runtimeHealthDetails();
-      const metrics = await runtimeMetrics();
-      const streams = listStreams();
+      const metrics = runtimeMetrics();
       const userCount = (
         getAuthDb().prepare("SELECT COUNT(*) AS n FROM user").get() as { n: number }
       ).n;
@@ -148,9 +97,6 @@ export function buildCli(): Command {
       console.log(`Port: ${settings.port}`);
       console.log(`Timezone: ${settings.timezone}`);
       console.log(`Users: ${userCount}`);
-      console.log(`Streams: ${streams.length} total`);
-      console.log(`FFmpeg: ${health.ffmpeg.available ? "Ready" : "Missing"}`);
-      console.log(`FFprobe: ${health.ffprobe.available ? "Ready" : "Missing"}`);
       if (metrics.storage?.disk) {
         console.log(
           `Disk: ${gigabytes(metrics.storage.disk.usedBytes)}GB / ${gigabytes(metrics.storage.disk.totalBytes)}GB (${metrics.storage.disk.usedPercent}%)`,
@@ -163,9 +109,6 @@ export function buildCli(): Command {
     .description("Diagnose common issues and check dependencies")
     .action(async () => {
       console.log("Running diagnostics for Kumix Worker...");
-      const binaries = resolveFfmpegBinaries();
-      console.log(`FFmpeg: ${binaries.ffmpegPath ?? "NOT FOUND"}`);
-      console.log(`FFprobe: ${binaries.ffprobePath ?? "NOT FOUND"}`);
       const settings = readSettings();
       console.log(`Data directory: ${settings.dataDir}`);
       console.log(`Config file: OK`);
@@ -252,7 +195,6 @@ export function buildCli(): Command {
       await performSelfUpdate({
         currentVersion: current,
         restartMode: options.restart as RestartMode,
-        autoStart: autoResumeEnabled(),
       });
       console.log(`Updated successfully to ${latest}.`);
     });

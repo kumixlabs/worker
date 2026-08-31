@@ -1,38 +1,6 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, expect, it } from "vitest";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-import { resetDbForTests } from "../../src/db/client";
-import { createSource } from "../../src/db/sources";
-import { createStream, setStreamStatus } from "../../src/db/streams";
-import { createTarget } from "../../src/db/targets";
-import { writeSettings } from "../../src/runtime/config";
-import { writeTombstone } from "../../src/runtime/recovery";
-import { activeStreamIds, compareVersions, parseVersion } from "../../src/runtime/update";
-import { hasSqlite } from "../helpers";
-
-let dataDir: string;
-
-beforeEach(() => {
-  dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-update-"));
-  process.env.KUMIX_WORKER_DATA_DIR = dataDir;
-  resetDbForTests();
-  writeSettings({
-    dataDir,
-    diskUsageLimitPercent: 90,
-    port: 8080,
-    timezone: "Asia/Jakarta",
-    token: "test-token-123456",
-  });
-});
-
-afterEach(() => {
-  resetDbForTests();
-  delete process.env.KUMIX_WORKER_DATA_DIR;
-  rmSync(dataDir, { force: true, recursive: true });
-});
+import { compareVersions, parseVersion } from "../../src/runtime/update";
 
 describe("parseVersion", () => {
   it("parses a simple semver string", () => {
@@ -76,53 +44,5 @@ describe("compareVersions", () => {
 
   it("falls back to lexical comparison for non-semver strings", () => {
     expect(compareVersions("latest", "1.2.3")).not.toBe(0);
-  });
-});
-
-describe.skipIf(!hasSqlite())("activeStreamIds", () => {
-  it("returns the union of running DB streams and tombstoned streams", () => {
-    const source = createSource({
-      kind: "url",
-      name: "Source",
-      url: "https://example.com/video.mp4",
-    });
-    const target = createTarget({
-      active: true,
-      ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
-      label: "YouTube",
-      streamKey: "secret",
-    });
-    const streamA = createStream({
-      loop: true,
-      recurrence: "none",
-      sourceId: source.id,
-      targetId: target.id,
-      title: "A",
-    });
-    const streamB = createStream({
-      loop: true,
-      recurrence: "none",
-      sourceId: source.id,
-      targetId: target.id,
-      title: "B",
-    });
-    setStreamStatus(streamA.id, "running", { pid: 111 });
-    setStreamStatus(streamB.id, "stopped");
-    writeTombstone({
-      pid: 222,
-      status: "running",
-      streamId: streamB.id,
-      writtenAt: new Date().toISOString(),
-    });
-
-    const active = activeStreamIds();
-
-    expect(active).toContain(streamA.id);
-    expect(active).toContain(streamB.id);
-    expect(active).toHaveLength(2);
-  });
-
-  it("returns an empty array when nothing is active", () => {
-    expect(activeStreamIds()).toEqual([]);
   });
 });

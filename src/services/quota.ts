@@ -1,8 +1,8 @@
 /**
  * Per-user quota engine: storage bytes and stream concurrency.
+ * Usage counters return zeros until media/stream features land on the new foundation.
+ * ponytail: plug real SUM/COUNT queries back in when tables return.
  */
-
-import { getDb } from "../db/client";
 
 export interface UserUsage {
   storageBytes: number;
@@ -11,24 +11,9 @@ export interface UserUsage {
 
 /**
  * Computes current usage for a user.
- * storageBytes = SUM(sources.size_bytes) for sources owned by the user.
- * streamCount = count of non-terminal streams (pending | running | stopping).
  */
-export function getUserUsage(userId: string): UserUsage {
-  const db = getDb();
-  const storageRow = db
-    .query("SELECT COALESCE(SUM(size_bytes), 0) AS total FROM sources WHERE user_id = ?")
-    .get(userId) as { total: number } | undefined;
-  const streamsRow = db
-    .query(
-      "SELECT COUNT(*) AS count FROM streams WHERE user_id = ? AND status IN ('pending', 'running', 'stopping')",
-    )
-    .get(userId) as { count: number } | undefined;
-
-  return {
-    storageBytes: storageRow?.total ?? 0,
-    streamCount: streamsRow?.count ?? 0,
-  };
+export function getUserUsage(_userId: string): UserUsage {
+  return { storageBytes: 0, streamCount: 0 };
 }
 
 /**
@@ -43,10 +28,9 @@ export function assertStorageQuota(
 ): void {
   if (!userId || maxStorageBytes === null || maxStorageBytes === undefined) return;
   if (incomingBytes <= 0) return;
-  const usage = getUserUsage(userId);
-  if (usage.storageBytes + incomingBytes > maxStorageBytes) {
+  if (incomingBytes > maxStorageBytes) {
     const error = new Error(
-      `Storage quota exceeded: requires ${usage.storageBytes + incomingBytes} bytes, limit is ${maxStorageBytes} bytes`,
+      `Storage quota exceeded: requires ${incomingBytes} bytes, limit is ${maxStorageBytes} bytes`,
     );
     (error as { code?: string }).code = "QUOTA_STORAGE_EXCEEDED";
     throw error;
@@ -63,9 +47,8 @@ export function assertStreamQuota(
   maxStreams: number | null | undefined,
 ): void {
   if (!userId || maxStreams === null || maxStreams === undefined) return;
-  const usage = getUserUsage(userId);
-  if (usage.streamCount >= maxStreams) {
-    const error = new Error(`Stream quota reached: limit is ${maxStreams} concurrent stream(s)`);
+  if (maxStreams <= 0) {
+    const error = new Error("Stream quota reached: limit is 0 concurrent stream(s)");
     (error as { code?: string }).code = "QUOTA_STREAMS_EXCEEDED";
     throw error;
   }

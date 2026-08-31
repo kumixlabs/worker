@@ -18,13 +18,7 @@ import { Button } from "@kumix/ui/ui/button";
 import { AdminShell } from "@/components/AdminShell";
 import { api } from "@/lib/api";
 import { useTimeFormatter } from "@/lib/date";
-import {
-  formatBytes,
-  formatDurationMs as formatDuration,
-  formatMbps,
-  formatUptime,
-  percent,
-} from "@/lib/format";
+import { formatBytes, formatUptime, percent } from "@/lib/format";
 
 function ProgressBar({ value }: { value: number }) {
   const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
@@ -47,12 +41,6 @@ function ProgressBar({ value }: { value: number }) {
 export function MonitoringPage() {
   const t = useTranslations("Monitoring");
   const common = useTranslations("Common");
-  const statsQuery = useQuery({
-    queryKey: ["adminStats"],
-    queryFn: api.adminStats,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: false,
-  });
   const metricsQuery = useQuery({
     queryKey: ["adminMetrics"],
     queryFn: api.metrics,
@@ -61,15 +49,14 @@ export function MonitoringPage() {
   });
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const timeFormatter = useTimeFormatter(settingsQuery.data);
-  const stats = statsQuery.data;
   const runtime = metricsQuery.data;
   const memoryPercent = percent(runtime?.memory.usedBytes, runtime?.memory.totalBytes);
   const diskPercent = percent(runtime?.storage.disk?.usedBytes, runtime?.storage.disk?.totalBytes);
   const loadAverage = runtime?.cpu.loadAverage?.[0] ?? 0;
   const loadPercent = percent(loadAverage, runtime?.cpu.cores ?? 0);
-  const isLoading = statsQuery.isLoading || metricsQuery.isLoading;
-  const hasError = statsQuery.isError || metricsQuery.isError;
-  const updatedAt = Math.max(statsQuery.dataUpdatedAt, metricsQuery.dataUpdatedAt);
+  const isLoading = metricsQuery.isLoading;
+  const hasError = metricsQuery.isError;
+  const updatedAt = metricsQuery.dataUpdatedAt;
   const summary = [
     {
       label: t("cpu"),
@@ -86,9 +73,9 @@ export function MonitoringPage() {
       icon: MemoryStick,
     },
     {
-      label: t("bandwidthOut"),
-      value: formatMbps(runtime?.network.outboundMbps),
-      detail: t("runningStreams", { count: stats?.streams.running ?? 0 }),
+      label: t("cacheUsage"),
+      value: formatBytes(runtime?.storage.cacheBytes),
+      detail: runtime?.process.platform ?? "-",
       icon: Network,
     },
     {
@@ -99,7 +86,6 @@ export function MonitoringPage() {
     },
   ];
   const refresh = () => {
-    void statsQuery.refetch();
     void metricsQuery.refetch();
   };
 
@@ -198,30 +184,16 @@ export function MonitoringPage() {
               </FrameTitle>
             </FrameHeader>
             <FramePanel className="space-y-3 text-sm">
+              <DetailRow label={t("processId")} value={String(runtime?.process.pid ?? 0)} />
               <DetailRow
-                label={t("scheduler")}
-                value={runtime?.scheduler.running ? t("schedulerRunning") : t("schedulerStopped")}
-              />
-              <DetailRow
-                label={t("schedulerInterval")}
-                value={formatDuration(runtime?.scheduler.intervalMs ?? 0)}
-              />
-              <DetailRow
-                label={t("lastSchedulerTick")}
+                label={t("startedAt")}
                 value={
-                  runtime?.scheduler.lastTickAt
-                    ? timeFormatter.format(new Date(runtime.scheduler.lastTickAt))
+                  runtime?.process.startedAt
+                    ? timeFormatter.format(new Date(runtime.process.startedAt))
                     : "-"
                 }
               />
-              <DetailRow
-                label={t("lastStarted")}
-                value={String(runtime?.scheduler.lastStarted ?? 0)}
-              />
-              <DetailRow
-                label={t("lastStopped")}
-                value={String(runtime?.scheduler.lastStopped ?? 0)}
-              />
+              <DetailRow label={t("platform")} value={runtime?.process.platform ?? "-"} />
               <DetailRow
                 label={t("lastUpdated")}
                 value={updatedAt ? timeFormatter.format(new Date(updatedAt)) : "-"}

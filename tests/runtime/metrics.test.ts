@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeSettings } from "../../src/runtime/config";
-import { runtimeHealthDetails, runtimeMetrics } from "../../src/runtime/metrics";
+import { runtimeMetrics } from "../../src/runtime/metrics";
 
 let dataDir: string;
 
@@ -27,17 +27,12 @@ afterEach(() => {
 });
 
 describe("runtime metrics", () => {
-  it("returns process, memory, cpu, and binary health details", () => {
+  it("returns process, memory, and cpu details", () => {
     const metrics = runtimeMetrics();
-    const health = runtimeHealthDetails();
 
     expect(metrics.cpu.cores).toBeGreaterThan(0);
     expect(metrics.cpu.usagePercent).toBeGreaterThanOrEqual(0);
     expect(metrics.memory.totalBytes).toBeGreaterThan(0);
     expect(metrics.process.pid).toBe(process.pid);
-    expect(typeof health.ffmpeg.available).toBe("boolean");
-    expect(typeof health.ffprobe.available).toBe("boolean");
-    if (health.ffmpeg.available) expect(health.ffmpeg.version).toContain("ffmpeg");
-    if (health.ffprobe.available) expect(health.ffprobe.version).toContain("ffprobe");
   });
 });

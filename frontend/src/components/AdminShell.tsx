@@ -26,7 +26,6 @@ import { queryClient } from "@/lib/api";
 import { authClient } from "@/lib/auth";
 import { useSidebarOpen } from "@/lib/sidebar-state";
 import packageJson from "../../../package.json";
-import { EngineStatus } from "./EngineStatus";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { Logo } from "./Logo";
 import { UserMenu } from "./UserMenu";
@@ -145,8 +144,7 @@ export function AdminShell({
         </AnimatedSidebarContent>
 
         <AnimatedSidebarFooter className="gap-3 border-none p-3">
-          <div className="flex min-h-9 items-center justify-between gap-2 px-2 group-data-[state=collapsed]/sidebar:hidden">
-            <EngineStatus />
+          <div className="flex min-h-9 items-center justify-end gap-2 px-2 group-data-[state=collapsed]/sidebar:hidden">
             <Badge variant="primary-light" radius="full" className="font-normal">
               v{packageJson.version}
             </Badge>

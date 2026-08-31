@@ -6,9 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { getAuthDb, resetAuthForTests } from "../../src/auth/server";
 import { resetDbForTests } from "../../src/db/client";
-import { createSource, listSources } from "../../src/db/sources";
-import { createStream, listStreams } from "../../src/db/streams";
-import { createTarget, listTargets } from "../../src/db/targets";
 import { createApiApp } from "../../src/http/app";
 import { writeSettings } from "../../src/runtime/config";
 import { assertStorageQuota, assertStreamQuota, getUserUsage } from "../../src/services/quota";
@@ -42,52 +39,6 @@ afterEach(() => {
 });
 
 describe.skipIf(!hasSqlite())("Multi-User Tenancy & Quotas", () => {
-  it("isolates streams, sources, and targets between users", async () => {
-    // Buat user non-admin langsung di auth db
-    const authDb = getAuthDb();
-    const now = Date.now();
-    authDb
-      .prepare(
-        "INSERT INTO user (id, name, email, emailVerified, role, createdAt, updatedAt) VALUES (?, ?, ?, 1, 'user', ?, ?)",
-      )
-      .run("usr_bob", "Bob", "bob@kumix.dev", now, now);
-
-    // Resource milik Bob
-    const srcBob = createSource(
-      { kind: "url", name: "Bob Source", url: "https://example.com/b.mp4" },
-      "usr_bob",
-    );
-    const tgtBob = createTarget(
-      { label: "Bob Target", ingestUrl: "rtmp://live.bob.com/app", streamKey: "key-bob" },
-      "usr_bob",
-    );
-    const stmBob = createStream(
-      { title: "Bob Stream", sourceId: srcBob.id, targetId: tgtBob.id },
-      "usr_bob",
-    );
-
-    // Resource milik Admin (via adminCookie session)
-    const adminUser = authDb.prepare("SELECT id FROM user WHERE role = 'admin'").get() as {
-      id: string;
-    };
-    const _srcAdmin = createSource(
-      { kind: "url", name: "Admin Source", url: "https://example.com/a.mp4" },
-      adminUser.id,
-    );
-
-    // List scoped
-    expect(listSources("usr_bob")).toHaveLength(1);
-    expect(listSources("usr_bob")[0]?.name).toBe("Bob Source");
-    expect(listSources(adminUser.id)).toHaveLength(1);
-    expect(listSources(adminUser.id)[0]?.name).toBe("Admin Source");
-    // List all (admin view)
-    expect(listSources()).toHaveLength(2);
-
-    expect(listTargets("usr_bob")).toHaveLength(1);
-    expect(listStreams("usr_bob")).toHaveLength(1);
-    expect(listStreams("usr_bob")[0]?.id).toBe(stmBob.id);
-  });
-
   it("calculates usage and enforces quotas", () => {
     const authDb = getAuthDb();
     const now = Date.now();

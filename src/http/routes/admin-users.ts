@@ -8,13 +8,8 @@ import { z } from "zod";
 
 import { requireAdmin } from "../../auth/middleware";
 import { getAuthDb } from "../../auth/server";
-import { getBandwidthSummary } from "../../db/bandwidth";
 import { getDb } from "../../db/client";
 import { addEvent } from "../../db/events";
-import { deleteSource, listSources } from "../../db/sources";
-import { getWorkerStats } from "../../db/stats";
-import { deleteStream, listStreams } from "../../db/streams";
-import { deleteTarget, listTargets } from "../../db/targets";
 import { runtimeMetrics } from "../../runtime/metrics";
 import { getUserUsage } from "../../services/quota";
 import { fail, ok } from "../middleware";
@@ -27,24 +22,10 @@ const userQuotasPatchSchema = z.object({
 
 export function registerAdminUserRoutes(app: Hono) {
   app.get(
-    "/api/admin/stats",
-    doc("Admin", "Global stats", "Aggregated counts, storage, and runtime stats across all users."),
-    requireAdmin,
-    (c) => c.json(ok(getWorkerStats())),
-  );
-
-  app.get(
-    "/api/admin/bandwidth",
-    doc("Admin", "Global bandwidth", "Bandwidth totals aggregated across every user's streams."),
-    requireAdmin,
-    (c) => c.json(ok(getBandwidthSummary())),
-  );
-
-  app.get(
     "/api/admin/metrics",
     doc("Admin", "System metrics", "Hardware metrics including CPU, memory, and disk usage."),
     requireAdmin,
-    async (c) => c.json(ok(await runtimeMetrics())),
+    (c) => c.json(ok(runtimeMetrics())),
   );
 
   app.get(
@@ -139,7 +120,7 @@ export function registerAdminUserRoutes(app: Hono) {
 
   app.delete(
     "/api/admin/users/:id",
-    doc("Admin", "Delete user", "Cascades delete across user streams, sources, and targets."),
+    doc("Admin", "Delete user", "Deletes the user account, sessions, and audit history."),
     requireAdmin,
     async (c) => {
       const id = c.req.param("id");
@@ -150,48 +131,9 @@ export function registerAdminUserRoutes(app: Hono) {
       const targetUser = getAuthDb().prepare("SELECT id FROM user WHERE id = ?").get(id);
       if (!targetUser) return fail("NOT_FOUND", "User not found", 404);
 
-      const userStreams = listStreams(id);
-      const activeStream = userStreams.find(
-        (s) => s.status === "running" || s.status === "stopping",
-      );
-      if (activeStream) {
-        return fail(
-          "CONFLICT",
-          `User has active stream ${activeStream.id}. Stop streams before deleting user.`,
-          409,
-        );
-      }
-
-      for (const s of userStreams) {
-        try {
-          deleteStream(s.id);
-        } catch {
-          // best-effort cleanup
-        }
-      }
-
-      const userSources = listSources(id);
-      for (const src of userSources) {
-        try {
-          deleteSource(src.id, true);
-        } catch {
-          // best-effort cleanup
-        }
-      }
-
-      const userTargets = listTargets(id);
-      for (const tgt of userTargets) {
-        try {
-          deleteTarget(tgt.id);
-        } catch {
-          // best-effort cleanup
-        }
-      }
-
       getAuthDb().prepare("DELETE FROM session WHERE userId = ?").run(id);
       getAuthDb().prepare("DELETE FROM account WHERE userId = ?").run(id);
       getAuthDb().prepare("DELETE FROM user WHERE id = ?").run(id);
-      getDb().query("DELETE FROM youtube_connections WHERE user_id = ?").run(id);
       getDb().query("DELETE FROM events WHERE user_id = ?").run(id);
 
       addEvent(null, "admin_user_deleted", `Admin deleted user ${id}`, {

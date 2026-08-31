@@ -25,16 +25,6 @@ export interface PublicSettings {
  * Aggregated statistics and system metrics.
  */
 export interface WorkerStats {
-  sources: { total: number; ready: number; invalid: number };
-  targets: { total: number; active: number };
-  streams: {
-    total: number;
-    running: number;
-    pending: number;
-    stopping: number;
-    stopped: number;
-    failed: number;
-  };
   storage: {
     cacheBytes: number;
     disk?: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };
@@ -48,19 +38,6 @@ export interface WorkerStats {
   system: { uptimeSec: number; pid: number; platform: string };
 }
 
-/**
- * Detailed local health status used by dashboard and CLI diagnostics.
- */
-export type WorkerHealthDetails = {
-  status: string;
-  uptimeSec: number;
-  ffmpeg: { available: boolean; path: string; version: string };
-  ffprobe: { available: boolean; path: string; version: string };
-};
-
-/**
- * Runtime host, storage, network, scheduler, and process metrics.
- */
 export type WorkerMetrics = {
   cpu: {
     cores: number;
@@ -75,12 +52,5 @@ export type WorkerMetrics = {
     disk?: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };
   };
   network: { outboundMbps: number; sessionBytes: number };
-  scheduler: {
-    running: boolean;
-    intervalMs: number;
-    lastTickAt: string | null;
-    lastStarted: number;
-    lastStopped: number;
-  };
   process: { pid: number; startedAt: string; uptimeSec: number; platform: string };
 };
