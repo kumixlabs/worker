@@ -35,11 +35,11 @@ export function onEvent(listener: (event: EventRecord) => void): () => void {
  * @param payload - Optional JSON payload holding diagnostic details.
  */
 export function addEvent(
-  streamId: string | null,
+  userId: string | null,
   kind: string,
   message: string,
   payload: unknown | null = null,
-  userId: string | null = null,
+  streamId: string | null = null,
 ): void {
   const id = `evt_${nanoid(12)}`;
   const now = nowIso();

@@ -109,11 +109,16 @@ export function registerAdminUserRoutes(app: Hono) {
           "SELECT id, name, email, role, banned, maxStorageBytes, maxStreams FROM user WHERE id = ?",
         )
         .get(id);
-      addEvent(null, "admin_user_quotas", `Admin updated quotas for user ${id}`, {
-        actorId: c.get("user")?.id ?? null,
-        targetId: id,
-        ...parsed.data,
-      });
+      addEvent(
+        c.get("user")?.id ?? null,
+        "admin_user_quotas",
+        `Admin updated quotas for user ${id}`,
+        {
+          actorId: c.get("user")?.id ?? null,
+          targetId: id,
+          ...parsed.data,
+        },
+      );
       return c.json(ok(updated));
     },
   );
@@ -136,7 +141,7 @@ export function registerAdminUserRoutes(app: Hono) {
       getAuthDb().prepare("DELETE FROM user WHERE id = ?").run(id);
       getDb().query("DELETE FROM events WHERE user_id = ?").run(id);
 
-      addEvent(null, "admin_user_deleted", `Admin deleted user ${id}`, {
+      addEvent(currentUser?.id ?? null, "admin_user_deleted", `Admin deleted user ${id}`, {
         actorId: currentUser?.id ?? null,
         targetId: id,
       });
