@@ -60,7 +60,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "@hono/standard-validator": "^0.4.0",
-    "@scalar/hono-api-reference": "^0.11.16",
+    "@scalar/hono-api-reference": "^0.12.0",
     "better-sqlite3": "^13.0.3",
     "commander": "^15.0.0",
     "ffmpeg-static": "^5.3.0",
