@@ -3,11 +3,8 @@ import { useTranslations } from "use-intl";
 
 import { Frame, FramePanel } from "@kumix/ui/reui/frame";
 import { Button } from "@kumix/ui/ui/button";
-import { getApiToken } from "@/lib/api";
-
 export function NotFound() {
   const t = useTranslations("Root");
-  const hasToken = Boolean(getApiToken());
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -16,11 +13,9 @@ export function NotFound() {
           <h1 className="font-bold text-7xl text-foreground">404</h1>
           <h2 className="mt-4 font-semibold text-foreground text-xl">{t("notFoundTitle")}</h2>
           <p className="mt-2 text-muted-foreground text-sm">{t("notFoundDescription")}</p>
-          {hasToken ? (
-            <Button className="mt-6" render={<Link to="/" />} nativeButton={false}>
-              {t("goHome")}
-            </Button>
-          ) : null}
+          <Button className="mt-6" render={<Link to="/" />} nativeButton={false}>
+            {t("goHome")}
+          </Button>
         </FramePanel>
       </Frame>
     </div>

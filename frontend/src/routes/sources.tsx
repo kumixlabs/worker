@@ -212,6 +212,13 @@ export function SourcesPage() {
   const sources = sourcesQuery.data ?? [];
   const storage = statsQuery.data?.storage;
   const usedGb = ((storage?.cacheBytes ?? 0) / 1024 / 1024 / 1024).toFixed(2);
+  const quota = statsQuery.data?.quota;
+  const quotaMaxBytes = quota?.maxStorageBytes ?? null;
+  const quotaPercent =
+    quotaMaxBytes && quotaMaxBytes > 0
+      ? Math.min(((quota?.storageBytes ?? 0) / quotaMaxBytes) * 100, 100)
+      : 0;
+  const quotaNear = quotaPercent >= 90;
   const readyCount = sources.filter((source) => source.status === "ready").length;
   const diskUsedPercent = storage?.disk?.usedPercent ?? 0;
   const diskLimit = settingsQuery.data?.diskUsageLimitPercent ?? 90;
@@ -556,19 +563,47 @@ export function SourcesPage() {
           </div>
         </FramePanel>
         <FrameFooter className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">{t("diskUsage")}</span>
-            <span className={nearLimit ? "font-medium text-destructive" : "font-medium"}>
-              {diskUsedPercent}% / {diskLimit}%
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className={`h-full rounded-full transition-all ${nearLimit ? "bg-destructive" : "bg-primary"}`}
-              style={{ width: `${Math.min(diskUsedPercent, 100)}%` }}
-            />
-          </div>
-          {nearLimit ? <p className="text-destructive text-xs">{t("diskNearLimit")}</p> : null}
+          {storage?.disk ? (
+            <>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{t("diskUsage")}</span>
+                <span className={nearLimit ? "font-medium text-destructive" : "font-medium"}>
+                  {diskUsedPercent}% / {diskLimit}%
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${nearLimit ? "bg-destructive" : "bg-primary"}`}
+                  style={{ width: `${Math.min(diskUsedPercent, 100)}%` }}
+                />
+              </div>
+              {nearLimit ? <p className="text-destructive text-xs">{t("diskNearLimit")}</p> : null}
+            </>
+          ) : null}
+          {quota && quotaMaxBytes ? (
+            <>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{t("quotaUsed")}</span>
+                <span className={quotaNear ? "font-medium text-destructive" : "font-medium"}>
+                  {formatBytes(quota.storageBytes)} / {formatBytes(quotaMaxBytes)}
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${quotaNear ? "bg-destructive" : "bg-primary"}`}
+                  style={{ width: `${quotaPercent}%` }}
+                />
+              </div>
+              {quota.maxStreams ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{t("quotaStreams")}</span>
+                  <span className="font-medium">
+                    {quota.streamCount} / {quota.maxStreams}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </FrameFooter>
       </Frame>
       <DataTable

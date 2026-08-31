@@ -22,146 +22,37 @@ export const queryClient = new QueryClient({
 
 const tokenStorageKey = "kumix-worker-token";
 const tokenExpiresStorageKey = "kumix-worker-token-expires-at";
-const passwordDefaultKey = "kumix-worker-password-is-default";
-/** Fallback only when server omits expiresAt (should not happen for login/exchange). */
-const tokenTtlMs = 7 * 24 * 60 * 60 * 1000;
 
-function storage(): Storage {
+function clearLegacyTokenStorage(): void {
   try {
-    return localStorage;
-  } catch {
-    return sessionStorage;
-  }
-}
-
-export function getApiToken() {
-  const store = storage();
-  const expiresAt = Number(store.getItem(tokenExpiresStorageKey) ?? "0");
-  if (expiresAt && expiresAt <= Date.now()) {
-    setApiToken("");
-    return "";
-  }
-  return store.getItem(tokenStorageKey) ?? "";
-}
-
-export function setApiToken(
-  token: string,
-  passwordIsDefault = false,
-  expiresAt?: string | number | null,
-) {
-  const store = storage();
-  if (token) {
-    store.setItem(tokenStorageKey, token);
-    const expMs =
-      typeof expiresAt === "number"
-        ? expiresAt
-        : typeof expiresAt === "string" && expiresAt
-          ? Date.parse(expiresAt)
-          : Number.NaN;
-    store.setItem(
-      tokenExpiresStorageKey,
-      String(Number.isFinite(expMs) ? expMs : Date.now() + tokenTtlMs),
-    );
-    if (passwordIsDefault) store.setItem(passwordDefaultKey, "1");
-    else store.removeItem(passwordDefaultKey);
-  } else {
+    const store = localStorage;
     store.removeItem(tokenStorageKey);
     store.removeItem(tokenExpiresStorageKey);
-    store.removeItem(passwordDefaultKey);
-  }
-}
-
-export function getPasswordIsDefault(): boolean {
-  try {
-    return storage().getItem(passwordDefaultKey) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function setPasswordIsDefault(value: boolean): void {
-  try {
-    const store = storage();
-    if (value) store.setItem(passwordDefaultKey, "1");
-    else store.removeItem(passwordDefaultKey);
+    store.removeItem("kumix-worker-password-is-default");
   } catch {
     // ignore
   }
 }
-
-export function clearPasswordIsDefault(): void {
-  setPasswordIsDefault(false);
-}
+clearLegacyTokenStorage();
 
 /**
  * Exchanges a one-time handoff code from the dashboard URL for the worker
  * token. Prefer `#code=` fragment (not sent to servers); still accept `?code=`
  * for older handoff links.
  */
-async function consumeHandoffCode(code: string) {
-  try {
-    const response = await fetch("/api/auth/exchange", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    if (!response.ok) return;
-    const body = (await response.json()) as ApiEnvelope<{
-      token: string;
-      expiresAt?: string;
-      passwordIsDefault?: boolean;
-    }>;
-    if (body.ok && body.data.token) {
-      setApiToken(
-        body.data.token,
-        Boolean(body.data.passwordIsDefault),
-        body.data.expiresAt ?? null,
-      );
-    }
-  } catch {
-    // Ignore; the auth gate will prompt for a valid link.
-  } finally {
-    window.dispatchEvent(new CustomEvent("kumix-worker-auth-ready"));
-  }
-}
-
-const queryParams = new URLSearchParams(window.location.search);
-const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-const handoffCode = hashParams.get("code") ?? queryParams.get("code");
-
-if (handoffCode) {
-  queryParams.delete("code");
-  hashParams.delete("code");
-  const nextQuery = queryParams.toString();
-  const nextHash = hashParams.toString();
-  window.history.replaceState(
-    null,
-    "",
-    `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${
-      nextHash ? `#${nextHash}` : ""
-    }`,
-  );
-  void consumeHandoffCode(handoffCode);
-}
 
 type ApiEnvelope<T> = { ok: true; data: T } | { ok: false; error: { message: string } };
 
-function authHeaders(): Record<string, string> {
-  const token = getApiToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function request<T>(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
-  for (const [key, value] of Object.entries(authHeaders())) headers.set(key, value);
   if (!(init?.body instanceof FormData)) headers.set("Content-Type", "application/json");
   const response = await fetch(path, {
     ...init,
     headers,
+    credentials: "same-origin",
   });
 
   if (response.status === 401) {
-    setApiToken("");
     queryClient.clear();
     window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
     throw new Error("Session expired");
@@ -182,40 +73,34 @@ async function request<T>(path: string, init?: RequestInit) {
   return body.data;
 }
 
-export type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey" | "passwordHash"> & {
-  hasToken: boolean;
-  tokenLength: number;
-  hasYoutubeApiKey: boolean;
-  hasPassword: boolean;
-  passwordIsDefault: boolean;
-};
+export type PublicSettings = Pick<WorkerSettings, "diskUsageLimitPercent" | "timezone">;
 
 export const api = {
+  getAdminUsers: () => request<unknown[]>("/api/admin/users"),
+  patchAdminUserQuotas: (
+    id: string,
+    body: { maxStorageBytes?: number | null; maxStreams?: number | null },
+  ) => request(`/api/admin/users/${id}/quotas`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteAdminUser: (id: string) => request(`/api/admin/users/${id}`, { method: "DELETE" }),
+  bootstrap: () =>
+    request<{
+      apiVersion: string;
+      hasAdmin: boolean;
+    }>("/api/bootstrap"),
   stats: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<WorkerStats>("/api/stats", { signal }),
   metrics: ({ signal }: { signal?: AbortSignal } = {}) =>
-    request<WorkerMetrics>("/api/metrics", { signal }),
+    request<WorkerMetrics>("/api/admin/metrics", { signal }),
+  adminStats: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<WorkerStats>("/api/admin/stats", { signal }),
+  adminBandwidth: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<BandwidthSummary>("/api/admin/bandwidth", { signal }),
   healthDetails: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<WorkerHealthDetails>("/api/health/details", { signal }),
   settings: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<PublicSettings>("/api/settings", { signal }),
-  patchSettings: (
-    body: Partial<Pick<WorkerSettings, "timezone" | "diskUsageLimitPercent" | "youtubeApiKey">>,
-  ) => request<PublicSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
-  changePassword: (body: {
-    currentPassword: string;
-    newPassword: string;
-    confirmPassword: string;
-  }) =>
-    request<{ changed: boolean }>("/api/settings/password", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  rotateToken: (token: string) =>
-    request<{ rotatedAt: string; tokenLength: number }>("/api/v1/settings/token", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    }),
+  patchSettings: (body: Partial<Pick<WorkerSettings, "timezone" | "diskUsageLimitPercent">>) =>
+    request<PublicSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   sources: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<SourceRecord[]>("/api/sources", { signal }),
   createSource: (body: { name: string; kind: "url" | "gdrive"; url: string }) =>
@@ -252,12 +137,20 @@ export const api = {
   createStream: (body: {
     title: string;
     sourceId: string;
-    targetId: string;
+    targetId?: string;
+    mode?: "rtmp" | "youtube";
+    youtubeConnectionId?: string;
+    ytTitle?: string;
+    ytDescription?: string;
+    ytTags?: string;
+    ytPrivacy?: "public" | "unlisted" | "private";
+    ytMadeForKids?: boolean;
+    ytDvr?: boolean;
     youtubeLiveUrl?: string | null;
     scheduledFor?: string | null;
     autoStopAt?: string | null;
     recurrence: "none" | "daily" | "weekly" | "monthly";
-    recurrenceRule?: { time?: string; weekdays?: number[] } | null;
+    recurrenceRule?: { time?: string; weekdays?: number[]; day?: number } | null;
   }) => request<StreamRecord>("/api/streams", { method: "POST", body: JSON.stringify(body) }),
   startStream: (id: string) => request<unknown>(`/api/streams/${id}/start`, { method: "POST" }),
   stopStream: (id: string) => request<unknown>(`/api/streams/${id}/stop`, { method: "POST" }),
@@ -304,4 +197,32 @@ export const api = {
     request<YouTubeAnalytics>(`/api/streams/${id}/analytics`, { signal }),
   bandwidth: ({ signal }: { signal?: AbortSignal } = {}) =>
     request<BandwidthSummary>("/api/bandwidth", { signal }),
+  youtubeConnections: () =>
+    request<
+      Array<{
+        id: string;
+        userId: string;
+        clientIdMasked: string;
+        hasClientSecret: boolean;
+        channelId?: string;
+        channelTitle?: string;
+        channelThumbnail?: string;
+        subscriberCount?: number;
+        status: "pending" | "connected" | "expired";
+        createdAt: string;
+        updatedAt: string;
+      }>
+    >("/api/youtube/connections"),
+  createYoutubeConnection: (body: { clientId: string; clientSecret: string }) =>
+    request<{
+      connection: { id: string };
+      authUrl: string;
+    }>("/api/youtube/connections", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteYoutubeConnection: (id: string) =>
+    request<{ deleted: boolean }>(`/api/youtube/connections/${id}`, {
+      method: "DELETE",
+    }),
 };

@@ -118,11 +118,16 @@ export function NewStreamPage() {
         autoStopAt: effectiveStopAt,
         recurrence,
         recurrenceRule:
-          recurrence === "daily" || recurrence === "monthly"
+          recurrence === "daily"
             ? { time: recurrenceTime || undefined }
-            : recurrence === "weekly"
-              ? { time: recurrenceTime || undefined, weekdays }
-              : null,
+            : recurrence === "monthly"
+              ? {
+                  time: recurrenceTime || undefined,
+                  day: Number((startAt || nowWallClock()).slice(8, 10)) || undefined,
+                }
+              : recurrence === "weekly"
+                ? { time: recurrenceTime || undefined, weekdays }
+                : null,
       }),
     onSuccess: (stream) => {
       toastSuccess({ message: t("streamCreated") });

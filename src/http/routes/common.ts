@@ -18,10 +18,9 @@ export function doc(tag: string, summary: string, description: string, status = 
     responses: {
       [status]: { description: summary },
       400: { description: "Bad request" },
-      401: { description: "Invalid Kumix Worker token" },
+      401: { description: "Not authenticated" },
       404: { description: "Resource not found" },
       409: { description: "Resource conflict" },
-      429: { description: "Rate limited" },
     },
   });
 }

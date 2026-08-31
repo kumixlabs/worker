@@ -51,7 +51,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@kumix/ui/ui/skeleton";
 import { AppShell } from "@/components/AppShell";
 import { EventKindBadge, knownEventKinds } from "@/components/EventKindBadge";
-import { api, getApiToken, queryClient } from "@/lib/api";
+import { api, queryClient } from "@/lib/api";
+import { authClient } from "@/lib/auth";
 import { useDateTimeFormatter } from "@/lib/date";
 import type { EventRecord } from "../../../src/types/event";
 
@@ -64,6 +65,8 @@ function uniqueEvents(events: EventRecord[]) {
 }
 
 export function LogPage() {
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
   const [searchParams] = useSearchParams();
   const [paused, setPaused] = useState(false);
   const [streamId, setStreamId] = useState(searchParams.get("q") ?? "");
@@ -135,10 +138,6 @@ export function LogPage() {
         signed = await api.signedUrl(path);
       } catch {
         setConnected(false);
-        if (!getApiToken()) {
-          window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
-          return;
-        }
         scheduleReconnect();
         return;
       }
@@ -337,14 +336,16 @@ export function LogPage() {
             {paused ? <Play /> : <Pause />}
             {paused ? t("resume") : t("pause")}
           </Button>
-          <Button
-            variant="outline"
-            disabled={clearEvents.isPending}
-            onClick={() => setConfirmClear(true)}
-          >
-            <Trash2 />
-            {common("clear")}
-          </Button>
+          {isAdmin ? (
+            <Button
+              variant="outline"
+              disabled={clearEvents.isPending}
+              onClick={() => setConfirmClear(true)}
+            >
+              <Trash2 />
+              {common("clear")}
+            </Button>
+          ) : null}
           <Button onClick={() => void exportEvents()}>
             <Download />
             {common("export")}
@@ -502,15 +503,17 @@ export function LogPage() {
         </DataGrid>
       </div>
 
-      <ConfirmDialog
-        open={confirmClear}
-        onOpenChange={setConfirmClear}
-        onConfirm={confirmClearEvents}
-        title={t("clearTitle")}
-        description={t("clearDescription")}
-        confirmText={common("confirm")}
-        cancelText={common("cancel")}
-      />
+      {isAdmin ? (
+        <ConfirmDialog
+          open={confirmClear}
+          onOpenChange={setConfirmClear}
+          onConfirm={confirmClearEvents}
+          title={t("clearTitle")}
+          description={t("clearDescription")}
+          confirmText={common("confirm")}
+          cancelText={common("cancel")}
+        />
+      ) : null}
     </AppShell>
   );
 }

@@ -15,6 +15,7 @@ import { nowIso } from "../lib/utils";
 import { getFfmpegPath } from "../runtime/ffmpeg";
 import { isPidAlive, removeTombstone, writeTombstone } from "../runtime/recovery";
 import type { StreamMetrics, StreamRecord } from "../types/stream";
+import { completeYouTubeBroadcast, prepareYouTubeBroadcast } from "./youtube";
 
 const processes = new Map<string, ChildProcess>();
 const startingStreams = new Set<string>();
@@ -111,7 +112,7 @@ export async function stopAllStreams(timeoutMs = 12_000): Promise<StopAllStreams
       pid: null,
       lastError: null,
     });
-    addEvent(id, "stopped", "Stopped during shutdown", null);
+    addEvent(id, "stopped", "Stopped during shutdown", null, getStream(id)?.userId ?? null);
     emit(id, { type: "status", status: "stopped" });
   }
   const streamIds = Array.from(processes.keys());
@@ -289,6 +290,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
   try {
     const stream = getStream(streamId);
     if (!stream) throw new Error("Stream not found");
+    const ownerId = stream.userId;
     // Allow reconnect while status is still "running" (process map empty).
     if (stream.status === "stopping") {
       throw new Error("Stream is already running or stopping");
@@ -297,17 +299,29 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       throw new Error("Stream is already running or stopping");
     }
     const source = getSource(stream.sourceId);
-    const target = getTarget(stream.targetId);
     if (source?.status !== "ready" || !source.filePath) throw new Error("Source is not ready");
-    if (!target?.active) throw new Error("Target is disabled");
-    const streamKey = decryptSecret(target.streamKey);
-    if (!streamKey) throw new Error("Stream key unavailable");
+
+    let ingestUrl = "";
+    let streamKey = "";
+
+    if (stream.mode === "youtube") {
+      const ytBroadcast = await prepareYouTubeBroadcast(streamId);
+      ingestUrl = ytBroadcast.ingestUrl;
+      streamKey = ytBroadcast.streamKey;
+    } else {
+      if (!stream.targetId) throw new Error("Target is required for RTMP mode");
+      const target = getTarget(stream.targetId);
+      if (!target?.active) throw new Error("Target is disabled");
+      streamKey = decryptSecret(target.streamKey);
+      if (!streamKey) throw new Error("Stream key unavailable");
+      ingestUrl = target.ingestUrl;
+    }
 
     const child = spawn(
       getFfmpegPath(),
       buildFfmpegArgs({
         filePath: source.filePath,
-        ingestUrl: target.ingestUrl,
+        ingestUrl,
         streamKey,
       }),
       { stdio: ["ignore", "pipe", "pipe"] },
@@ -320,7 +334,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
         pid: null,
         lastError: message,
       });
-      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null);
+      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null, ownerId);
       emit(streamId, { type: "status", status: "failed" });
       throw new Error(message);
     }
@@ -345,7 +359,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
         pid: null,
         lastError: message,
       });
-      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null);
+      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null, ownerId);
       throw error;
     }
     try {
@@ -380,7 +394,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
         pid: null,
         lastError: message,
       });
-      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null);
+      addEvent(streamId, "failed", `FFmpeg failed: ${message}`, null, ownerId);
       emit(streamId, { type: "status", status: "failed" });
       throw error;
     }
@@ -388,13 +402,19 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
       const childToStop = processes.get(streamId);
       if (childToStop) {
         setStreamStatus(streamId, "stopping");
-        addEvent(streamId, "stopping", "Stop requested during start", null);
+        addEvent(streamId, "stopping", "Stop requested during start", null, ownerId);
         killChildProcess(childToStop, "SIGTERM");
       } else {
         stopRequested.delete(streamId);
       }
     } else {
-      addEvent(streamId, "running", `FFmpeg started with pid ${child.pid}`, { pid: child.pid });
+      addEvent(
+        streamId,
+        "running",
+        `FFmpeg started with pid ${child.pid}`,
+        { pid: child.pid },
+        ownerId,
+      );
       emit(streamId, { type: "status", status: "running" });
     }
 
@@ -492,7 +512,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
           `[worker] settle kept tombstone for ${streamId}; status write failed (${status})`,
         );
       }
-      addEvent(streamId, status, failureMessage, payload);
+      addEvent(streamId, status, failureMessage, payload, ownerId);
       emit(streamId, { type: "status", status });
     };
 
@@ -535,6 +555,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
           signal,
           diagnostic: diagnostic || undefined,
         },
+        ownerId,
       );
       emit(streamId, { type: "status", status: "restarting" });
       restartTimers.set(
@@ -548,13 +569,13 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
               pid: null,
               lastError: null,
             });
-            addEvent(streamId, "stopped", "Stop requested during reconnect", null);
+            addEvent(streamId, "stopped", "Stop requested during reconnect", null, ownerId);
             emit(streamId, { type: "status", status: "stopped" });
             return;
           }
           void startStream(streamId).catch((error) => {
             const message = error instanceof Error ? error.message : String(error);
-            addEvent(streamId, "restart_failed", message);
+            addEvent(streamId, "restart_failed", message, null, ownerId);
             if (stopRequested.has(streamId)) {
               stopRequested.delete(streamId);
               forceSetStreamStatus(streamId, "stopped", {
@@ -562,7 +583,7 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
                 pid: null,
                 lastError: null,
               });
-              addEvent(streamId, "stopped", "Stop requested during reconnect", null);
+              addEvent(streamId, "stopped", "Stop requested during reconnect", null, ownerId);
               emit(streamId, { type: "status", status: "stopped" });
               return;
             }
@@ -637,7 +658,13 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
           pid: null,
           lastError: null,
         });
-        addEvent(streamId, "stopped", "Stop requested before FFmpeg spawned", null);
+        addEvent(
+          streamId,
+          "stopped",
+          "Stop requested before FFmpeg spawned",
+          null,
+          getStream(streamId)?.userId ?? null,
+        );
         emit(streamId, { type: "status", status: "stopped" });
       }
     }
@@ -655,6 +682,13 @@ export async function startStream(streamId: string): Promise<StreamRecord | null
 export function stopStream(streamId: string) {
   const stream = getStream(streamId);
   if (!stream) return stream;
+  const ownerId = stream.userId;
+  if (stream.mode === "youtube" && stream.youtubeConnectionId && stream.ytBroadcastId) {
+    // Broadcasts also auto-complete via enableAutoStop; this closes the window early.
+    void completeYouTubeBroadcast(stream.youtubeConnectionId, stream.ytBroadcastId).catch(() => {
+      // auto-stop on YouTube side is the fallback
+    });
+  }
   const child = processes.get(streamId);
   const starting = startingStreams.has(streamId);
   if (stream.status !== "running" && stream.status !== "stopping" && !child && !starting) {
@@ -668,7 +702,7 @@ export function stopStream(streamId: string) {
   }
   restartAttempts.delete(streamId);
   if (starting && !child) {
-    addEvent(streamId, "stopping", "Stop requested during start", null);
+    addEvent(streamId, "stopping", "Stop requested during start", null, ownerId);
     return getStream(streamId);
   }
   try {
@@ -676,14 +710,14 @@ export function stopStream(streamId: string) {
   } catch {
     forceSetStreamStatus(streamId, "stopping");
   }
-  addEvent(streamId, "stopping", "Stop requested", null);
+  addEvent(streamId, "stopping", "Stop requested", null, ownerId);
   if (!child) {
     forceSetStreamStatus(streamId, "stopped", {
       stoppedAt: new Date().toISOString(),
       pid: null,
     });
     stopRequested.delete(streamId);
-    addEvent(streamId, "stopped", "FFmpeg stopped", null);
+    addEvent(streamId, "stopped", "FFmpeg stopped", null, ownerId);
     emit(streamId, { type: "status", status: "stopped" });
     return getStream(streamId);
   }
@@ -721,7 +755,13 @@ export function reconcileOrphanedDbStreams(): number {
         lastError: "Kumix Worker detected FFmpeg process no longer tracked; marked as failed",
       });
       if (!written) continue;
-      addEvent(stream.id, "failed", "FFmpeg process no longer tracked; marked as failed", null);
+      addEvent(
+        stream.id,
+        "failed",
+        "FFmpeg process no longer tracked; marked as failed",
+        null,
+        stream.userId,
+      );
       try {
         removeTombstone(stream.id);
       } catch {

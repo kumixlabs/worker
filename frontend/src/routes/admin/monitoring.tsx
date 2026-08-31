@@ -15,7 +15,7 @@ import { Alert, AlertTitle } from "@kumix/ui/reui/alert";
 import { Frame, FrameFooter, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
 import { IconTile } from "@kumix/ui/reui/icon-tile";
 import { Button } from "@kumix/ui/ui/button";
-import { AppShell } from "@/components/AppShell";
+import { AdminShell } from "@/components/AdminShell";
 import { api } from "@/lib/api";
 import { useTimeFormatter } from "@/lib/date";
 import {
@@ -48,13 +48,13 @@ export function MonitoringPage() {
   const t = useTranslations("Monitoring");
   const common = useTranslations("Common");
   const statsQuery = useQuery({
-    queryKey: ["stats"],
-    queryFn: api.stats,
+    queryKey: ["adminStats"],
+    queryFn: api.adminStats,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
   });
   const metricsQuery = useQuery({
-    queryKey: ["metrics"],
+    queryKey: ["adminMetrics"],
     queryFn: api.metrics,
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
@@ -104,7 +104,7 @@ export function MonitoringPage() {
   };
 
   return (
-    <AppShell
+    <AdminShell
       title={t("title")}
       description={t("description")}
       actions={
@@ -230,7 +230,7 @@ export function MonitoringPage() {
           </Frame>
         </section>
       </div>
-    </AppShell>
+    </AdminShell>
   );
 }
 

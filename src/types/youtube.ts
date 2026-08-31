@@ -1,16 +1,42 @@
-/** YouTube live analytics snapshot types shared by the API and dashboard. */
+export interface YoutubeConnectionRecord {
+  id: string;
+  userId: string;
+  clientId: string;
+  clientSecret: string;
+  refreshToken?: string;
+  channelId?: string;
+  channelTitle?: string;
+  channelThumbnail?: string;
+  subscriberCount?: number;
+  status: "pending" | "connected" | "expired";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SafeYoutubeConnection = Omit<
+  YoutubeConnectionRecord,
+  "clientId" | "clientSecret" | "refreshToken"
+> & {
+  clientIdMasked: string;
+  hasClientSecret: boolean;
+};
+
+export interface YoutubeConnectionCreateInput {
+  clientId: string;
+  clientSecret: string;
+}
 
 export interface YouTubeAnalytics {
-  videoId: string;
   title: string;
   channelTitle: string;
-  thumbnailUrl: string | null;
   concurrentViewers: number | null;
-  actualStartTime: string | null;
-  scheduledStartTime: string | null;
   viewCount: number | null;
   likeCount: number | null;
   commentCount: number | null;
   isLive: boolean;
   isUpcoming: boolean;
+  actualStartTime?: string | null;
+  scheduledStartTime?: string | null;
+  liveStatus: "live" | "upcoming" | "ended" | "unknown";
+  thumbnailUrl: string | null;
 }

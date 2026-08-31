@@ -163,7 +163,7 @@ function probeKeyframeInterval(filePath: string): Promise<number | null> {
  * @returns The parsed probe result.
  * @throws If ffprobe exits non-zero or cannot be spawned.
  */
-export async function ffprobe(filePath: string, signal?: AbortSignal): Promise<ProbeResult> {
+async function ffprobe(filePath: string, signal?: AbortSignal): Promise<ProbeResult> {
   const result = await new Promise<ProbeResult>((resolve, reject) => {
     const child = spawn(getFfprobePath(), [
       "-v",
@@ -180,6 +180,7 @@ export async function ffprobe(filePath: string, signal?: AbortSignal): Promise<P
     const abort = () => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       child.kill("SIGKILL");
       reject(new Error("ffprobe aborted"));
     };
@@ -187,6 +188,7 @@ export async function ffprobe(filePath: string, signal?: AbortSignal): Promise<P
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener("abort", abort);
       child.kill("SIGKILL");
       reject(new Error("ffprobe timed out"));
     }, 30_000);

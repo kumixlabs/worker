@@ -22,6 +22,7 @@ export interface SourceDownloadProgress {
  */
 export interface SourceRecord {
   id: string;
+  userId?: string | null;
   name: string;
   kind: SourceKind;
   status: SourceStatus;

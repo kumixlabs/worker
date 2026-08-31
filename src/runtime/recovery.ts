@@ -64,7 +64,7 @@ export function isPidAlive(pid: number | null): boolean {
  * @param writtenAt - The tombstone's ISO write timestamp.
  * @returns True when the timestamp is older than the current boot time.
  */
-export function isBeforeLastBoot(writtenAt: string | null | undefined): boolean {
+function isBeforeLastBoot(writtenAt: string | null | undefined): boolean {
   if (!writtenAt) return false;
   const written = new Date(writtenAt).getTime();
   if (!Number.isFinite(written)) return false;
@@ -79,7 +79,7 @@ export function isBeforeLastBoot(writtenAt: string | null | undefined): boolean 
  *
  * @param pid - The orphaned process identifier to terminate.
  */
-export function terminateOrphanPid(pid: number | null): void {
+function terminateOrphanPid(pid: number | null): void {
   if (!isPidAlive(pid)) return;
   try {
     if (process.platform === "win32") {
@@ -129,7 +129,7 @@ export function getTombstoneDir(): string {
  * @param streamId - The stream identifier.
  * @returns The absolute path to the stream's tombstone JSON file.
  */
-export function getTombstonePath(streamId: string): string {
+function getTombstonePath(streamId: string): string {
   return path.join(getTombstoneDir(), `${safeStreamId(streamId)}.json`);
 }
 
@@ -277,7 +277,7 @@ export function recoverInterruptedStreams(skipStreamIds: string[] = []): StreamR
     }
     if (!stream) return;
     removeTombstone(streamId);
-    addEvent(streamId, "failed", message, { orphanPid: pid, orphanAlive });
+    addEvent(streamId, "failed", message, { orphanPid: pid, orphanAlive }, stream.userId);
     recovered.push(stream);
   };
 

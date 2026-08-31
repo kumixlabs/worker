@@ -39,15 +39,24 @@ export function addEvent(
   kind: string,
   message: string,
   payload: unknown | null = null,
+  userId: string | null = null,
 ): void {
   const id = `evt_${nanoid(12)}`;
   const now = nowIso();
   const db = getDb();
   db.query(
-    "INSERT INTO events (id, stream_id, kind, message, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(id, streamId, kind, message, payload !== null ? JSON.stringify(payload) : null, now);
+    "INSERT INTO events (id, user_id, stream_id, kind, message, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run(
+    id,
+    userId,
+    streamId,
+    kind,
+    message,
+    payload !== null ? JSON.stringify(payload) : null,
+    now,
+  );
 
-  const event: EventRecord = { id, streamId, kind, message, payload, createdAt: now };
+  const event: EventRecord = { id, userId, streamId, kind, message, payload, createdAt: now };
   for (const listener of eventListeners) {
     try {
       listener(event);
@@ -92,31 +101,35 @@ export function listEvents(
   streamId?: string,
   limit = 200,
   before?: { createdAt: string; id: string },
+  userId?: string,
 ): EventRecord[] {
   const safeLimit = Math.min(Math.max(limit, 1), 500);
-  const rows = streamId
-    ? (getDb()
-        .query(
-          before
-            ? "SELECT * FROM events WHERE stream_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?"
-            : "SELECT * FROM events WHERE stream_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-        )
-        .all(
-          ...(before
-            ? [streamId, before.createdAt, before.createdAt, before.id, safeLimit]
-            : [streamId, safeLimit]),
-        ) as Record<string, unknown>[])
-    : (getDb()
-        .query(
-          before
-            ? "SELECT * FROM events WHERE (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?"
-            : "SELECT * FROM events ORDER BY created_at DESC, id DESC LIMIT ?",
-        )
-        .all(
-          ...(before ? [before.createdAt, before.createdAt, before.id, safeLimit] : [safeLimit]),
-        ) as Record<string, unknown>[]);
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (streamId) {
+    conditions.push("stream_id = ?");
+    params.push(streamId);
+  }
+  if (userId) {
+    conditions.push("user_id = ?");
+    params.push(userId);
+  }
+  if (before) {
+    conditions.push("(created_at < ? OR (created_at = ? AND id < ?))");
+    params.push(before.createdAt, before.createdAt, before.id);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = `SELECT * FROM events ${where} ORDER BY created_at DESC, id DESC LIMIT ?`;
+  params.push(safeLimit);
+
+  const rows = getDb()
+    .query(sql)
+    .all(...params) as Record<string, unknown>[];
   return rows.map((row) => ({
     id: row.id as string,
+    userId: (row.user_id as string | null) ?? null,
     streamId: (row.stream_id as string | null) ?? null,
     kind: row.kind as string,
     message: row.message as string,

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetDbForTests } from "../../src/db/client";
 import { addEvent, clearEvents, listEvents, onEvent } from "../../src/db/events";
 import { createSource, deleteSource } from "../../src/db/sources";
-import { stats } from "../../src/db/stats";
+import { getWorkerStats } from "../../src/db/stats";
 import { createStream } from "../../src/db/streams";
 import { createTarget, deleteTarget } from "../../src/db/targets";
 import { writeSettings } from "../../src/runtime/config";
@@ -62,7 +62,7 @@ describe.skipIf(!hasSqlite())("DB integration", () => {
     expect(stream.id).toMatch(/^stm_/);
     expect(event?.id).toMatch(/^evt_/);
     expect(event?.payload).toEqual({ ok: true });
-    expect(stats().streams.total).toBe(1);
+    expect(getWorkerStats().streams.total).toBe(1);
   });
 
   it("notifies listeners and clears events", () => {

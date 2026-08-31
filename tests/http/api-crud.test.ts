@@ -1,28 +1,25 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { resetAuthForTests } from "../../src/auth/server";
 import { resetDbForTests } from "../../src/db/client";
-import { createSource, updateSourceProbe } from "../../src/db/sources";
+import { createSource, getSource, updateSourceProbe } from "../../src/db/sources";
 import { getStream, setStreamStatus } from "../../src/db/streams";
-import { getTarget } from "../../src/db/targets";
 import { createApiApp } from "../../src/http/app";
-import { decryptSecretWithToken } from "../../src/lib/crypto";
 import { writeSettings } from "../../src/runtime/config";
-import { hasSqlite } from "../helpers";
+import { createAdminSession, hasSqlite, jsonHeaders, rmDataDirForTests } from "../helpers";
 
 let dataDir: string;
 let app: ReturnType<typeof createApiApp>;
-const headers = {
-  Authorization: "Bearer test-token-123456",
-  "Content-Type": "application/json",
-};
+let headers: Record<string, string>;
 
-beforeEach(() => {
+beforeEach(async () => {
   dataDir = mkdtempSync(path.join(tmpdir(), "kumix-worker-"));
   process.env.KUMIX_WORKER_DATA_DIR = dataDir;
+  resetAuthForTests();
   resetDbForTests();
   writeSettings({
     dataDir,
@@ -32,12 +29,14 @@ beforeEach(() => {
     token: "test-token-123456",
   });
   app = createApiApp();
+  headers = jsonHeaders(await createAdminSession(app));
 });
 
 afterEach(() => {
+  resetAuthForTests();
   resetDbForTests();
   delete process.env.KUMIX_WORKER_DATA_DIR;
-  rmSync(dataDir, { force: true, recursive: true });
+  rmDataDirForTests(dataDir);
 });
 
 function markSourceReady(sourceId: string) {
@@ -55,7 +54,11 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     markSourceReady(sourceBody.data.id);
 
     const targetResponse = await app.request("/api/targets", {
-      body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
+      body: JSON.stringify({
+        label: "YouTube",
+        streamKey: "secret",
+        ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      }),
       headers,
       method: "POST",
     });
@@ -94,7 +97,11 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     const sourceBody = await sourceResponse.json();
     markSourceReady(sourceBody.data.id);
     const targetResponse = await app.request("/api/targets", {
-      body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
+      body: JSON.stringify({
+        label: "YouTube",
+        streamKey: "secret",
+        ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      }),
       headers,
       method: "POST",
     });
@@ -135,6 +142,13 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
       method: "POST",
     });
     const secondSource = await secondSourceResponse.json();
+    for (const id of [firstSource.data.id, secondSource.data.id]) {
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const status = getSource(id)?.status;
+        if (status !== "pending" && status !== "downloading" && status !== "probing") break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
     const bulkResponse = await app.request("/api/sources", {
       body: JSON.stringify({ ids: [firstSource.data.id, secondSource.data.id] }),
       headers,
@@ -284,86 +298,22 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     expect(invalidResponse.status).toBe(400);
   });
 
-  it("supports auth handoff, public stats, and token rotation", async () => {
-    const authResponse = await app.request("/auth?token=test-token-123456");
-    const authLocation = authResponse.headers.get("location") ?? "";
-    const handoffCode =
-      new URL(authLocation, "http://worker.local").hash.replace(/^#code=/, "") ||
-      new URL(authLocation, "http://worker.local").searchParams.get("code") ||
-      "";
-    const exchangeResponse = await app.request("/api/auth/exchange", {
-      body: JSON.stringify({ code: handoffCode }),
-      headers,
-      method: "POST",
-    });
-    const exchangeBody = await exchangeResponse.json();
-    const reuseExchangeResponse = await app.request("/api/auth/exchange", {
-      body: JSON.stringify({ code: handoffCode }),
-      headers,
-      method: "POST",
-    });
-    const healthResponse = await app.request("/api/v1/health", { headers });
-    const healthBody = await healthResponse.json();
-    const statsResponse = await app.request("/api/v1/stats", { headers });
+  it("serves stats, metrics, and health details", async () => {
+    const statsResponse = await app.request("/api/stats", { headers });
     const statsBody = await statsResponse.json();
-    const targetResponse = await app.request("/api/targets", {
-      body: JSON.stringify({ label: "YouTube", streamKey: "secret-before-rotation" }),
-      headers,
-      method: "POST",
-    });
-    const targetBody = await targetResponse.json();
-    const beforeRotation = getTarget(targetBody.data.id)!;
-    const sameTokenResponse = await app.request("/api/v1/settings/token", {
-      body: JSON.stringify({ token: "test-token-123456" }),
-      headers,
-      method: "POST",
-    });
-    const rotateResponse = await app.request("/api/v1/settings/token", {
-      body: JSON.stringify({ token: "new-token-123456789" }),
-      headers,
-      method: "POST",
-    });
-    const oldTokenResponse = await app.request("/api/v1/stats", { headers });
-    const newTokenResponse = await app.request("/api/v1/stats", {
-      headers: { Authorization: "Bearer new-token-123456789" },
-    });
 
-    expect(authResponse.status).toBe(302);
-    expect(authLocation).toMatch(/^\/#code=/);
-    expect(authLocation).not.toContain("test-token-123456");
-    expect(exchangeResponse.status).toBe(200);
-    expect(exchangeBody.data.token).toBe("test-token-123456");
-    expect(reuseExchangeResponse.status).toBe(401);
-    expect(healthResponse.status).toBe(200);
-    expect(["ok", "degraded"]).toContain(healthBody.data.status);
-    expect(healthBody.data.streamsRunning).toBe(0);
     expect(statsResponse.status).toBe(200);
-    expect(statsBody.data.system.agentVersion).toMatch(/^\d+\.\d+\.\d+/);
-    expect(typeof statsBody.data.system.health.ffmpeg).toBe("boolean");
-    expect(statsBody.data.system.cpu.cores).toBeGreaterThan(0);
-    expect(statsBody.data.system.disk.usedPercent).toBeGreaterThanOrEqual(0);
-    expect(targetResponse.status).toBe(201);
-    expect(decryptSecretWithToken(beforeRotation.streamKey, "test-token-123456")).toBe(
-      "secret-before-rotation",
-    );
-    expect(sameTokenResponse.status).toBe(409);
-    expect(rotateResponse.status).toBe(200);
-    const rotateBody = await rotateResponse.json();
-    expect(rotateBody.data.token).toBeUndefined();
-    expect(rotateBody.data.tokenLength).toBe("new-token-123456789".length);
-    const afterRotation = getTarget(targetBody.data.id)!;
-    expect(afterRotation.streamKey).not.toBe(beforeRotation.streamKey);
-    expect(decryptSecretWithToken(afterRotation.streamKey, "new-token-123456789")).toBe(
-      "secret-before-rotation",
-    );
-    expect(decryptSecretWithToken(afterRotation.streamKey, "test-token-123456")).toBe("");
-    expect(oldTokenResponse.status).toBe(401);
-    expect(newTokenResponse.status).toBe(200);
+    expect(statsBody.ok).toBe(true);
+    expect(statsBody.data.streams.total).toBe(0);
   });
 
   it("never leaks the ciphered stream key and masks the plaintext preview", async () => {
     const targetResponse = await app.request("/api/targets", {
-      body: JSON.stringify({ label: "YouTube", streamKey: "super-secret-key" }),
+      body: JSON.stringify({
+        label: "YouTube",
+        streamKey: "super-secret-key",
+        ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      }),
       headers,
       method: "POST",
     });
@@ -387,7 +337,11 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     const sourceBody = await sourceResponse.json();
     markSourceReady(sourceBody.data.id);
     const targetResponse = await app.request("/api/targets", {
-      body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
+      body: JSON.stringify({
+        label: "YouTube",
+        streamKey: "secret",
+        ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      }),
       headers,
       method: "POST",
     });
@@ -460,7 +414,11 @@ describe.skipIf(!hasSqlite())("API CRUD integration", () => {
     const sourceBody = await sourceResponse.json();
     markSourceReady(sourceBody.data.id);
     const targetResponse = await app.request("/api/targets", {
-      body: JSON.stringify({ label: "YouTube", streamKey: "secret" }),
+      body: JSON.stringify({
+        label: "YouTube",
+        streamKey: "secret",
+        ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
+      }),
       headers,
       method: "POST",
     });

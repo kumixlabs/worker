@@ -7,7 +7,9 @@
 #
 # Options:
 #   --port <port>        HTTP port (default: 8080)
-#   --host <host>        Bind host (default: 0.0.0.0)
+#   --host <host>        Bind host (default: 127.0.0.1; pass 0.0.0.0 to expose publicly)
+#   --domain <domain>    Set up Caddy reverse proxy + automatic Let's Encrypt TLS
+#                         (DNS A record must already point to this server)
 #   --timezone <tz>      IANA timezone (default: Asia/Jakarta)
 #   --data-dir <path>    Data directory (default: /opt/kumix-worker)
 #   --version <ver>      Pin a specific npm version (default: latest)
@@ -47,7 +49,9 @@ error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
 KUMIX_PORT="8080"
-KUMIX_HOST="0.0.0.0"
+KUMIX_HOST="127.0.0.1"
+KUMIX_DOMAIN=""
+KUMIX_TRUST_PROXY="0"
 KUMIX_TIMEZONE="Asia/Jakarta"
 KUMIX_DATA_DIR="/opt/kumix-worker"
 KUMIX_VERSION="latest"
@@ -60,6 +64,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)       KUMIX_PORT="$2"; shift 2 ;;
     --host)       KUMIX_HOST="$2"; shift 2 ;;
+    --domain)     KUMIX_DOMAIN="$2"; shift 2 ;;
     --timezone)   KUMIX_TIMEZONE="$2"; shift 2 ;;
     --data-dir)   KUMIX_DATA_DIR="$2"; shift 2 ;;
     --version)    KUMIX_VERSION="$2"; shift 2 ;;
@@ -135,6 +140,34 @@ install_ffmpeg() {
   success "FFmpeg installed: $FFMPEG_PATH"
 }
 
+# ── Caddy (domain + TLS) ────────────────────────────────────────────────────
+
+setup_caddy() {
+  info "Installing Caddy (official apt repo)..."
+  apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+    > /etc/apt/sources.list.d/caddy-stable.list
+  apt-get update -qq
+  apt-get install -y -qq caddy
+
+  # ponytail: overwrites a stock /etc/caddy/Caddyfile (backed up); merge manually
+  # if you already run other sites.
+  local caddyfile="/etc/caddy/Caddyfile"
+  [[ -s "$caddyfile" ]] && cp -n "$caddyfile" "${caddyfile}.kumix.bak"
+  cat > "$caddyfile" <<EOF
+${KUMIX_DOMAIN} {
+	reverse_proxy 127.0.0.1:${KUMIX_PORT}
+}
+EOF
+
+  systemctl enable caddy
+  systemctl restart caddy
+
+  success "Caddy installed: https://${KUMIX_DOMAIN} → 127.0.0.1:${KUMIX_PORT}"
+}
+
 # ── Kumix Worker ─────────────────────────────────────────────────────────────
 
 install_worker() {
@@ -187,6 +220,7 @@ ExecStart=${npm_prefix}/bin/kumix-worker serve --host ${KUMIX_HOST}
 Environment=KUMIX_WORKER_DATA_DIR=${KUMIX_DATA_DIR}
 Environment=KUMIX_WORKER_FFMPEG_PATH=${FFMPEG_PATH}
 Environment=KUMIX_WORKER_FFPROBE_PATH=${FFPROBE_PATH}
+Environment=KUMIX_WORKER_TRUST_PROXY=${KUMIX_TRUST_PROXY}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -206,6 +240,10 @@ EOF
 # ── Install ──────────────────────────────────────────────────────────────────
 
 do_install() {
+  if [[ "$KUMIX_HOST" != "127.0.0.1" && "$KUMIX_HOST" != "localhost" ]]; then
+    warn "Binding to ${KUMIX_HOST}: the dashboard will be reachable from the network."
+    warn "Change the default password immediately and front it with TLS (reverse proxy)."
+  fi
   echo ""
   echo -e "${BOLD}  Kumix Worker — VPS Installer${NC}"
   echo ""
@@ -220,6 +258,13 @@ do_install() {
   echo ""
   init_worker
 
+  if [[ -n "$KUMIX_DOMAIN" ]]; then
+    echo ""
+    KUMIX_HOST="127.0.0.1"
+    KUMIX_TRUST_PROXY="1"
+    setup_caddy
+  fi
+
   if [[ "$SETUP_SERVICE" == "yes" ]] && command_exists systemctl; then
     echo ""
     setup_systemd
@@ -233,8 +278,16 @@ do_install() {
   echo -e "${GREEN}${BOLD}  │          Kumix Worker installed successfully         │${NC}"
   echo -e "${GREEN}${BOLD}  └──────────────────────────────────────────────────────┘${NC}"
   echo ""
-  echo -e "  ${BOLD}Dashboard:${NC}  http://${server_ip}:${KUMIX_PORT}"
-  echo -e "  ${BOLD}Password:${NC}   123456 ${YELLOW}(change it now in Settings)${NC}"
+  if [[ -n "$KUMIX_DOMAIN" ]]; then
+    echo -e "  ${BOLD}Dashboard:${NC}  https://${KUMIX_DOMAIN}"
+    echo -e "  ${BOLD}TLS:${NC}       Let's Encrypt, auto-renewed by Caddy"
+    echo -e "  ${BOLD}OAuth redirect URI:${NC}"
+    echo -e "    ${BOLD}https://${KUMIX_DOMAIN}/api/youtube/callback${NC}"
+    echo -e "    Add it in Google Cloud Console → Credentials → Authorized redirect URIs."
+  else
+    echo -e "  ${BOLD}Dashboard:${NC}  http://${server_ip}:${KUMIX_PORT} (bind: ${KUMIX_HOST})"
+  fi
+  echo -e "  ${BOLD}Login:${NC}    open the dashboard and create the first admin account"
   echo -e "  ${BOLD}Data dir:${NC}   ${KUMIX_DATA_DIR}"
   echo ""
 

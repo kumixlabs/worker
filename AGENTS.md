@@ -4,6 +4,15 @@ Self-hosted Kumix live-stream runner: local dashboard + API, SQLite, source cach
 
 Package `@kumix/worker`, CLI `kumix-worker`. Node `>=24`, package manager `bun@1.4+`. Runtime is Node (not Bun) even though scripts use Bun.
 
+## Security & Architecture
+
+- **Multi-user Auth**: Built on `better-auth`. User accounts with session cookies. Setup creates the first admin at `POST /api/auth/setup`.
+- **Tenancy**: `user_id` on `sources`, `targets`, `streams`, `events`, and `youtube_connections`. Non-admin queries strictly filter by current user.
+- **Quota Engine**: Configurable `maxStorageBytes` and `maxStreams` per user (enforced before downloads and stream spawns).
+- **YouTube Live Automation**: BYO Google Cloud OAuth Client ID & Secret per user. Automated broadcast lifecycle (`prepareYouTubeBroadcast`, bind stream keys, `transition complete`). Legacy single `youtubeApiKey` completely removed.
+- **Secrets Encryption**: AES-256-GCM using `encryptionKey` from `config.json`. Target stream keys and OAuth client credentials encrypted at rest. Masked in UI.
+- **Signed URLs**: Path-scoped HMAC signatures with `signingSecret` for preview, SSE logs, and file downloads.
+
 ## Layout
 
 | Path           | Role                                               |
@@ -13,6 +22,18 @@ Package `@kumix/worker`, CLI `kumix-worker`. Node `>=24`, package manager `bun@1
 | `public/`      | **Generated** Vite output — do not edit by hand    |
 | `tests/`       | Vitest (`tests/vitest.config.ts`; `@` → `../src`)  |
 | `src/index.ts` | Public package API — renames/removals are breaking |
+
+## Install & commands
+
+```bash
+bun install
+bun install --cwd frontend
+bun run dev            # API :8080 (node --watch --import tsx) + Vite :8000 (proxies /api)
+bun run build          # clean → tsc → fix:esm → frontend:build → copy public → verify
+bun run types:check    # backend + frontend
+bun run lint           # biome check
+bun run test           # must run from repo root
+```
 
 Entrypoints: `src/cli.ts` (CLI), `src/http/app.ts` (routes). Schema bootstrapped in `getDb()` via `CREATE TABLE IF NOT EXISTS` — **no migration runner**. Schema changes need manual `ALTER` or drop-recreate. One ad-hoc helper: `tryColumnMigration` (e.g. `youtube_live_url`, `keyframe_interval`).
 
@@ -55,7 +76,7 @@ Before calling work done: `types:check` → `lint` → `test` → `build` (build
 - Hot paths use `currentToken()` (mtime-cached); avoid re-reading full settings for every crypto/HMAC call.
 - SPA honors login/exchange `expiresAt`; revalidates `passwordIsDefault` from `GET /api/settings` so CLI password reset unblocks force-change gate.
 
-Public routes: `GET /health`, `/api/bootstrap`, `/openapi`, `/docs`, `/auth?token=...` (core handoff only), `POST /api/auth/login`, `POST /api/auth/exchange`.
+Public routes: `GET /health`, `/api/bootstrap`, `/openapi`, `/auth?token=...` (core handoff only), `POST /api/auth/login`, `POST /api/auth/exchange`. `GET /docs` is **not** public: it serves a password-only login form; `POST /docs` verifies the dashboard password (same scrypt hash as login, failures count against the auth rate limit) and sets an HttpOnly `kumix_docs` cookie (HMAC-signed by the token, 12h) that unlocks the Scalar page.
 
 Dashboard login uses a **password** (scrypt hash in `config.json`, factory default `123456`). First login with default forces password change in the SPA (`passwordIsDefault`). Change via `POST /api/settings/password` (Bearer) or CLI `kumix-worker password --password <pw>`. Password change does **not** re-encrypt stream keys or invalidate existing Bearer sessions.
 
@@ -69,7 +90,7 @@ Signed URLs: `POST /api/events/signed-url`, `POST /api/sources/:id/preview-url` 
 
 Auth rate limit: **10** failures / 60s / IP (in-memory, lazy-expire + prune). `KUMIX_WORKER_TRUST_PROXY=1` only behind a proxy that strips client-supplied forwarded headers.
 
-Dashboard Settings UI: timezone, diskUsageLimitPercent, youtubeApiKey (write-only; blank keeps existing), change password, regenerate API token (client-generated; server does not echo token).
+Dashboard Settings UI: YouTube connections (BYO OAuth client), change password. Timezone & diskUsageLimitPercent are admin-only (PATCH `/api/settings` requires admin; General tab hidden for non-admins).
 
 ## Stream lifecycle
 
@@ -122,7 +143,7 @@ Notable env:
 - `KUMIX_WORKER_TRUST_PROXY=1` for real client IP behind proxy (proxy must strip client XFF).
 - `KUMIX_WORKER_IPV4_FIRST` — default on; set `0` to disable.
 
-CLI auth/ops: `init`, `serve`, `status`, `doctor`, `token` (`--show` / `--regenerate`), `password --password <pw>`, `update`, `reset`.
+CLI auth/ops: `init`, `serve`, `status`, `doctor`, `admin` (create user / reset password), `update`, `reset`.
 
 ## Testing quirks
 
@@ -133,11 +154,9 @@ bun run test -- tests/http/api-crud.test.ts     # single file
 
 - Config: `tests/vitest.config.ts` (not root). `pool: "forks"` for `process.chdir` — no thread-safe globals.
 - **Wrong cwd:** `messages.test.ts` uses `process.cwd()` for `frontend/src`; running inside `tests/` silently skips orphan checks.
-- DB tests: call `resetDbForTests()` in `beforeEach`/`afterEach` (closes SQLite singleton).
-- Test tokens: `validToken` requires length 16–256, rejects weak patterns and &lt;5 distinct chars. Use random-looking 16+ char stubs, not `"test"`.
+- DB tests: call `resetDbForTests()` **and** `resetAuthForTests()` in `beforeEach`/`afterEach`.
+- Test auth: Better Auth passwords min 8 chars. Use `createAdminSession` / `createUserSession` helpers (`tests/helpers.ts`). Create the admin session **before** ordinary users (`/api/auth/setup` is one-time per DB).
 - Stream create tests must mark sources `ready` via `updateSourceProbe` before `POST /api/streams`.
-- Password helpers are async (`hashPassword` / `verifyPassword` / `isDefaultPasswordHash`); tests must `await`.
-- HTTP auth tests: use rate-limit reset helper between cases when hammering login.
 
 ## CI / release
 

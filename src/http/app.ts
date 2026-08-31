@@ -5,20 +5,22 @@
 import { Scalar } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { cors } from "hono/cors";
 import { openAPIRouteHandler } from "hono-openapi";
 
+import { requireAdmin, requireSession } from "../auth/middleware";
+import { getAuth, getAuthDb } from "../auth/server";
+import { listStreams } from "../db/streams";
 import { readPackageVersion } from "../lib/version";
-import { allowedCorsOrigins, readSettings } from "../runtime/config";
-import { fail, ok, publicApiRateLimit, tokenAuth } from "./middleware";
-import { registerAuthRoutes } from "./routes/auth";
+import { stopStream } from "../services/stream-runner";
+import { fail, ok, signedRequest } from "./middleware";
+import { registerAdminUserRoutes } from "./routes/admin-users";
 import { doc } from "./routes/common";
-import { registerCoreRoutes } from "./routes/core";
 import { registerEventRoutes } from "./routes/events";
 import { registerSourceRoutes } from "./routes/sources";
 import { registerStreamRoutes } from "./routes/streams";
 import { registerSystemRoutes } from "./routes/system";
 import { registerTargetRoutes } from "./routes/targets";
+import { registerYoutubeRoutes } from "./routes/youtube";
 import { findPublicDir, serveStatic } from "./static";
 
 /**
@@ -51,21 +53,9 @@ export function createApiApp() {
     }
   });
 
-  app.use(
-    "/api/v1/*",
-    cors({
-      allowHeaders: ["Authorization", "Content-Type"],
-      allowMethods: ["GET", "POST", "OPTIONS"],
-      origin: (origin) => {
-        const allowed = allowedCorsOrigins();
-        return origin && allowed.includes(origin) ? origin : "";
-      },
-    }),
-  );
-
   app.get(
     "/health",
-    doc("Health", "Health check", "Returns basic process uptime without requiring a token."),
+    doc("Health", "Health check", "Returns basic process uptime without requiring a session."),
     (c) => c.json(ok({ status: "ok", uptimeSec: Math.round(process.uptime()) })),
   );
 
@@ -77,7 +67,7 @@ export function createApiApp() {
           title: "Kumix Worker API",
           version: readPackageVersion(),
           description:
-            "Local API for Kumix Worker sources, targets, streams, logs, settings, and runtime diagnostics.",
+            "Multi-user streaming daemon for Kumix Worker: sources, targets, streams, logs, settings, and users.",
         },
         servers: [
           {
@@ -85,47 +75,42 @@ export function createApiApp() {
             description: "Local Kumix Worker server",
           },
         ],
-        components: {
-          securitySchemes: {
-            bearerAuth: {
-              type: "http",
-              scheme: "bearer",
-              description: "Kumix Worker token. Paste it once to authorize all /api/* requests.",
-            },
-          },
-        },
-        security: [{ bearerAuth: [] }],
       },
     }),
   );
 
-  app.get("/docs", (c) => {
+  // OpenAPI docs page: requires an admin session.
+  app.get("/docs", requireSession, requireAdmin, async (c) => {
     c.header(
       "Content-Security-Policy",
       "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' data: https:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://api.scalar.com https://cdn.jsdelivr.net",
     );
-    return Scalar({ theme: "kepler", url: "/openapi" })(c, () => Promise.resolve());
+    return Scalar({ theme: "kepler", url: "/openapi" })(c, () =>
+      Promise.resolve(),
+    ) as unknown as Response;
   });
+
   app.get(
     "/api/bootstrap",
     doc(
       "System",
       "Read bootstrap data",
-      "Returns public token state for the dashboard onboarding screen.",
+      "Returns public onboarding state for the dashboard (whether an admin account exists).",
     ),
     (c) => {
-      const settings = readSettings();
+      const userCount = getAuthDb().prepare("SELECT COUNT(*) AS n FROM user").get() as {
+        n: number;
+      };
       return c.json(
         ok({
           apiVersion: "v1",
-          hasToken: Boolean(settings.token),
-          dashboardPath: "/",
+          hasAdmin: userCount.n > 0,
         }),
       );
     },
   );
 
-  // Body limit applies to all /api/* including public auth login/exchange.
+  // Body limit applies to all /api/*
   app.use(
     "/api/*",
     bodyLimit({
@@ -134,25 +119,123 @@ export function createApiApp() {
     }),
   );
 
-  // Auth routes are public (password login, handoff) and must be registered
-  // before the dashboard tokenAuth guard.
-  registerAuthRoutes(app);
-
-  // Core-facing /api/v1/* routes: CORS + token auth + separate rate limit.
-  // The tokenAuth below is scoped to non-v1 paths, so /api/v1/* is guarded here.
-  app.use("/api/v1/*", tokenAuth);
-  app.use("/api/v1/*", publicApiRateLimit);
-  registerCoreRoutes(app);
-
-  // Dashboard /api/* routes (excluding /api/v1/* and /api/auth/*, which are
-  // already registered above): require the worker token.
-  app.use("/api/*", async (c, next) => {
-    if (c.req.path.startsWith("/api/v1")) return await next();
-    return await tokenAuth(c, next);
+  // Auth: one-time admin bootstrap, then the Better Auth handler owns /api/auth/*.
+  let setupClaimed = false;
+  app.post(
+    "/api/auth/setup",
+    doc(
+      "Auth",
+      "Create admin",
+      "Creates the first admin account when no user exists yet, then signs in.",
+    ),
+    async (c) => {
+      const userCount = getAuthDb().prepare("SELECT COUNT(*) AS n FROM user").get() as {
+        n: number;
+      };
+      if (userCount.n > 0) return fail("FORBIDDEN", "Admin already exists", 403);
+      if (setupClaimed) return fail("FORBIDDEN", "Admin already exists", 403);
+      setupClaimed = true;
+      const raw = await c.req.json().catch(() => null);
+      const email = typeof raw?.email === "string" ? raw.email.trim() : "";
+      const password = typeof raw?.password === "string" ? raw.password : "";
+      const name = typeof raw?.name === "string" && raw.name.trim() ? raw.name.trim() : "Admin";
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        return fail("VALIDATION_ERROR", "A valid email is required", 400);
+      }
+      if (password.length < 8) {
+        return fail("VALIDATION_ERROR", "Password must be at least 8 characters", 400);
+      }
+      try {
+        const response = await getAuth().api.signUpEmail({
+          body: { email, password, name, callbackURL: "/" },
+          asResponse: true,
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { message?: string } | null;
+          return fail(
+            "VALIDATION_ERROR",
+            body?.message ?? "Could not create the admin account",
+            400,
+          );
+        }
+        getAuthDb().prepare("UPDATE user SET role = 'admin' WHERE email = ?").run(email);
+      } catch (error) {
+        setupClaimed = false;
+        const message =
+          error instanceof Error ? error.message : "Could not create the admin account";
+        return fail("VALIDATION_ERROR", message, 400);
+      }
+      return await getAuth().api.signInEmail({
+        body: { email, password },
+        headers: c.req.raw.headers,
+        asResponse: true,
+      });
+    },
+  );
+  // Better Auth admin plugin cannot guard role demotion of the only admin; intercept before it owns the route.
+  app.on("POST", "/api/auth/admin/update-user", async (c) => {
+    const raw = (await c.req.raw
+      .clone()
+      .json()
+      .catch(() => null)) as {
+      userId?: string;
+      data?: { role?: string | string[] };
+    } | null;
+    const role = raw?.data?.role;
+    const demotes =
+      role !== undefined &&
+      (Array.isArray(role) ? role.every((r) => r !== "admin") : role !== "admin");
+    if (raw?.userId && demotes) {
+      const target = getAuthDb().prepare("SELECT role FROM user WHERE id = ?").get(raw.userId) as
+        | { role?: string }
+        | undefined;
+      if (target?.role === "admin") {
+        const admins = getAuthDb()
+          .prepare("SELECT COUNT(*) AS n FROM user WHERE role = 'admin'")
+          .get() as { n: number };
+        if (admins.n <= 1) {
+          return fail("BAD_REQUEST", "Cannot demote the only admin account", 400);
+        }
+      }
+    }
+    return getAuth().handler(c.req.raw);
   });
+  // Banning a user must also cut off their live streams, not just sessions.
+  app.on("POST", "/api/auth/admin/ban-user", async (c) => {
+    const raw = (await c.req.raw
+      .clone()
+      .json()
+      .catch(() => null)) as { userId?: string } | null;
+    const res = await getAuth().handler(c.req.raw);
+    if (res.ok && raw?.userId) {
+      for (const s of listStreams(raw.userId)) {
+        if (s.status === "running" || s.status === "stopping") {
+          try {
+            stopStream(s.id);
+          } catch {
+            // best-effort cutoff
+          }
+        }
+      }
+    }
+    return res;
+  });
+  app.all("/api/auth/*", (c) => getAuth().handler(c.req.raw));
+
+  // Dashboard /api/* routes: require a Better Auth session unless explicitly public.
+  app.use("/api/*", async (c, next) => {
+    const path = c.req.path;
+    if (path.startsWith("/api/auth") || path === "/api/bootstrap" || signedRequest(c)) {
+      return await next();
+    }
+    return await requireSession(c, next);
+  });
+
   registerSystemRoutes(app);
+  registerAdminUserRoutes(app);
   registerSourceRoutes(app);
   registerTargetRoutes(app);
+  registerYoutubeRoutes(app);
   registerStreamRoutes(app);
   registerEventRoutes(app);
 

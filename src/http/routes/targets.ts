@@ -7,7 +7,7 @@ import {
   createTarget,
   deleteTarget,
   getTarget,
-  listTargetsWithKeys,
+  listTargets,
   patchTarget,
   safeTarget,
 } from "../../db/targets";
@@ -26,18 +26,23 @@ export function registerTargetRoutes(app: Hono) {
   app.get(
     "/api/targets",
     doc("Targets", "List targets", "Lists streaming targets with secrets omitted."),
-    (c) => c.json(ok(listTargetsWithKeys().map((target) => safeTarget(target)))),
+    (c) => {
+      const user = c.get("user");
+      const list = user?.role === "admin" ? listTargets() : listTargets(user?.id);
+      return c.json(ok(list.map((target) => safeTarget(target))));
+    },
   );
 
   app.post(
     "/api/targets",
     doc("Targets", "Create target", "Creates a streaming target and encrypts its stream key.", 201),
     async (c) => {
+      const user = c.get("user");
       const parsed = targetCreateSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid target");
       }
-      return c.json(ok(createTarget(parsed.data)), 201);
+      return c.json(ok(createTarget(parsed.data, user?.id)), 201);
     },
   );
 
@@ -47,9 +52,17 @@ export function registerTargetRoutes(app: Hono) {
     async (c) => {
       const parsed = bulkDeleteSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return fail("BAD_REQUEST", "Invalid target ids");
+      const user = c.get("user");
       const deleted: string[] = [];
       const failed: { id: string; message: string }[] = [];
       for (const id of parsed.data.ids) {
+        if (user?.role !== "admin") {
+          const existing = getTarget(id);
+          if (!existing || (existing.userId && existing.userId !== user?.id)) {
+            failed.push({ id, message: "Target not found" });
+            continue;
+          }
+        }
         try {
           if (deleteTarget(id)) deleted.push(id);
           else failed.push({ id, message: "Target not found" });
@@ -65,8 +78,12 @@ export function registerTargetRoutes(app: Hono) {
     "/api/targets/:id",
     doc("Targets", "Read target", "Returns one target with a masked stream key."),
     (c) => {
+      const user = c.get("user");
       const target = getTarget(c.req.param("id"));
       if (!target) return fail("NOT_FOUND", "Target not found", 404);
+      if (user?.role !== "admin" && target.userId && target.userId !== user?.id) {
+        return fail("NOT_FOUND", "Target not found", 404);
+      }
       return c.json(ok(safeTarget(target)));
     },
   );
@@ -83,6 +100,12 @@ export function registerTargetRoutes(app: Hono) {
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid target");
       }
+      const user = c.get("user");
+      const current = getTarget(c.req.param("id"));
+      if (!current) return fail("NOT_FOUND", "Target not found", 404);
+      if (user?.role !== "admin" && current.userId && current.userId !== user?.id) {
+        return fail("NOT_FOUND", "Target not found", 404);
+      }
       const updated = patchTarget(c.req.param("id"), parsed.data);
       if (!updated) return fail("NOT_FOUND", "Target not found", 404);
       return c.json(ok(safeTarget(updated)));
@@ -93,6 +116,12 @@ export function registerTargetRoutes(app: Hono) {
     "/api/targets/:id",
     doc("Targets", "Delete target", "Deletes a streaming target."),
     (c) => {
+      const user = c.get("user");
+      const target = getTarget(c.req.param("id"));
+      if (!target) return fail("NOT_FOUND", "Target not found", 404);
+      if (user?.role !== "admin" && target.userId && target.userId !== user?.id) {
+        return fail("NOT_FOUND", "Target not found", 404);
+      }
       try {
         return c.json(ok(deleteTarget(c.req.param("id"))));
       } catch (error) {

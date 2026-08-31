@@ -19,9 +19,6 @@ afterEach(() => {
 describe("Kumix Worker config", () => {
   it("creates default settings in the configured data directory", async () => {
     const { readSettings } = await import("../../src/runtime/config");
-    const { isPasswordHash, verifyPassword, DEFAULT_DASHBOARD_PASSWORD } = await import(
-      "../../src/lib/password"
-    );
 
     const settings = readSettings();
 
@@ -29,22 +26,20 @@ describe("Kumix Worker config", () => {
     expect(settings.port).toBe(8080);
     expect(settings.diskUsageLimitPercent).toBe(90);
     expect(settings.timezone).toBe("Asia/Jakarta");
-    expect(settings.token.length).toBeGreaterThanOrEqual(32);
-    expect(isPasswordHash(settings.passwordHash)).toBe(true);
-    expect(await verifyPassword(DEFAULT_DASHBOARD_PASSWORD, settings.passwordHash)).toBe(true);
+    expect(settings.signingSecret.length).toBeGreaterThanOrEqual(32);
+    expect(settings.encryptionKey.length).toBeGreaterThanOrEqual(32);
   });
 
   it("persists settings", async () => {
     const { readSettings, writeSettings } = await import("../../src/runtime/config");
-    const { isPasswordHash } = await import("../../src/lib/password");
 
     writeSettings({
       dataDir,
       diskUsageLimitPercent: 80,
       port: 9090,
       timezone: "UTC",
-      token: "test-token-123456",
-      youtubeApiKey: "",
+      signingSecret: "custom-signing-secret-01234567890123456789",
+      encryptionKey: "custom-encryption-key-01234567890123456789",
     });
 
     const settings = readSettings();
@@ -53,9 +48,8 @@ describe("Kumix Worker config", () => {
       diskUsageLimitPercent: 80,
       port: 9090,
       timezone: "UTC",
-      token: "test-token-123456",
-      youtubeApiKey: "",
+      signingSecret: "custom-signing-secret-01234567890123456789",
+      encryptionKey: "custom-encryption-key-01234567890123456789",
     });
-    expect(isPasswordHash(settings.passwordHash)).toBe(true);
   });
 });

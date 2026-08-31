@@ -74,7 +74,24 @@ export function getDb(): SqliteDatabase {
     };
     ensureSchema(wrapper);
     tryColumnMigration(wrapper, "streams", "youtube_live_url", "TEXT");
+    tryColumnMigration(wrapper, "streams", "user_id", "TEXT");
+    tryColumnMigration(wrapper, "streams", "mode", "TEXT DEFAULT 'rtmp'");
+    tryColumnMigration(wrapper, "streams", "youtube_connection_id", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_title", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_description", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_tags", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_privacy", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_made_for_kids", "INTEGER DEFAULT 0");
+    tryColumnMigration(wrapper, "streams", "yt_dvr", "INTEGER DEFAULT 1");
+    tryColumnMigration(wrapper, "streams", "yt_stream_key_id", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_broadcast_id", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_video_id", "TEXT");
+    tryColumnMigration(wrapper, "streams", "yt_stream_key_ref", "TEXT");
     tryColumnMigration(wrapper, "sources", "keyframe_interval", "REAL");
+    tryColumnMigration(wrapper, "sources", "user_id", "TEXT");
+    tryColumnMigration(wrapper, "targets", "user_id", "TEXT");
+    tryColumnMigration(wrapper, "events", "user_id", "TEXT");
+    tryColumnMigration(wrapper, "youtube_connections", "subscriber_count", "INTEGER");
     dbInstance = instance;
     dbWrapper = wrapper;
     return wrapper;
@@ -82,7 +99,7 @@ export function getDb(): SqliteDatabase {
     try {
       instance?.close();
     } catch {
-      throw getDbFailure(error);
+      // close failure is irrelevant; the init error is the real cause
     }
     throw getDbFailure(error);
   }
@@ -104,10 +121,65 @@ function tryColumnMigration(db: SqliteDatabase, table: string, column: string, t
   }
 }
 
+export const AUTH_SCHEMA_SQL = `
+    CREATE TABLE IF NOT EXISTS user (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      emailVerified INTEGER NOT NULL DEFAULT 0,
+      image TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      role TEXT,
+      banned INTEGER,
+      banReason TEXT,
+      banExpires INTEGER,
+      maxStorageBytes INTEGER,
+      maxStreams INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS session (
+      id TEXT PRIMARY KEY,
+      token TEXT NOT NULL UNIQUE,
+      userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+      expiresAt INTEGER NOT NULL,
+      ipAddress TEXT,
+      userAgent TEXT,
+      impersonatedBy TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS account (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+      accountId TEXT NOT NULL,
+      providerId TEXT NOT NULL,
+      accessToken TEXT,
+      refreshToken TEXT,
+      idToken TEXT,
+      accessTokenExpiresAt INTEGER,
+      refreshTokenExpiresAt INTEGER,
+      scope TEXT,
+      password TEXT,
+      issuer TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS verification (
+      id TEXT PRIMARY KEY,
+      identifier TEXT NOT NULL,
+      value TEXT NOT NULL,
+      expiresAt INTEGER NOT NULL,
+      createdAt INTEGER,
+      updatedAt INTEGER
+    );
+`;
+
 function ensureSchema(database: SqliteDatabase): void {
   database.exec(`
+    ${AUTH_SCHEMA_SQL}
     CREATE TABLE IF NOT EXISTS sources (
       id TEXT PRIMARY KEY,
+      user_id TEXT,
       name TEXT NOT NULL,
       kind TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -129,6 +201,7 @@ function ensureSchema(database: SqliteDatabase): void {
 
     CREATE TABLE IF NOT EXISTS targets (
       id TEXT PRIMARY KEY,
+      user_id TEXT,
       label TEXT NOT NULL,
       ingest_url TEXT NOT NULL,
       stream_key_cipher TEXT NOT NULL,
@@ -137,11 +210,39 @@ function ensureSchema(database: SqliteDatabase): void {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS youtube_connections (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      client_id_cipher TEXT NOT NULL,
+      client_secret_cipher TEXT NOT NULL,
+      refresh_token_cipher TEXT,
+      channel_id TEXT,
+      channel_title TEXT,
+      channel_thumbnail TEXT,
+      subscriber_count INTEGER,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS streams (
       id TEXT PRIMARY KEY,
+      user_id TEXT,
       title TEXT NOT NULL,
       source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE RESTRICT,
-      target_id TEXT NOT NULL REFERENCES targets(id) ON DELETE RESTRICT,
+      target_id TEXT REFERENCES targets(id) ON DELETE RESTRICT,
+      mode TEXT NOT NULL DEFAULT 'rtmp',
+      youtube_connection_id TEXT REFERENCES youtube_connections(id) ON DELETE RESTRICT,
+      yt_title TEXT,
+      yt_description TEXT,
+      yt_tags TEXT,
+      yt_privacy TEXT,
+      yt_made_for_kids INTEGER NOT NULL DEFAULT 0,
+      yt_dvr INTEGER NOT NULL DEFAULT 1,
+      yt_stream_key_id TEXT,
+      yt_broadcast_id TEXT,
+      yt_video_id TEXT,
+      yt_stream_key_ref TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       loop INTEGER NOT NULL DEFAULT 1,
       youtube_live_url TEXT,
@@ -160,6 +261,7 @@ function ensureSchema(database: SqliteDatabase): void {
 
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
+      user_id TEXT,
       stream_id TEXT REFERENCES streams(id) ON DELETE SET NULL,
       kind TEXT NOT NULL,
       message TEXT NOT NULL,
@@ -168,9 +270,13 @@ function ensureSchema(database: SqliteDatabase): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_sources_status ON sources(status);
+    CREATE INDEX IF NOT EXISTS idx_sources_user ON sources(user_id);
     CREATE INDEX IF NOT EXISTS idx_targets_active ON targets(active);
+    CREATE INDEX IF NOT EXISTS idx_targets_user ON targets(user_id);
     CREATE INDEX IF NOT EXISTS idx_streams_status ON streams(status);
+    CREATE INDEX IF NOT EXISTS idx_streams_user ON streams(user_id);
     CREATE INDEX IF NOT EXISTS idx_events_stream ON events(stream_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id, created_at);
 
     CREATE TABLE IF NOT EXISTS bandwidth_log (
       id TEXT PRIMARY KEY,

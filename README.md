@@ -29,9 +29,15 @@ Options:
 # Custom port + timezone
 curl -fsSL https://raw.githubusercontent.com/kumixlabs/worker/main/install.sh | sudo bash -s -- --port 9090 --timezone UTC
 
+# Domain + HTTPS (Caddy reverse proxy, automatic Let's Encrypt TLS)
+# DNS A record for the domain must already point to this server.
+curl -fsSL https://raw.githubusercontent.com/kumixlabs/worker/main/install.sh | sudo bash -s -- --domain stream.example.com
+
 # Uninstall everything (service + package + data)
 curl -fsSL https://raw.githubusercontent.com/kumixlabs/worker/main/install.sh | sudo bash -s -- --uninstall
 ```
+
+The installer also sets `KUMIX_WORKER_TRUST_PROXY=1` and binds the worker to `127.0.0.1` when `--domain` is used, and prints the exact YouTube OAuth redirect URI to register in Google Cloud Console.
 
 ### NPM (global install)
 
@@ -63,7 +69,7 @@ See [DOCKER.md](./DOCKER.md) for full Docker usage, compose, and configuration.
 - Creates manual, scheduled, and recurring stream jobs.
 - Runs FFmpeg jobs and tracks runtime metrics, status, logs, and tombstones.
 - Recovers interrupted streams safely after restart.
-- Exposes health, stats, capabilities, link metadata, and token rotation endpoints for external integrations.
+- Exposes health, stats, and monitoring endpoints for external integrations.
 - Serves static dashboard assets from the package build.
 
 ## Main Features
@@ -78,7 +84,7 @@ The dashboard includes:
 - Sources page for adding direct URL or Google Drive sources, viewing media details, previewing, renaming, cancelling, retrying, and deleting sources, including bulk delete.
 - Targets page for creating/editing RTMP targets and enabling/disabling destinations.
 - Streams page for stream lifecycle actions, logs, exports, stopped time edits, and safe deletion.
-- Settings page for timezone, disk usage limit, optional YouTube Data API key (write-only), dashboard password change, and API token regenerate.
+- Settings page for timezone, disk usage limit, YouTube channel connections (BYO Google OAuth client), and account password change (Better Auth).
 - EN/ID i18n with parity and orphan-key tests.
 
 ### Sources
@@ -154,17 +160,7 @@ Events support:
 
 ### Core-Facing API
 
-External integrations should use `/api/v1/*` endpoints with Bearer token auth.
-
-Available core-facing endpoints:
-
-- `GET /api/v1/health` - lightweight worker health.
-- `GET /api/v1/stats` - monitoring stats and recent stream summaries.
-- `GET /api/v1/capabilities` - worker API version, feature flags, limits, and safe settings.
-- `GET /api/v1/link` - link/install metadata without leaking the raw token.
-- `POST /api/v1/settings/token` - rotate worker token and re-encrypt target secrets.
-
-CORS origins are not allowed by default. Configure allowed origins with `KUMIX_WORKER_CORS_ORIGINS`.
+Integrations authenticate like any other client: create a user account and use the session cookie, or front specific flows with the signed-URL routes below.
 
 ## CLI
 
@@ -175,10 +171,7 @@ kumix-worker init
 kumix-worker serve
 kumix-worker status
 kumix-worker doctor
-kumix-worker token
-kumix-worker token --show
-kumix-worker token --regenerate
-kumix-worker password --password <new-password>
+kumix-worker admin                 # create a user / reset a password
 kumix-worker reset --yes
 kumix-worker reset --all --yes
 kumix-worker reset --force --yes
@@ -236,12 +229,11 @@ Data layout:
 
 Config contains:
 
-- `token` — API Bearer key, stream-key encryption root, signed-URL HMAC
-- `passwordHash` — scrypt hash of the dashboard login password
+- `signingSecret` — HMAC key for signed URLs and YouTube OAuth state
+- `encryptionKey` — AES-256-GCM root for target stream keys and YouTube OAuth credentials
 - `port`
 - `timezone`
 - `diskUsageLimitPercent`
-- `youtubeApiKey` — optional; never returned raw from the API
 - `dataDir`
 
 The config file is written with restrictive permissions where supported.
@@ -269,49 +261,42 @@ KUMIX_WORKER_AUTO_RESUME
 
 ## HTTP API Overview
 
-Dashboard/private API routes use Bearer token auth:
+Dashboard/private API routes require a Better Auth session cookie (admin or regular user):
 
-- `/api/settings`, `PATCH /api/settings`, `POST /api/settings/password`
-- `/api/stats`
-- `/api/metrics`
-- `/api/health/details`
-- `/api/bandwidth`
-- `/api/sources`
-- `/api/targets`
-- `/api/streams`
-- `/api/events`
-- `/api/events/signed-url`
+- `/api/settings`, `PATCH /api/settings`
+- `/api/stats`, `/api/metrics`, `/api/health/details`, `/api/bandwidth`
+- `/api/sources`, `/api/targets`, `/api/streams`
+- `/api/events`, `/api/events/signed-url`
 - `/api/sources/:id/preview-url`
+- `/api/admin/users` (admin only)
+- `/api/youtube/connections` (YouTube channel connections)
 
-The cached source preview (`GET /api/sources/:id/preview`, with HTTP range support) is authorized through a short-lived signed URL rather than a Bearer header, so the dashboard `<video>` element can stream it directly.
+Non-admin users only see and mutate their own resources; admins see everything.
+
+The cached source preview (`GET /api/sources/:id/preview`, with HTTP range support) is authorized through a short-lived signed URL rather than a cookie, so the dashboard `<video>` element can stream it directly.
 
 Public unauthenticated routes:
 
 - `GET /health`
 - `GET /api/bootstrap`
 - `GET /openapi`
-- `GET /docs`
-- `GET /auth?token=...` (CLI/core handoff only)
-- `POST /api/auth/login` (dashboard password)
-- `POST /api/auth/exchange` (handoff code → session token)
+- `GET /docs` (redirects to login; Scalar page requires an admin session)
+- `POST /api/auth/setup` (one-time first admin creation)
 
 Signed URL routes are generated by `POST /api/events/signed-url` and `POST /api/sources/:id/preview-url`, and are short-lived.
 
 ## Security Notes
 
-- Dashboard login uses a password (factory default `123456`, scrypt-hashed). First login with the default forces a password change in the SPA. Change anytime under Settings or with `kumix-worker password --password <pw>`. Password change does not rotate the API token, re-encrypt stream keys, or invalidate other Bearer sessions.
-- Password hashing is async scrypt with allowlisted cost parameters (rejects corrupt/malicious `passwordHash` values that could DoS the process). Invalid `passwordHash` fails closed (no silent reset to default).
-- API routes require Bearer token auth unless explicitly public. After password login (or handoff), the SPA stores the worker token in **localStorage** and sends it as Bearer. On 401 the SPA clears the session.
-- Core handoff: `/auth?token=` validates the token, then redirects with a single-use, short-lived `#code=` that the dashboard exchanges via `POST /api/auth/exchange`. CLI printed dashboard URLs never embed the token (password login).
-- Token rotation (`POST /api/v1/settings/token` or `kumix-worker token --regenerate`) returns `{ rotatedAt, tokenLength }` only — never echoes the new token. Concurrent rotations are serialized; stream keys are re-encrypted with rollback on config write failure.
-- Invalid auth attempts are rate-limited (10 / 60s / IP), with lazy expiry and prune. Buckets key on the socket address by default; forwarded headers are only trusted when `KUMIX_WORKER_TRUST_PROXY=1` (enable only behind a proxy that strips client-supplied XFF).
-- Web/core API calls are rate-limited separately.
+- Authentication is multi-user (Better Auth: email + password, session cookies, scrypt-hashed passwords). The first admin is created once via `POST /api/auth/setup`; admins manage users, quotas, and bans from `/users`.
+- Tenancy: `sources`, `targets`, `streams`, `events`, and `youtube_connections` are scoped to `user_id`; non-admin sessions can only touch their own rows on every route (including bulk delete, preview, analytics, export, SSE).
+- Deleting a user cascades their streams, sources, targets, events, YouTube connections, and auth records.
+- Auth endpoints are rate-limited by Better Auth (10 requests / 60s / IP). Forwarded headers are only trusted when `KUMIX_WORKER_TRUST_PROXY=1` (enable only behind a proxy that strips client-supplied XFF).
+- Quotas: admins can cap `maxStorageBytes` and `maxStreams` per user; enforced before downloads and stream starts.
 - `/api/*` routes enforce a 1 MB request body limit; unknown `/api/*` paths return a 404 envelope.
 - Responses include security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and a basic Content-Security-Policy.
-- New dashboard passwords cannot be the factory default (`123456`); rejected by API and CLI.
-- Stream keys are encrypted using the worker token (AES-256-GCM). FFmpeg is spawned with the RTMP URL (including the stream key) as argv — deploy single-tenant or in a container so process listings are not shared.
-- Raw worker token and password hash are never returned from settings or core-facing endpoints. Settings expose `passwordIsDefault` / `hasPassword` (booleans) and `tokenLength` only.
-- Raw and encrypted target stream keys are never returned from API responses; only a masked preview is exposed.
+- Secrets at rest (target stream keys, YouTube OAuth client credentials and refresh tokens) are encrypted with AES-256-GCM keyed from `encryptionKey`. API responses only expose masked previews (`clientIdMasked`, stream-key masks) — never raw secrets, ciphertexts, or hashes.
+- YouTube Live automation uses each user's own Google Cloud OAuth client (BYO). The OAuth `state` is HMAC-signed and verified against both the session user and the connection owner on callback.
+- Stream keys are encrypted using AES-256-GCM. FFmpeg is spawned with the RTMP URL (including the stream key) as argv — deploy single-tenant or in a container so process listings are not shared.
 - Source downloads are protected against SSRF via DNS checks, per-redirect-hop validation, and connection-time DNS pinning that blocks private, loopback, link-local, and embedded-IPv4 (6to4/NAT64) addresses. Google Drive confirmation failures do not fall back to HTML quarantine pages. Concurrent downloads are capped.
 - Static file serving guards against path traversal and streams assets.
 - Source cache filenames and event export filenames are sanitized.
@@ -346,19 +331,18 @@ bun run build
 
 The test suite covers:
 
-- Config validation, including weak token rejection and password hash seeding.
-- Password helpers (async scrypt hash/verify, corrupt-param rejection).
+- Config validation.
 - DB integration and stats aggregation.
-- HTTP API CRUD, auth login/password change, stream-key non-exposure, running-stream delete protection, and SSE signed URL flows.
-- Auth rate limits and security response headers.
-- Core-facing API contract.
+- HTTP API CRUD, tenancy/ownership scoping, quota enforcement, stream-key non-exposure, running-stream delete protection, and SSE signed URL flows.
+- Auth (Better Auth setup/login, admin vs user scoping, rate limits) and security response headers.
 - Static serving security.
 - FFmpeg/FFprobe helpers.
 - Source downloading and SSRF validation.
 - Scheduler, recurrence, and tick lifecycle.
 - Recovery/tombstones.
-- Crypto/token re-encryption.
-- Token verification (timing-safe comparison).
+- Crypto re-encryption and secrets masking.
+- Signed-URL verification (timing-safe comparison).
+- YouTube connection lifecycle and OAuth URL generation.
 - Version comparison for self-update.
 - Stream runner lifecycle.
 - Frontend message parity and orphan keys.
@@ -383,9 +367,9 @@ kumix-worker serve
 
 The official Docker image already installs system FFmpeg/FFprobe via apt and sets `KUMIX_WORKER_FFMPEG_PATH` / `KUMIX_WORKER_FFPROBE_PATH` to `/usr/bin/*`, so the container does not rely on the bundled static binaries for RTMP output.
 
-### Config is missing its token
+### Config is missing its signing secret or encryption key
 
-If the worker refuses to start because the token is missing, it is refusing to generate a new one to avoid making existing encrypted stream keys undecryptable. Restore the original `config.json` or run a factory reset:
+If the worker refuses to start because `signingSecret` or `encryptionKey` is missing, restore the original `config.json` — without `encryptionKey`, existing encrypted stream keys and YouTube credentials are undecryptable. Otherwise run a factory reset:
 
 ```bash
 kumix-worker reset --all --yes

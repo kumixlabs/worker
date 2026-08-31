@@ -2,9 +2,11 @@
  * Scheduler loop for starting due streams and stopping elapsed streams.
  */
 
+import { getAuthDb } from "../auth/server";
 import { addEvent } from "../db/events";
-import { listStreams, patchStream } from "../db/streams";
+import { getStream, listStreams, patchStream } from "../db/streams";
 import { fromZonedParts, zonedParts, zonedWeekday } from "../lib/timezone";
+import { assertStreamQuota } from "../services/quota";
 import { reconcileOrphanedDbStreams, startStream, stopStream } from "../services/stream-runner";
 import type { StreamRecord } from "../types/stream";
 import { readSettings } from "./config";
@@ -40,6 +42,7 @@ type SchedulerTickResult = {
 type RecurrenceRule = {
   time?: string;
   weekdays?: number[];
+  day?: number;
 };
 
 /**
@@ -54,6 +57,7 @@ function recurrenceRule(value: unknown): RecurrenceRule {
   return {
     time: typeof rule.time === "string" ? rule.time : undefined,
     weekdays: Array.isArray(rule.weekdays) ? rule.weekdays.filter(Number.isInteger) : undefined,
+    day: Number.isInteger(rule.day) ? rule.day : undefined,
   };
 }
 
@@ -120,10 +124,11 @@ export function computeNextSchedule(stream: StreamRecord, now = new Date()): str
   }
 
   if (stream.recurrence === "monthly") {
+    const ruleDay = Number.isInteger(rule.day) ? (rule.day as number) : parts.day;
     for (let offset = 0; offset <= 1; offset += 1) {
       const year = parts.year + Math.floor((parts.month - 1 + offset) / 12);
       const month = ((parts.month - 1 + offset) % 12) + 1;
-      const day = Math.min(parts.day, daysInMonth(year, month));
+      const day = Math.min(ruleDay, daysInMonth(year, month));
       candidates.push(fromZonedParts({ ...parts, year, month, day }, timezone));
     }
   }
@@ -181,6 +186,18 @@ export async function tickScheduler(now = new Date()): Promise<SchedulerTickResu
   for (const action of dueActions) {
     try {
       if (action.type === "start") {
+        // ponytail: quota skip is silent — surface a dashboard warning if operators complain streams vanish
+        const stream = listStreams().find((s) => s.id === action.streamId);
+        if (stream?.userId) {
+          const owner = getAuthDb()
+            .prepare("SELECT maxStreams FROM user WHERE id = ?")
+            .get(stream.userId) as { maxStreams: number | null } | undefined;
+          try {
+            assertStreamQuota(stream.userId, owner?.maxStreams ?? null);
+          } catch {
+            continue;
+          }
+        }
         const started = await startStream(action.streamId);
         if (started) {
           result.started.push(action.streamId);
@@ -216,6 +233,7 @@ export async function tickScheduler(now = new Date()): Promise<SchedulerTickResu
         "error",
         `Scheduler ${action.type} failed: ${error instanceof Error ? error.message : String(error)}`,
         { action: action.type },
+        getStream(action.streamId)?.userId ?? null,
       );
     }
   }

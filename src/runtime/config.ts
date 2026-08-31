@@ -15,19 +15,12 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { defaultPasswordHash, isPasswordHash } from "../lib/password";
 import type { WorkerSettings } from "../types/worker";
 
 const DEFAULT_DIR = path.join(homedir(), ".kumix-worker");
 const CONFIG_FILE = "config.json";
 const markerFile = ".kumix-worker-data";
 
-/**
- * Validates a port number from config or environment.
- *
- * @param value - The raw value to validate.
- * @returns The validated port number.
- */
 function validPort(value: unknown): number {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -36,12 +29,6 @@ function validPort(value: unknown): number {
   return port;
 }
 
-/**
- * Validates the disk usage limit from config or environment.
- *
- * @param value - The raw value to validate.
- * @returns The validated percentage.
- */
 function validDiskLimit(value: unknown): number {
   const percent = Number(value);
   if (!Number.isInteger(percent) || percent < 50 || percent > 99) {
@@ -52,12 +39,6 @@ function validDiskLimit(value: unknown): number {
   return percent;
 }
 
-/**
- * Validates an IANA timezone from config or environment.
- *
- * @param value - The raw value to validate.
- * @returns The validated timezone.
- */
 function validTimezone(value: unknown): string {
   if (typeof value !== "string" || value.length < 1 || value.length > 64) {
     throw new Error("Invalid Kumix Worker timezone. Expected 1-64 character IANA timezone.");
@@ -70,100 +51,29 @@ function validTimezone(value: unknown): string {
   return value;
 }
 
-/**
- * Tokens so weak that they are effectively guessable. They are rejected even
- * when length >= 16 to avoid shipping a worker whose secret derives from a
- * trivially brute-forceable value (the token is the AES key for stream keys).
- */
-const weakTokenPatterns = [
-  /^0+$/,
-  /^1+$/,
-  /^a+$/i,
-  /^(\d)\1{15,}$/, // a single digit repeated (e.g. 7777777777777777)
-  /^(?:password|kumix|secret|token|admin|worker)+[-_\d]*$/i,
-  /^(?:1234567890)+$/i,
-  /^(?:abcdef)+[-_\d]*$/i,
-];
-
-function isWeakToken(token: string): boolean {
-  if (weakTokenPatterns.some((pattern) => pattern.test(token))) return true;
-  // Fewer than 5 distinct characters across a 16+ char token is too low-entropy.
-  const distinct = new Set(token.toLowerCase()).size;
-  return distinct < 5;
-}
-
-/**
- * Validates a worker auth token from config, CLI, or API input.
- * Rejects values that are too short, too long, or too weak to resist guessing.
- *
- * @param value - The raw value to validate.
- * @returns The validated token.
- */
-export function validToken(value: unknown): string {
-  if (typeof value !== "string" || value.length < 16 || value.length > 256) {
-    throw new Error("Invalid Kumix Worker token. Expected 16-256 characters.");
-  }
-  if (isWeakToken(value)) {
-    throw new Error(
-      "Invalid Kumix Worker token. The token is too predictable; use a random value of at least 16 characters (e.g. from `kumix-worker token --regenerate`).",
-    );
-  }
-  return value;
-}
-
-/**
- * Builds validated settings from partial config values and environment defaults.
- *
- * @param parsed - Partial values read from config.json.
- * @param allowTokenGeneration - When true (first run), a missing token is
- *   generated. When false (existing config), a missing token throws instead of
- *   silently rotating it, which would orphan every encrypted target stream key.
- * @returns Validated worker settings.
- */
-function normalizeSettings(
-  parsed: Partial<WorkerSettings>,
-  allowTokenGeneration: boolean,
-): WorkerSettings {
-  if (!parsed.token && !allowTokenGeneration) {
-    throw new Error(
-      "Kumix Worker config is missing its token. Refusing to generate a new one because " +
-        "it would make existing encrypted stream keys undecryptable. Restore the token or run " +
-        "'kumix-worker reset --all --yes' to recreate the worker from scratch.",
-    );
-  }
-  let passwordHash: string;
-  if (
-    parsed.passwordHash === undefined ||
-    parsed.passwordHash === null ||
-    parsed.passwordHash === ""
-  ) {
-    passwordHash = defaultPasswordHash();
-  } else if (isPasswordHash(parsed.passwordHash)) {
-    passwordHash = parsed.passwordHash;
-  } else {
-    throw new Error(
-      "Kumix Worker config has an invalid passwordHash. Restore a valid scrypt hash or run " +
-        "'kumix-worker reset --all --yes' to recreate the worker from scratch.",
-    );
-  }
+function normalizeSettings(parsed: Partial<WorkerSettings>): WorkerSettings {
   return {
-    token: validToken(parsed.token || randomBytes(32).toString("base64url")),
-    passwordHash,
+    signingSecret:
+      parsed.signingSecret &&
+      typeof parsed.signingSecret === "string" &&
+      parsed.signingSecret.length >= 32
+        ? parsed.signingSecret
+        : randomBytes(32).toString("hex"),
+    encryptionKey:
+      parsed.encryptionKey &&
+      typeof parsed.encryptionKey === "string" &&
+      parsed.encryptionKey.length >= 32
+        ? parsed.encryptionKey
+        : randomBytes(32).toString("hex"),
     port: validPort(parsed.port ?? process.env.KUMIX_WORKER_PORT ?? 8080),
     diskUsageLimitPercent: validDiskLimit(
       parsed.diskUsageLimitPercent ?? process.env.KUMIX_WORKER_DISK_LIMIT_PERCENT ?? 90,
     ),
     timezone: validTimezone(parsed.timezone ?? process.env.KUMIX_WORKER_TIMEZONE ?? "Asia/Jakarta"),
-    youtubeApiKey: parsed.youtubeApiKey ?? "",
     dataDir: ensureDataDir(),
   };
 }
 
-/**
- * Ensures the worker data directory is safe for destructive reset operations.
- *
- * @param dir - The candidate data directory.
- */
 function assertSafeDataDir(dir: string): void {
   const resolved = path.resolve(dir);
   const unsafe = new Set([path.parse(resolved).root, homedir(), process.cwd()]);
@@ -175,13 +85,6 @@ function assertSafeDataDir(dir: string): void {
   }
 }
 
-/**
- * Resets the worker by deleting its database, cache, tombstones, and optionally config.
- * Stream shutdown must be handled by the caller before invoking this function.
- * Optionally deletes the config file to force a full factory reset.
- *
- * @param includeConfig - Whether to also delete config.json (factory reset).
- */
 export function resetWorkerData(includeConfig: boolean): void {
   const dir = getDataDir();
   if (!existsSync(dir)) return;
@@ -198,28 +101,16 @@ export function resetWorkerData(includeConfig: boolean): void {
 
   if (includeConfig && existsSync(configFile)) {
     rmSync(configFile, { force: true });
-    tokenCache = null;
+    secretCache = null;
   }
 
   ensureDataDir();
 }
 
-/**
- * Resolves the root data directory for the worker.
- * Honors the KUMIX_WORKER_DATA_DIR env override, otherwise defaults to ~/.kumix-worker.
- *
- * @returns The absolute path to the data directory.
- */
-export function getDataDir(): string {
+function getDataDir(): string {
   return process.env.KUMIX_WORKER_DATA_DIR || DEFAULT_DIR;
 }
 
-/**
- * Ensures the data directory and all required subdirectories exist.
- * Creates the cache and tombstones folders if missing.
- *
- * @returns The absolute path to the data directory.
- */
 export function ensureDataDir(): string {
   const dir = getDataDir();
   mkdirSync(dir, { recursive: true });
@@ -232,132 +123,90 @@ export function ensureDataDir(): string {
   return dir;
 }
 
-/**
- * Resolves the absolute path to the worker's config.json file.
- *
- * @returns The absolute path to the config file.
- */
 export function getConfigPath(): string {
   return path.join(ensureDataDir(), CONFIG_FILE);
 }
 
-/**
- * Resolves the absolute path to the worker's SQLite database file.
- *
- * @returns The absolute path to db.sqlite.
- */
 export function getDbPath(): string {
   return path.join(ensureDataDir(), "db", "db.sqlite");
 }
 
-/**
- * Resolves the absolute path to the local source cache directory.
- *
- * @returns The absolute path to the cache folder.
- */
 export function getCacheDir(): string {
   return path.join(ensureDataDir(), "cache");
 }
 
-/**
- * Reads the worker settings from config.json.
- * Generates a fresh config (with a random token and defaults) on first run,
- * and backfills any missing fields from env vars or defaults on subsequent reads.
- *
- * @returns The resolved worker settings.
- */
+let secretCache: {
+  mtimeMs: number;
+  signingSecret: string;
+  encryptionKey: string;
+} | null = null;
+
+export function currentSigningSecret(): string {
+  const file = getConfigPath();
+  try {
+    const stats = statSync(file);
+    if (secretCache && secretCache.mtimeMs === stats.mtimeMs) {
+      return secretCache.signingSecret;
+    }
+    const settings = readSettings();
+    secretCache = {
+      mtimeMs: stats.mtimeMs,
+      signingSecret: settings.signingSecret,
+      encryptionKey: settings.encryptionKey,
+    };
+    return settings.signingSecret;
+  } catch {
+    return readSettings().signingSecret;
+  }
+}
+
+export function currentEncryptionKey(): string {
+  const file = getConfigPath();
+  try {
+    const stats = statSync(file);
+    if (secretCache && secretCache.mtimeMs === stats.mtimeMs) {
+      return secretCache.encryptionKey;
+    }
+    const settings = readSettings();
+    secretCache = {
+      mtimeMs: stats.mtimeMs,
+      signingSecret: settings.signingSecret,
+      encryptionKey: settings.encryptionKey,
+    };
+    return settings.encryptionKey;
+  } catch {
+    return readSettings().encryptionKey;
+  }
+}
+
 export function readSettings(): WorkerSettings {
   const file = getConfigPath();
   if (!existsSync(file)) {
-    const settings = normalizeSettings({}, true);
+    const settings = normalizeSettings({});
     writeSettings(settings);
     return settings;
   }
 
   try {
     const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<WorkerSettings>;
-    const settings = normalizeSettings(parsed, false);
-    // Persist default password hash when migrating older configs that only had a token.
-    if (
-      parsed.passwordHash === undefined ||
-      parsed.passwordHash === null ||
-      parsed.passwordHash === ""
-    ) {
+    const settings = normalizeSettings(parsed);
+    if (!parsed.signingSecret || !parsed.encryptionKey) {
       writeSettings(settings);
     }
     return settings;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown config error";
     throw new Error(
-      `Failed to read Kumix Worker config at ${file}: ${message}. Run 'kumix-worker init' to repair or 'kumix-worker reset --all --yes' to recreate.`,
+      `Failed to read Kumix Worker config at ${file}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
 
-/**
- * Persists the worker settings to config.json.
- * Writes with 0600 permissions to protect the auth token and password hash.
- * Missing passwordHash is filled with a hash of the factory default password.
- *
- * @param settings - The settings object to save.
- */
-export function writeSettings(
-  settings: Omit<WorkerSettings, "passwordHash"> & { passwordHash?: string },
-): void {
-  ensureDataDir();
-  const toWrite: WorkerSettings = {
-    ...settings,
-    passwordHash: isPasswordHash(settings.passwordHash)
-      ? settings.passwordHash
-      : defaultPasswordHash(),
-  };
-  const configPath = getConfigPath();
-  const tempPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tempPath, `${JSON.stringify(toWrite, null, 2)}\n`, { mode: 0o600 });
-  renameSync(tempPath, configPath);
-  tokenCache = {
-    path: configPath,
-    mtimeMs: statSync(configPath).mtimeMs,
-    token: toWrite.token,
-  };
-}
-
-/**
- * Cached token keyed by config path + mtime. Read-heavy crypto helpers use this
- * to avoid re-reading and re-validating config.json on every call. Invalidated
- * by writeSettings/resetWorkerData and by external config edits (mtime change).
- */
-let tokenCache: { path: string; mtimeMs: number; token: string } | null = null;
-
-/**
- * Returns the current worker token, reading config.json only when it changed.
- *
- * @returns The worker auth token.
- */
-export function currentToken(): string {
-  const configPath = getConfigPath();
-  let mtimeMs = 0;
-  try {
-    mtimeMs = statSync(configPath).mtimeMs;
-  } catch {
-    // Missing config: fall through to readSettings which creates it.
-  }
-  if (tokenCache && tokenCache.path === configPath && tokenCache.mtimeMs === mtimeMs) {
-    return tokenCache.token;
-  }
-  const token = readSettings().token;
-  tokenCache = { path: configPath, mtimeMs: statSync(configPath).mtimeMs, token };
-  return token;
-}
-
-/**
- * Reads the configured CORS allowlist for core-facing public API routes.
- *
- * @returns Trimmed origins from `KUMIX_WORKER_CORS_ORIGINS`.
- */
-export function allowedCorsOrigins(): string[] {
-  return (process.env.KUMIX_WORKER_CORS_ORIGINS ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+export function writeSettings(settings: WorkerSettings): void {
+  const file = getConfigPath();
+  const dir = path.dirname(file);
+  mkdirSync(dir, { recursive: true });
+  const tmp = `${file}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+  writeFileSync(tmp, JSON.stringify(settings, null, 2), { encoding: "utf8", mode: 0o600 });
+  renameSync(tmp, file);
+  secretCache = null;
 }

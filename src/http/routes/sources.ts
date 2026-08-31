@@ -61,7 +61,9 @@ export function registerSourceRoutes(app: Hono) {
     "/api/sources",
     doc("Sources", "List sources", "Lists direct URL and Google Drive source records."),
     (c) => {
-      const sources = listSources().map((source) => {
+      const user = c.get("user");
+      const list = user?.role === "admin" ? listSources() : listSources(user?.id);
+      const sources = list.map((source) => {
         const progress =
           source.status === "downloading" ? getSourceDownloadProgress(source.id) : null;
         return progress ? { ...source, progress } : source;
@@ -79,11 +81,12 @@ export function registerSourceRoutes(app: Hono) {
       201,
     ),
     async (c) => {
+      const user = c.get("user");
       const parsed = sourceCreateSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid source");
       }
-      const created = createSource(parsed.data);
+      const created = createSource(parsed.data, user?.id);
       console.log(`[worker] Start processing source: ${created.name} (${created.id})`);
       void downloadAndProbeSource(created.id)
         .then((result) => {
@@ -97,10 +100,16 @@ export function registerSourceRoutes(app: Hono) {
           const message = error instanceof Error ? error.message : "Download failed";
           console.error(`[worker] Source ${created.id} failed: ${message}`);
           updateSourceProbe(created.id, { status: "invalid", invalidReason: message });
-          addEvent(null, "source_download_failed", `Source download failed: ${created.name}`, {
-            sourceId: created.id,
-            message,
-          });
+          addEvent(
+            null,
+            "source_download_failed",
+            `Source download failed: ${created.name}`,
+            {
+              sourceId: created.id,
+              message,
+            },
+            created.userId,
+          );
         });
       return c.json(ok(created), 201);
     },
@@ -112,9 +121,17 @@ export function registerSourceRoutes(app: Hono) {
     async (c) => {
       const parsed = bulkDeleteSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return fail("BAD_REQUEST", "Invalid source ids");
+      const user = c.get("user");
       const deleted: string[] = [];
       const failed: { id: string; message: string }[] = [];
       for (const id of parsed.data.ids) {
+        if (user?.role !== "admin") {
+          const target = getSource(id);
+          if (!target || (target.userId && target.userId !== user?.id)) {
+            failed.push({ id, message: "Source not found" });
+            continue;
+          }
+        }
         try {
           if (deleteSource(id)) deleted.push(id);
           else failed.push({ id, message: "Source not found" });
@@ -150,8 +167,12 @@ export function registerSourceRoutes(app: Hono) {
     "/api/sources/:id/retry",
     doc("Sources", "Retry source", "Re-downloads and re-probes a failed or invalid source."),
     async (c) => {
+      const user = c.get("user");
       const source = getSource(c.req.param("id"));
       if (!source) return fail("NOT_FOUND", "Source not found", 404);
+      if (user?.role !== "admin" && source.userId && source.userId !== user?.id) {
+        return fail("NOT_FOUND", "Source not found", 404);
+      }
       if (source.status !== "invalid" && source.status !== "pending") {
         return fail("CONFLICT", "Source is not in a retryable state", 409);
       }
@@ -170,10 +191,16 @@ export function registerSourceRoutes(app: Hono) {
           const message = error instanceof Error ? error.message : "Download failed";
           console.error(`[worker] Retry failed for source ${source.id}: ${message}`);
           updateSourceProbe(source.id, { status: "invalid", invalidReason: message });
-          addEvent(null, "source_download_failed", `Source download failed: ${source.name}`, {
-            sourceId: source.id,
-            message,
-          });
+          addEvent(
+            null,
+            "source_download_failed",
+            `Source download failed: ${source.name}`,
+            {
+              sourceId: source.id,
+              message,
+            },
+            source.userId,
+          );
         });
       return c.json(ok(source), 202);
     },
@@ -186,6 +213,12 @@ export function registerSourceRoutes(app: Hono) {
       const parsed = sourcePatchSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid source");
+      }
+      const user = c.get("user");
+      const current = getSource(c.req.param("id"));
+      if (!current) return fail("NOT_FOUND", "Source not found", 404);
+      if (user?.role !== "admin" && current.userId && current.userId !== user?.id) {
+        return fail("NOT_FOUND", "Source not found", 404);
       }
       const updated = patchSource(c.req.param("id"), parsed.data);
       if (!updated) return fail("NOT_FOUND", "Source not found", 404);
@@ -201,8 +234,13 @@ export function registerSourceRoutes(app: Hono) {
       "Runs FFprobe against a local source and updates media metadata.",
     ),
     async (c) => {
+      const user = c.get("user");
       const source = getSource(c.req.param("id"));
-      if (!source?.filePath) return fail("NOT_FOUND", "Source file not found", 404);
+      if (!source) return fail("NOT_FOUND", "Source not found", 404);
+      if (user?.role !== "admin" && source.userId && source.userId !== user?.id) {
+        return fail("NOT_FOUND", "Source not found", 404);
+      }
+      if (!source.filePath) return fail("NOT_FOUND", "Source file not found", 404);
       if (isSourceDownloadActive(source.id)) {
         return fail("CONFLICT", "Source download in progress", 409);
       }
@@ -218,8 +256,13 @@ export function registerSourceRoutes(app: Hono) {
       "Creates a short-lived signed URL the browser can use to stream the cached source video.",
     ),
     (c) => {
+      const user = c.get("user");
       const source = getSource(c.req.param("id"));
-      if (source?.status !== "ready" || !source.filePath) {
+      if (!source) return fail("NOT_FOUND", "Source not found", 404);
+      if (user?.role !== "admin" && source.userId && source.userId !== user?.id) {
+        return fail("NOT_FOUND", "Source not found", 404);
+      }
+      if (source.status !== "ready" || !source.filePath) {
         return fail("NOT_FOUND", "Source is not ready for preview", 404);
       }
       return c.json(ok({ url: createSignedUrl(`/api/sources/${source.id}/preview`, "GET") }));
@@ -237,6 +280,14 @@ export function registerSourceRoutes(app: Hono) {
       const source = getSource(c.req.param("id"));
       if (source?.status !== "ready" || !source.filePath) {
         return fail("NOT_FOUND", "Source is not ready for preview", 404);
+      }
+      // Signed URL bypass in the /api middleware is the only keyless access path;
+      // plain session access still requires ownership.
+      if (!c.req.query("sig")) {
+        const user = c.get("user");
+        if (user?.role !== "admin" && source.userId && source.userId !== user?.id) {
+          return fail("NOT_FOUND", "Source not found", 404);
+        }
       }
       const stats = await stat(source.filePath).catch(() => null);
       if (!stats?.isFile()) return fail("NOT_FOUND", "Source file not found", 404);
@@ -300,6 +351,12 @@ export function registerSourceRoutes(app: Hono) {
     "/api/sources/:id",
     doc("Sources", "Delete source", "Deletes a source record."),
     (c) => {
+      const user = c.get("user");
+      const current = getSource(c.req.param("id"));
+      if (!current) return fail("NOT_FOUND", "Source not found", 404);
+      if (user?.role !== "admin" && current.userId && current.userId !== user?.id) {
+        return fail("NOT_FOUND", "Source not found", 404);
+      }
       try {
         return c.json(ok(deleteSource(c.req.param("id"))));
       } catch (error) {

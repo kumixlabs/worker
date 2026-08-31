@@ -21,6 +21,7 @@ import { addEvent } from "./events";
 function mapSourceRow(row: Record<string, unknown>): SourceRecord {
   return {
     id: row.id as string,
+    userId: (row.user_id as string | null) ?? null,
     name: row.name as string,
     kind: row.kind as SourceRecord["kind"],
     status: row.status as SourceRecord["status"],
@@ -47,8 +48,11 @@ function mapSourceRow(row: Record<string, unknown>): SourceRecord {
  *
  * @returns An array of source records.
  */
-export function listSources(): SourceRecord[] {
-  const rows = getDb().query("SELECT * FROM sources ORDER BY created_at DESC").all() as Record<
+export function listSources(userId?: string): SourceRecord[] {
+  const sql = userId
+    ? "SELECT * FROM sources WHERE user_id = ? ORDER BY created_at DESC"
+    : "SELECT * FROM sources ORDER BY created_at DESC";
+  const rows = (userId ? getDb().query(sql).all(userId) : getDb().query(sql).all()) as Record<
     string,
     unknown
   >[];
@@ -77,15 +81,17 @@ export function getSource(id: string): SourceRecord | null {
  */
 export function createSource(
   input: SourceCreateInput & { filePath?: string | null },
+  userId?: string | null,
 ): SourceRecord {
   const id = `src_${nanoid(12)}`;
   const now = nowIso();
   getDb()
     .query(
-      "INSERT INTO sources (id, name, kind, status, file_path, url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO sources (id, user_id, name, kind, status, file_path, url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       id,
+      userId ?? null,
       input.name,
       input.kind,
       input.filePath ? "ready" : "pending",
@@ -131,9 +137,13 @@ export function updateSourceProbe(
     try {
       unlinkSync(existing.filePath);
     } catch {
-      addEvent(null, "source_warning", `Old cache file could not be deleted for source ${id}`, {
-        sourceId: id,
-      });
+      addEvent(
+        null,
+        "source_warning",
+        `Old cache file could not be deleted for source ${id}`,
+        { sourceId: id },
+        existing.userId,
+      );
     }
   }
   getDb()
@@ -204,9 +214,8 @@ export function deleteSource(id: string, force = false): boolean {
         null,
         "source_warning",
         `Orphaned cache file could not be deleted for source ${id}`,
-        {
-          sourceId: id,
-        },
+        { sourceId: id },
+        existing.userId,
       );
     }
   }

@@ -1,79 +1,50 @@
-/** Dashboard-facing settings, stats, metrics, and health-detail routes. */
+/**
+ * System stats, metrics, and settings endpoints.
+ */
 
 import type { Hono } from "hono";
 
 import { getBandwidthSummary } from "../../db/bandwidth";
-import { stats } from "../../db/stats";
-import { listStreams } from "../../db/streams";
-import { hashPassword, isDefaultPasswordHash, verifyPassword } from "../../lib/password";
+import { getWorkerStats } from "../../db/stats";
 import { readSettings, writeSettings } from "../../runtime/config";
-import { runtimeHealthDetails, runtimeMetrics } from "../../runtime/metrics";
-import { schedulerState } from "../../runtime/scheduler";
-import { passwordChangeSchema, settingsPatchSchema } from "../../schemas/settings";
-import type { WorkerSettings } from "../../types/worker";
-import { fail, ok, recordAuthFailure } from "../middleware";
+import { runtimeHealthDetails } from "../../runtime/metrics";
+import { settingsPatchSchema } from "../../schemas/settings";
+import { getUserUsage } from "../../services/quota";
+import type { PublicSettings } from "../../types/worker";
+import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
-type PublicSettings = Omit<WorkerSettings, "token" | "youtubeApiKey" | "passwordHash"> & {
-  hasToken: boolean;
-  tokenLength: number;
-  hasYoutubeApiKey: boolean;
-  hasPassword: boolean;
-  passwordIsDefault: boolean;
-};
-
-/**
- * Removes raw secrets from settings responses.
- *
- * @param settings - Full worker settings from config storage.
- * @returns Settings safe for dashboard responses.
- */
-async function publicSettings(settings: WorkerSettings): Promise<PublicSettings> {
-  const { token, youtubeApiKey, passwordHash, ...rest } = settings;
+function publicSettings(settings = readSettings()): PublicSettings {
   return {
-    ...rest,
-    hasToken: token.length > 0,
-    tokenLength: token.length,
-    hasYoutubeApiKey: Boolean(youtubeApiKey),
-    hasPassword: Boolean(passwordHash),
-    passwordIsDefault: await isDefaultPasswordHash(passwordHash),
+    diskUsageLimitPercent: settings.diskUsageLimitPercent,
+    timezone: settings.timezone,
   };
 }
 
-/**
- * Registers settings, stats, metrics, and detailed health routes.
- *
- * @param app - Hono app to attach routes to.
- */
 export function registerSystemRoutes(app: Hono) {
   app.get(
     "/api/stats",
     doc(
       "System",
       "Read stats",
-      "Returns counts for sources, targets, streams, storage, and process state.",
+      "Returns the current user's aggregate counts, storage usage, and system runtime stats.",
     ),
-    (c) => c.json(ok(stats())),
-  );
-
-  app.get(
-    "/api/metrics",
-    doc(
-      "System",
-      "Read runtime metrics",
-      "Returns CPU, memory, storage, live stream throughput, scheduler, and process metrics.",
-    ),
-    (c) => c.json(ok(runtimeMetrics(listStreams(), schedulerState()))),
-  );
-
-  app.get(
-    "/api/bandwidth",
-    doc(
-      "System",
-      "Read bandwidth summary",
-      "Returns bandwidth usage: today, this month, all-time, per-stream, and 30-day daily breakdown.",
-    ),
-    (c) => c.json(ok(getBandwidthSummary())),
+    (c) => {
+      const user = c.get("user") as
+        | { id: string; role?: string; maxStorageBytes?: number | null; maxStreams?: number | null }
+        | undefined;
+      const stats = getWorkerStats(user?.id);
+      if (user && user.role !== "admin") {
+        const usage = getUserUsage(user.id);
+        stats.storage = { cacheBytes: usage.storageBytes };
+        stats.quota = {
+          ...usage,
+          maxStorageBytes: user.maxStorageBytes ?? null,
+          maxStreams: user.maxStreams ?? null,
+        };
+      }
+      return c.json(ok(stats));
+    },
   );
 
   app.get(
@@ -89,7 +60,7 @@ export function registerSystemRoutes(app: Hono) {
   app.get(
     "/api/settings",
     doc("Settings", "Read settings", "Returns local Kumix Worker settings without secrets."),
-    async (c) => c.json(ok(await publicSettings(readSettings()))),
+    (c) => c.json(ok(publicSettings(readSettings()))),
   );
 
   app.patch(
@@ -97,55 +68,33 @@ export function registerSystemRoutes(app: Hono) {
     doc(
       "Settings",
       "Update settings",
-      "Updates disk usage limit or timezone settings. Port, token, and password are managed separately.",
+      "Updates disk usage limit or timezone settings. Admin only — these are worker-wide settings.",
     ),
     async (c) => {
+      if ((c.get("user") as { role?: string } | undefined)?.role !== "admin") {
+        return fail("FORBIDDEN", "Admin access required", 403);
+      }
       const parsed = settingsPatchSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid settings");
       }
       const current = readSettings();
-      const { youtubeApiKey, ...rest } = parsed.data;
-      const next = {
-        ...current,
-        ...rest,
-        dataDir: current.dataDir,
-        youtubeApiKey:
-          youtubeApiKey === undefined
-            ? current.youtubeApiKey
-            : youtubeApiKey === ""
-              ? current.youtubeApiKey
-              : youtubeApiKey,
-      };
+      const next = { ...current, ...parsed.data, dataDir: current.dataDir };
       writeSettings(next);
-      return c.json(ok(await publicSettings(next)));
+      return c.json(ok(publicSettings(next)));
     },
   );
 
-  app.post(
-    "/api/settings/password",
+  app.get(
+    "/api/bandwidth",
     doc(
-      "Settings",
-      "Change dashboard password",
-      "Updates the dashboard login password. Does not rotate the API token or re-encrypt stream keys.",
+      "System",
+      "Read bandwidth",
+      "Returns bandwidth usage totals scoped to the current user's streams.",
     ),
-    async (c) => {
-      const parsed = passwordChangeSchema.safeParse(await c.req.json().catch(() => null));
-      if (!parsed.success) {
-        return fail("BAD_REQUEST", parsed.error.issues[0]?.message ?? "Invalid password change");
-      }
-      const current = readSettings();
-      if (!(await verifyPassword(parsed.data.currentPassword, current.passwordHash))) {
-        // 400 (not 401): wrong current password must not clear the SPA Bearer session.
-        // Still count against auth rate limit so brute-force of the current password is bounded.
-        recordAuthFailure(c);
-        return fail("BAD_REQUEST", "Current password is incorrect");
-      }
-      writeSettings({
-        ...current,
-        passwordHash: await hashPassword(parsed.data.newPassword),
-      });
-      return c.json(ok({ changed: true }));
+    (c) => {
+      const user = c.get("user") as { id: string } | undefined;
+      return c.json(ok(getBandwidthSummary(user?.id)));
     },
   );
 }

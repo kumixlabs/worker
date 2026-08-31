@@ -1,10 +1,8 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo } from "react";
 import {
-  Activity,
   Film,
   KeyRound,
   LayoutDashboard,
-  LogOut,
   PanelLeft,
   Radio,
   Settings,
@@ -14,7 +12,6 @@ import {
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
-import { ConfirmSignOut } from "@kumix/ui/custom/confirm-dialog";
 import {
   AnimatedSidebar,
   AnimatedSidebarContent,
@@ -34,15 +31,17 @@ import {
 import { ThemeToggle } from "@kumix/ui/motion/theme-toggle";
 import { Badge } from "@kumix/ui/reui/badge";
 import { Button } from "@kumix/ui/ui/button";
-import { queryClient, setApiToken } from "@/lib/api";
+import { queryClient } from "@/lib/api";
+import { authClient } from "@/lib/auth";
+import { useSidebarOpen } from "@/lib/sidebar-state";
 import packageJson from "../../../package.json";
 import { EngineStatus } from "./EngineStatus";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { Logo } from "./Logo";
+import { UserMenu } from "./UserMenu";
 
 const navItems = [
   { to: "/", key: "overview", icon: LayoutDashboard },
-  { to: "/monitoring", key: "monitoring", icon: Activity },
   { to: "/log", key: "log", icon: Terminal },
 ] as const;
 
@@ -68,10 +67,9 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const [confirmLogout, setConfirmLogout] = useState(false);
   const t = useTranslations("Shell");
-  const common = useTranslations("Common");
   const tNav = useTranslations("Shell.navigation");
+  const impersonating = Boolean(authClient.useSession().data?.session?.impersonatedBy);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -86,15 +84,16 @@ export function AppShell({
   }, [location.pathname, title, tNav]);
 
   const logout = () => {
-    setApiToken("");
-    queryClient.clear();
-    window.location.reload();
+    void authClient.signOut().then(() => {
+      queryClient.clear();
+      window.location.reload();
+    });
   };
 
   const go = (to: string) => navigate(to);
 
   return (
-    <AnimatedSidebarProvider className="h-screen overflow-hidden">
+    <AnimatedSidebarProvider {...useSidebarOpen()} className="h-screen overflow-hidden">
       <AnimatedSidebar ariaLabel="Kumix Worker" collapsible="icon" className="min-h-0">
         <AnimatedSidebarHeader className="p-3 pb-2">
           <div className="flex min-h-11 items-center gap-3 overflow-hidden px-2">
@@ -179,19 +178,17 @@ export function AppShell({
           </AnimatedSidebarTrigger>
           <div className="h-5 w-px bg-border" />
           <p className="flex-1 truncate font-medium text-foreground text-sm">{activePage}</p>
+          {impersonating ? (
+            <Badge variant="destructive" radius="full" className="me-1 shrink-0">
+              {t("impersonating")}
+            </Badge>
+          ) : null}
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <LocaleSwitcher />
             <Button size="icon" variant="outline">
               <ThemeToggle variant="circle-blur" start="bottom-up" />
             </Button>
-            <Button
-              size="icon"
-              variant="destructive"
-              aria-label={t("logout")}
-              onClick={() => setConfirmLogout(true)}
-            >
-              <LogOut className="size-4" />
-            </Button>
+            <UserMenu onLogout={logout} />
           </div>
         </header>
 
@@ -210,16 +207,6 @@ export function AppShell({
           </div>
         </div>
       </AnimatedSidebarInset>
-
-      <ConfirmSignOut
-        open={confirmLogout}
-        onOpenChange={setConfirmLogout}
-        onConfirm={logout}
-        title={t("logoutTitle")}
-        description={t("logoutDescription")}
-        confirmText={common("confirm")}
-        cancelText={common("cancel")}
-      />
     </AnimatedSidebarProvider>
   );
 }

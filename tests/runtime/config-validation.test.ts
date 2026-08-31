@@ -41,27 +41,8 @@ describe("config validation", () => {
   });
 
   it("rejects an invalid timezone", () => {
-    writeRawConfig({ timezone: "Not/AZone", token: "test-token-123456" });
+    writeRawConfig({ timezone: "Not/AZone" });
     expect(() => readSettings()).toThrow(/timezone/i);
-  });
-
-  it("rejects an invalid token", () => {
-    writeRawConfig({ token: "short" });
-    expect(() => readSettings()).toThrow(/token/i);
-  });
-
-  it("rejects weak tokens that are long enough but too predictable", () => {
-    writeRawConfig({ token: "passwordpassword" });
-    expect(() => readSettings()).toThrow(/too predictable/i);
-    writeRawConfig({ token: "1111111111111111" });
-    expect(() => readSettings()).toThrow(/too predictable/i);
-    writeRawConfig({ token: "aaaaaaaaaaaaaaaa" });
-    expect(() => readSettings()).toThrow(/too predictable/i);
-  });
-
-  it("accepts a random-looking 16-char token", () => {
-    writeRawConfig({ token: "k7Xm2vQ9pL4rT8wY" });
-    expect(readSettings().token).toBe("k7Xm2vQ9pL4rT8wY");
   });
 
   it("throws a repair hint on corrupt config", () => {
@@ -98,7 +79,8 @@ describe("resetWorkerData guard", () => {
       diskUsageLimitPercent: 90,
       port: 8080,
       timezone: "Asia/Jakarta",
-      token: "test-token-123456",
+      signingSecret: "test-signing-secret-01234567890123456789",
+      encryptionKey: "test-encryption-key-01234567890123456789",
     });
 
     expect(() => resetWorkerData(false)).not.toThrow();

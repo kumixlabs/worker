@@ -1,29 +1,11 @@
 /**
  * Public package entry point for Kumix Worker runtime consumers.
- *
- * Everything exported below is part of the public API surface for external
- * consumers (e.g. Kumix core). Renaming or removing any export is a breaking
- * change and requires a major version bump. New exports may be added freely.
  */
 
-export { createCliProgram, dashboardUrl, maskToken } from "./cli";
-export type { RotateWorkerTokenResult, WorkerClientOptions } from "./client";
-export {
-  createWorkerClient,
-  fetchWorkerHealth,
-  fetchWorkerStats,
-  rotateWorkerToken,
-  workerDashboardUrl,
-} from "./client";
+export { buildCli } from "./cli";
 export { readPackageVersion } from "./lib/version";
-export type { PublicWorkerHealth } from "./schemas/public";
-export {
-  publicWorkerHealthSchema,
-  publicWorkerStatsSchema,
-  rotateWorkerTokenResultSchema,
-} from "./schemas/public";
 export type { SettingsPatchInput } from "./schemas/settings";
-export { settingsPatchSchema, tokenRotateSchema } from "./schemas/settings";
+export { settingsPatchSchema } from "./schemas/settings";
 export type { SourceCreateInput, SourcePatchInput } from "./schemas/source";
 export {
   sourceCreateSchema,
@@ -45,7 +27,7 @@ export type { SourceKind, SourceRecord, SourceStatus } from "./types/source";
 export type { StreamMetrics, StreamRecord, StreamRecurrence, StreamStatus } from "./types/stream";
 export type { TargetRecord } from "./types/target";
 export type {
-  PublicWorkerStats,
+  PublicSettings,
   WorkerHealthDetails,
   WorkerMetrics,
   WorkerSettings,

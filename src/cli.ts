@@ -1,31 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Command-line interface for initializing, serving, inspecting, and updating Kumix Worker.
+ * Command-line interface for serving, inspecting, and managing Kumix Worker.
  */
 
-import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { serve } from "@hono/node-server";
 import { Command } from "commander";
 
-import { cliHelpText } from "./cli-help";
+import { closeAuthDb, getAuth, getAuthDb } from "./auth/server";
 import { closeDb } from "./db/client";
 import { listStreams } from "./db/streams";
-import { reencryptTargetSecrets } from "./db/targets";
 import { createApiApp } from "./http/app";
-import { hashPassword, validPassword } from "./lib/password";
 import { readPackageVersion } from "./lib/version";
-import {
-  allowedCorsOrigins,
-  ensureDataDir,
-  readSettings,
-  resetWorkerData,
-  validToken,
-  writeSettings,
-} from "./runtime/config";
+import { ensureDataDir, readSettings, resetWorkerData } from "./runtime/config";
 import { resolveFfmpegBinaries } from "./runtime/ffmpeg";
 import { runtimeHealthDetails, runtimeMetrics } from "./runtime/metrics";
 import {
@@ -42,596 +32,257 @@ import {
 } from "./runtime/update";
 import { startStream, stopAllStreams } from "./services/stream-runner";
 
-/**
- * When true (default), graceful SIGTERM/SIGINT writes an auto-start marker so
- * active streams resume after Docker recreate / process restart.
- * Set KUMIX_WORKER_AUTO_RESUME=0 to disable.
- */
 function autoResumeEnabled(): boolean {
   const raw = process.env.KUMIX_WORKER_AUTO_RESUME?.trim().toLowerCase();
   if (!raw) return true;
   return raw !== "0" && raw !== "false" && raw !== "no" && raw !== "off";
 }
 
-/**
- * Masks a token for safe display in CLI output.
- *
- * @param token - The raw token.
- * @returns A masked preview of the token.
- */
-export function maskToken(token: string): string {
-  return token.length <= 10 ? "••••" : `${token.slice(0, 6)}...${token.slice(-4)}`;
+function gigabytes(bytes: number): string {
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2);
 }
 
-/**
- * Formats a byte count as gigabytes with two decimals.
- *
- * @param bytes - The byte count.
- * @returns The value in GB as a fixed-2 string.
- */
-function formatGb(bytes: number): string {
-  return (bytes / 1024 / 1024 / 1024).toFixed(2);
-}
-
-/**
- * Parses and validates a TCP port option.
- *
- * @param value - The raw CLI value.
- * @param label - The option label used in error output.
- * @returns The validated port number.
- */
-function parsePort(value: string, label = "port"): number {
-  const port = Number(value);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid ${label}: ${value}. Expected integer 1-65535.`);
-  }
-  return port;
-}
-
-/**
- * Parses and validates the disk usage limit percentage.
- *
- * @param value - The raw CLI value.
- * @returns The validated percentage.
- */
-function parseDiskLimit(value: string): number {
-  const percent = Number(value);
-  if (!Number.isInteger(percent) || percent < 50 || percent > 99) {
-    throw new Error(`Invalid disk limit: ${value}. Expected integer 50-99.`);
-  }
-  return percent;
-}
-
-/**
- * Validates a timezone option against Intl support and schema bounds.
- *
- * @param value - The raw CLI value.
- * @returns The validated timezone string.
- */
-function parseTimezone(value: string): string {
-  if (value.length < 1 || value.length > 64) {
-    throw new Error("Invalid timezone. Expected 1-64 characters.");
-  }
-  try {
-    Intl.DateTimeFormat("en-US", { timeZone: value });
-  } catch {
-    throw new Error(`Invalid timezone: ${value}. Expected a valid IANA timezone.`);
-  }
-  return value;
-}
-
-/**
- * Parses and validates a token option.
- *
- * @param value - The raw CLI token value.
- * @returns The validated token.
- */
-function parseToken(value: string): string {
-  return validToken(value);
-}
-
-/**
- * Builds a dashboard URL for CLI output. Never embeds the API token in the URL
- * (password login). Core integrations that need token handoff use GET /auth?token=.
- *
- * @param host - Bind host or display host.
- * @param port - HTTP port.
- * @returns Dashboard origin URL.
- */
-export function dashboardUrl(host: string, port: number): string {
-  const dashboardHost = host === "0.0.0.0" ? "localhost" : host;
-  return `http://${dashboardHost}:${port}`;
-}
-
-/**
- * Prints an error and exits the CLI.
- *
- * @param error - The failure value to print.
- */
-function exitWithError(error: unknown): never {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-}
-
-/**
- * Returns platform-appropriate restart guidance.
- *
- * @returns A short restart instruction.
- */
-function restartHint(): string {
-  return process.platform === "win32"
-    ? "Restart the kumix-worker terminal or Windows service to apply the new version."
-    : "Restart the kumix-worker service/process to apply the new version.";
-}
-
-/**
- * Starts streams requested by an update auto-start marker when their stop window has not elapsed.
- *
- * @param streamIds - Stream IDs requested for auto-start.
- * @returns Auto-start result counts.
- */
-async function autoStartStreams(
-  streamIds: string[],
-): Promise<{ started: number; skipped: number }> {
-  let started = 0;
-  let skipped = 0;
-  const now = Date.now();
-  const streams = listStreams();
-  for (const streamId of streamIds) {
-    const stream = streams.find((item) => item.id === streamId);
-    if (!stream || (stream.autoStopAt && new Date(stream.autoStopAt).getTime() <= now)) {
-      skipped += 1;
-      continue;
-    }
-    try {
-      const result = await startStream(streamId);
-      if (result) started += 1;
-      else skipped += 1;
-    } catch {
-      skipped += 1;
-    }
-  }
-  return { started, skipped };
-}
-
-/**
- * Builds the Kumix Worker CLI program with init, serve, and status commands.
- *
- * @returns The configured commander program.
- */
-export function createCliProgram(): Command {
+export function buildCli(): Command {
   const program = new Command();
 
   program
     .name("kumix-worker")
-    .description("Kumix Worker self-hosted live runner")
-    .version(readPackageVersion(), "-v, --version", "Print the installed Kumix Worker version")
-    .helpOption("-h, --help", "Show all commands and usage information")
-    .addHelpText("after", cliHelpText);
-
-  // No subcommand: show a short hint instead of exiting silently.
-  program.action(() => {
-    console.log("Kumix Worker - Self-hosted live streaming on autopilot.");
-    console.log("");
-    console.log("No command provided. Run 'kumix-worker --help' to see all commands.");
-  });
+    .description("Multi-user live stream worker with local dashboard and API")
+    .version(readPackageVersion());
 
   program
     .command("init")
-    .description("Create or update the local Kumix Worker config")
-    .option("--token <token>", "dashboard/API token")
-    .option("--port <port>", "local HTTP port")
-    .option("--host <host>", "host used only for printed dashboard URLs", "localhost")
-    .option("--timezone <timezone>", "IANA timezone for recurring schedules")
-    .option("--disk-limit <percent>", "reject new sources past this disk usage percent")
-    .option("--dev", "development mode")
-    .option("--show", "print the full token instead of a masked preview")
-    .action(
-      (opts: {
-        token?: string;
-        port?: string;
-        host: string;
-        timezone?: string;
-        diskLimit?: string;
-        dev?: boolean;
-        show?: boolean;
-      }) => {
-        try {
-          const current = readSettings();
-          const nextToken = opts.token ? parseToken(opts.token) : current.token;
-          const next = {
-            ...current,
-            token: nextToken,
-            port: opts.port ? parsePort(opts.port) : current.port,
-            timezone: opts.timezone ? parseTimezone(opts.timezone) : current.timezone,
-            diskUsageLimitPercent: opts.diskLimit
-              ? parseDiskLimit(opts.diskLimit)
-              : current.diskUsageLimitPercent,
-          };
-          if (nextToken !== current.token) {
-            reencryptTargetSecrets(current.token, nextToken);
-            try {
-              writeSettings(next);
-            } catch (error) {
-              reencryptTargetSecrets(nextToken, current.token);
-              throw error;
-            }
-          } else {
-            writeSettings(next);
-          }
-          console.log(`Kumix Worker config written to ${ensureDataDir()}`);
-          console.log(`Port: ${next.port}`);
-          console.log(`Timezone: ${next.timezone}`);
-          console.log(`Disk usage limit: ${next.diskUsageLimitPercent}%`);
-          console.log(`Dashboard: ${dashboardUrl(opts.host, next.port)}`);
-          if (opts.show || opts.dev) {
-            console.log(`API token: ${next.token}`);
-            console.log(
-              `(Dashboard login uses the password, default 123456 — change it in Settings.)`,
-            );
-          }
-        } catch (error) {
-          exitWithError(error);
-        }
-      },
-    );
+    .description("Initialize the worker data directory and configuration")
+    .action(() => {
+      ensureDataDir();
+      const settings = readSettings();
+      console.log(`Kumix Worker initialized at ${settings.dataDir}`);
+      console.log(`Port: ${settings.port}`);
+      console.log(`Timezone: ${settings.timezone}`);
+    });
 
   program
     .command("serve")
-    .description("Run local Kumix Worker API")
-    .option("--host <host>", "host", "localhost")
-    .option("--port <port>", "port override")
-    .action(async (opts: { host: string; port?: string }) => {
+    .description("Start the Kumix Worker HTTP server and stream scheduler")
+    .option("-p, --port <port>", "Port to bind to")
+    .option("-H, --host <host>", "Host to bind to")
+    .action(async (options) => {
+      ensureDataDir();
       const settings = readSettings();
-      let port: number;
-      try {
-        port = opts.port ? parsePort(opts.port) : settings.port;
-      } catch (error) {
-        exitWithError(error);
-      }
+      const port = options.port ? Number(options.port) : settings.port;
+      const hostname = options.host ?? "localhost";
 
-      // Preflight: fail fast with a clear message when binaries are missing.
-      try {
-        resolveFfmpegBinaries();
-      } catch (error) {
-        console.error(error instanceof Error ? error.message : "FFmpeg binaries unavailable");
-        process.exit(1);
-      }
-
-      process.on("unhandledRejection", (reason) => {
-        console.error("[worker] Unhandled promise rejection:", reason);
-      });
-      process.on("uncaughtException", (error) => {
-        console.error("[worker] Uncaught exception:", error);
-      });
-
-      const autoStartIds = consumeAutoStartMarker();
-
-      // Crash recovery: reconcile streams left running by a previous process.
-      let recovered: Awaited<ReturnType<typeof recoverInterruptedStreams>> = [];
-      try {
-        recovered = recoverInterruptedStreams(autoStartIds);
-      } catch (error) {
-        console.error(
-          "[worker] Crash recovery failed:",
-          error instanceof Error ? error.message : error,
-        );
-      }
-
+      recoverInterruptedStreams();
       const app = createApiApp();
-      const server = serve({
-        fetch: app.fetch,
-        hostname: opts.host,
-        port,
+      startScheduler();
+
+      const server = serve({ fetch: app.fetch, port, hostname }, () => {
+        console.log(`Kumix Worker running on http://${hostname}:${port}`);
       });
-      server.on("error", (error) => {
-        console.error("[worker] Server error:", error instanceof Error ? error.message : error);
-      });
-      const stopScheduler = startScheduler();
+
+      const autoResume = autoResumeEnabled();
+      if (autoResume) {
+        const toResume = consumeAutoStartMarker();
+        if (toResume.length > 0) {
+          console.log(`[worker] Auto-resuming ${toResume.length} stream(s) from previous run...`);
+          for (const id of toResume) {
+            startStream(id).catch((err) => {
+              console.error(
+                `[worker] Auto-resume failed for stream ${id}:`,
+                err instanceof Error ? err.message : err,
+              );
+            });
+          }
+        }
+      }
+
       let shuttingDown = false;
       const shutdown = async (signal: string) => {
         if (shuttingDown) return;
         shuttingDown = true;
-        console.log(`[worker] Shutting down (${signal})…`);
-        stopScheduler();
-        // Persist active stream IDs before stopping FFmpeg so the next process
-        // (Docker image update, compose recreate, systemd restart) can resume them.
-        if (autoResumeEnabled()) {
-          const active = activeStreamIds();
-          if (active.length > 0) {
-            try {
-              writeAutoStartMarker(active);
-              console.log(
-                `[worker] Auto-resume: marked ${active.length} active stream(s) for restart after boot`,
-              );
-            } catch (error) {
-              console.error(
-                "[worker] Failed to write auto-resume marker:",
-                error instanceof Error ? error.message : error,
-              );
-            }
-          }
-        }
-        await stopAllStreams();
-        await Promise.race([
-          new Promise<void>((resolve) => server.close(() => resolve())),
-          new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, 5_000);
-            timer.unref?.();
-          }),
-        ]);
-        closeDb();
-        process.exit(0);
-      };
-      process.once("SIGINT", () => void shutdown("SIGINT"));
-      process.once("SIGTERM", () => void shutdown("SIGTERM"));
+        console.log(`\nReceived ${signal}, shutting down...`);
 
-      console.log(`Kumix Worker API listening on http://${opts.host}:${port}`);
-      console.log(`Dashboard: ${dashboardUrl(opts.host, port)}`);
-      if (opts.host === "0.0.0.0") {
-        console.log("Warning: API is exposed on the network. Keep the worker token secret.");
-      }
-      if (process.env.NODE_ENV !== "production" && allowedCorsOrigins().length === 0) {
-        console.log(
-          "Warning: KUMIX_WORKER_CORS_ORIGINS is unset; cross-origin requests to the " +
-            "core-facing /api/v1/* API are blocked. Configure it when browser access is needed.",
-        );
-      }
-      console.log(`Data directory: ${ensureDataDir()}`);
-      console.log(`Timezone: ${settings.timezone}`);
-      console.log(`Disk usage limit: ${settings.diskUsageLimitPercent}%`);
-      if (recovered.length > 0) {
-        console.log(
-          autoStartIds.length > 0
-            ? `Recovered ${recovered.length} interrupted stream(s); ${autoStartIds.length} marked for auto-resume`
-            : `Recovered ${recovered.length} interrupted stream(s) as failed`,
-        );
-      }
-      if (autoStartIds.length > 0) {
-        const autoStarted = await autoStartStreams(autoStartIds);
-        console.log(
-          `Auto-resumed ${autoStarted.started} stream(s); skipped ${autoStarted.skipped} stream(s).`,
-        );
-      }
+        if (autoResume) {
+          const active = activeStreamIds();
+          if (active.length > 0) writeAutoStartMarker(active);
+        }
+
+        try {
+          await stopAllStreams();
+        } catch (error) {
+          console.error("[worker] Error stopping streams during shutdown:", error);
+        }
+
+        server.close(() => {
+          closeDb();
+          closeAuthDb();
+          process.exit(0);
+        });
+
+        setTimeout(() => {
+          console.error("[worker] Forcefully terminating after timeout");
+          closeDb();
+          closeAuthDb();
+          process.exit(1);
+        }, 5000).unref();
+      };
+
+      process.on("SIGINT", () => void shutdown("SIGINT"));
+      process.on("SIGTERM", () => void shutdown("SIGTERM"));
     });
 
   program
     .command("status")
-    .description("Print local Kumix Worker status, binary health, and disk usage")
-    .action(() => {
+    .description("Display the current state and health of the worker")
+    .action(async () => {
       const settings = readSettings();
       const health = runtimeHealthDetails();
-      const metrics = runtimeMetrics();
-      const disk = metrics.storage.disk;
+      const metrics = await runtimeMetrics();
+      const streams = listStreams();
+      const userCount = (
+        getAuthDb().prepare("SELECT COUNT(*) AS n FROM user").get() as { n: number }
+      ).n;
 
-      console.log("Config:");
-      console.log(`  Port: ${settings.port}`);
-      console.log(`  Timezone: ${settings.timezone}`);
-      console.log(`  Disk usage limit: ${settings.diskUsageLimitPercent}%`);
-      console.log(`  Data directory: ${settings.dataDir}`);
-      console.log(`  API token length: ${settings.token.length}`);
-
-      console.log("Binaries:");
-      console.log(`  FFmpeg: ${health.ffmpeg.version ?? "unknown"} (${health.ffmpeg.path})`);
-      console.log(`  FFprobe: ${health.ffprobe.version ?? "unknown"} (${health.ffprobe.path})`);
-
-      console.log("Disk:");
-      if (disk) {
-        console.log(`  Used: ${formatGb(disk.usedBytes)} / ${formatGb(disk.totalBytes)} GB`);
-        console.log(`  Free: ${formatGb(disk.freeBytes)} GB`);
-        console.log(`  Usage: ${disk.usedPercent}%`);
-      } else {
-        console.log("  Unavailable");
+      console.log(`Kumix Worker v${readPackageVersion()}`);
+      console.log(`Data Directory: ${settings.dataDir}`);
+      console.log(`Port: ${settings.port}`);
+      console.log(`Timezone: ${settings.timezone}`);
+      console.log(`Users: ${userCount}`);
+      console.log(`Streams: ${streams.length} total`);
+      console.log(`FFmpeg: ${health.ffmpeg.available ? "Ready" : "Missing"}`);
+      console.log(`FFprobe: ${health.ffprobe.available ? "Ready" : "Missing"}`);
+      if (metrics.storage?.disk) {
+        console.log(
+          `Disk: ${gigabytes(metrics.storage.disk.usedBytes)}GB / ${gigabytes(metrics.storage.disk.totalBytes)}GB (${metrics.storage.disk.usedPercent}%)`,
+        );
       }
-      console.log(`  Cache: ${formatGb(metrics.storage.cacheBytes)} GB`);
     });
 
   program
     .command("doctor")
-    .description("Run preflight checks for FFmpeg/FFprobe, config, and disk usage")
-    .action(() => {
-      let ok = true;
+    .description("Diagnose common issues and check dependencies")
+    .action(async () => {
+      console.log("Running diagnostics for Kumix Worker...");
+      const binaries = resolveFfmpegBinaries();
+      console.log(`FFmpeg: ${binaries.ffmpegPath ?? "NOT FOUND"}`);
+      console.log(`FFprobe: ${binaries.ffprobePath ?? "NOT FOUND"}`);
       const settings = readSettings();
-
-      try {
-        const health = runtimeHealthDetails();
-        console.log(`[ok] FFmpeg: ${health.ffmpeg.version}`);
-        console.log(`[ok] FFprobe: ${health.ffprobe.version}`);
-      } catch (error) {
-        ok = false;
-        console.error(`[fail] ${error instanceof Error ? error.message : "FFmpeg unavailable"}`);
-      }
-
-      console.log(`[ok] Config readable at ${settings.dataDir}`);
-      console.log(
-        settings.token.length >= 16
-          ? "[ok] Token present"
-          : "[warn] Token looks too short; run 'kumix-worker token --regenerate'",
-      );
-
-      const disk = runtimeMetrics().storage.disk;
-      if (disk) {
-        const overLimit = disk.usedPercent >= settings.diskUsageLimitPercent;
-        console.log(
-          overLimit
-            ? `[warn] Disk usage ${disk.usedPercent}% is at/over the ${settings.diskUsageLimitPercent}% limit`
-            : `[ok] Disk usage ${disk.usedPercent}% (limit ${settings.diskUsageLimitPercent}%)`,
-        );
-      } else {
-        console.log("[warn] Disk usage unavailable");
-      }
-
-      console.log(ok ? "Doctor: all critical checks passed" : "Doctor: critical checks failed");
-      if (!ok) process.exit(1);
+      console.log(`Data directory: ${settings.dataDir}`);
+      console.log(`Config file: OK`);
+      const userCount = (
+        getAuthDb().prepare("SELECT COUNT(*) AS n FROM user").get() as { n: number }
+      ).n;
+      console.log(`Admin accounts initialized: ${userCount > 0 ? "Yes" : "No (visit / to setup)"}`);
     });
 
   program
-    .command("token")
-    .description("Print or rotate the local Kumix Worker token")
-    .option("--regenerate", "generate and store a new token")
-    .option("--show", "print the full token instead of a masked preview")
-    .action((opts: { regenerate?: boolean; show?: boolean }) => {
-      try {
-        const current = readSettings();
-        if (opts.regenerate) {
-          const token = randomBytes(32).toString("base64url");
-          reencryptTargetSecrets(current.token, token);
-          try {
-            writeSettings({ ...current, token });
-          } catch (error) {
-            reencryptTargetSecrets(token, current.token);
-            throw error;
+    .command("admin")
+    .description("Create or reset an admin account from the CLI")
+    .requiredOption("-e, --email <email>", "Admin email address")
+    .requiredOption("-p, --password <password>", "Admin password (min 8 chars)")
+    .option("-n, --name <name>", "Admin name", "Admin")
+    .action(async (options) => {
+      const email = options.email.trim();
+      const password = options.password;
+      const name = options.name.trim();
+
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        console.error("Error: A valid email address is required.");
+        process.exit(1);
+      }
+      if (password.length < 8) {
+        console.error("Error: Password must be at least 8 characters.");
+        process.exit(1);
+      }
+
+      const existing = getAuthDb().prepare("SELECT id FROM user WHERE email = ?").get(email) as
+        | {
+            id: string;
           }
-          console.log("New token generated.");
-          console.log(`Token: ${opts.show ? token : maskToken(token)}`);
-          return;
-        }
-        console.log(`Token: ${opts.show ? current.token : maskToken(current.token)}`);
-      } catch (error) {
-        exitWithError(error);
-      }
-    });
+        | undefined;
 
-  program
-    .command("password")
-    .description("Reset the dashboard login password")
-    .option("--password <password>", "new dashboard password")
-    .action(async (opts: { password?: string }) => {
-      try {
-        const newPassword = opts.password ? validPassword(opts.password) : "";
-        if (!newPassword) {
-          console.error("Provide a password: kumix-worker password --password <password>");
-          console.error("Password must be 6-128 characters.");
+      if (existing) {
+        const res = await getAuth().api.setUserPassword({
+          body: { userId: existing.id, newPassword: password },
+        });
+        if (res && "error" in res && res.error) {
+          console.error(
+            `Error: ${(res.error as { message?: string }).message ?? "could not set password"}`,
+          );
           process.exit(1);
         }
-        const current = readSettings();
-        writeSettings({ ...current, passwordHash: await hashPassword(newPassword) });
-        console.log("Dashboard password updated.");
-        console.log("Login at:", dashboardUrl("localhost", current.port));
-      } catch (error) {
-        exitWithError(error);
+        getAuthDb().prepare("UPDATE user SET role = 'admin' WHERE id = ?").run(existing.id);
+        console.log(`Updated admin password for ${email}.`);
+      } else {
+        const res = await getAuth().api.signUpEmail({
+          body: { email, password, name, callbackURL: "/" },
+        });
+        if (res && "error" in res && res.error) {
+          console.error(
+            `Error: ${(res.error as { message?: string }).message ?? "could not create account"}`,
+          );
+          process.exit(1);
+        }
+        getAuthDb().prepare("UPDATE user SET role = 'admin' WHERE email = ?").run(email);
+        console.log(`Created admin account for ${email}.`);
       }
     });
 
   program
     .command("update")
-    .description("Update the @kumix/worker package via npm")
-    .option("--check", "only check for a newer version, do not install")
-    .option("--restart", "restart the service after install when no streams are active")
-    .option("--force", "restart even when streams are active")
-    .option("--auto-start", "start previously active streams after forced restart")
-    .action(
-      async (opts: {
-        check?: boolean;
-        restart?: boolean;
-        force?: boolean;
-        autoStart?: boolean;
-      }) => {
-        const current = readPackageVersion();
-
-        if (opts.check) {
-          const latest = await latestVersion();
-          if (!latest) {
-            console.error("Could not reach the npm registry to check for updates.");
-            process.exit(1);
-          }
-          console.log(
-            latest === current
-              ? `Already up to date (v${current})`
-              : `Update available: v${current} -> v${latest}`,
-          );
-          return;
-        }
-
-        if (opts.autoStart && !opts.force) {
-          console.error(
-            "--auto-start requires --force because normal updates skip restart with active streams.",
-          );
-          process.exit(1);
-        }
-        const restartMode: RestartMode = opts.force ? "force" : opts.restart ? "auto" : "never";
-
-        console.log(`Updating @kumix/worker (current v${current})...`);
-        try {
-          const result = await performSelfUpdate({
-            autoStart: Boolean(opts.autoStart),
-            currentVersion: current,
-            restartMode,
-          });
-          if (result.installed) {
-            console.log(
-              result.latestVersion
-                ? `Installed @kumix/worker@${result.latestVersion}`
-                : "Installed @kumix/worker@latest",
-            );
-          } else if (result.latestVersion === current) {
-            console.log(`Already up to date (v${current})`);
-          }
-          if (result.restarted) {
-            console.log("Service restarted.");
-          } else if (result.restartSkippedReason) {
-            console.log(`Restart skipped: ${result.restartSkippedReason}`);
-            console.log(restartHint());
-          }
-        } catch (error) {
-          console.error(error instanceof Error ? error.message : "Update failed");
-          process.exit(1);
-        }
-      },
-    );
+    .description("Check for and apply self-updates to the worker package")
+    .option("--check", "Only check if an update is available without applying it")
+    .option("-y, --yes", "Skip confirmation prompt and apply the update immediately")
+    .option("--restart <mode>", "How to restart after update (pm2|systemd|none)", "none")
+    .action(async (options) => {
+      const current = readPackageVersion();
+      console.log(`Current version: ${current}`);
+      const latest = await latestVersion();
+      if (!latest) {
+        console.error("Could not fetch latest version from npm.");
+        process.exit(1);
+      }
+      console.log(`Latest version:  ${latest}`);
+      if (current === latest) {
+        console.log("Kumix Worker is up to date.");
+        return;
+      }
+      if (options.check) return;
+      console.log(`Updating to ${latest}...`);
+      await performSelfUpdate({
+        currentVersion: current,
+        restartMode: options.restart as RestartMode,
+        autoStart: autoResumeEnabled(),
+      });
+      console.log(`Updated successfully to ${latest}.`);
+    });
 
   program
     .command("reset")
-    .description("Clear worker data (database, cache, tombstones)")
-    .option("--all", "factory reset: also delete the token and config")
-    .option("--yes", "confirm the destructive operation")
-    .option("--force", "delete data even if active streams are detected")
-    .action(async (opts: { all?: boolean; yes?: boolean; force?: boolean }) => {
-      if (!opts.yes) {
-        console.error("This is a destructive operation that stops all streams and deletes data.");
-        console.error("Run again with --yes to confirm.");
-        if (opts.all) console.error("Warning: --all will permanently delete your worker token.");
+    .description("Delete database and cache (factory reset)")
+    .option("--all", "Also delete config.json")
+    .option("-y, --yes", "Skip confirmation")
+    .action((options) => {
+      if (!options.yes) {
+        console.error("Pass --yes to confirm destructive reset.");
         process.exit(1);
       }
-
-      const externalActive = activeStreamIds().length;
-      if (externalActive > 0 && !opts.force) {
-        console.error(
-          `${externalActive} active stream(s) detected in database or tombstones. Stop the worker service first, or rerun with --force.`,
-        );
-        process.exit(1);
-      }
-
-      console.log("Stopping active streams...");
-      const stopResult = await stopAllStreams();
-      if (stopResult.remaining.length > 0 && !opts.force) {
-        console.error(
-          `Timed out waiting for ${stopResult.remaining.length} stream(s) to stop. Rerun with --force to delete data anyway.`,
-        );
-        process.exit(1);
-      }
-      if (stopResult.requested.length > 0) {
-        console.log(
-          `Stop requested for ${stopResult.requested.length} stream(s); ${stopResult.remaining.length} still tracked.`,
-        );
-      }
-
-      console.log(`Deleting worker data... ${opts.all ? "(factory reset)" : "(keeping config)"}`);
-      closeDb();
-      resetWorkerData(Boolean(opts.all));
-
-      console.log(`Reset complete. Data directory: ${ensureDataDir()}`);
-      if (opts.all) {
-        console.log("Config deleted. Run 'kumix-worker init' to configure a new token.");
-      }
+      resetWorkerData(Boolean(options.all));
+      console.log("Worker data reset complete.");
     });
 
   return program;
 }
 
-const invokedPath = process.argv[1] ? realpathSync.native(process.argv[1]) : null;
-const modulePath = realpathSync.native(fileURLToPath(import.meta.url));
+const isDirectCli = () => {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+};
 
-if (invokedPath === modulePath) {
-  createCliProgram().parse(process.argv);
+if (isDirectCli()) {
+  buildCli().parse(process.argv);
 }

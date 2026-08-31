@@ -27,9 +27,22 @@ export interface StreamMetrics {
  */
 export interface StreamRecord {
   id: string;
+  userId?: string | null;
   title: string;
   sourceId: string;
-  targetId: string;
+  targetId?: string | null;
+  mode: "rtmp" | "youtube";
+  youtubeConnectionId?: string | null;
+  ytTitle?: string | null;
+  ytDescription?: string | null;
+  ytTags?: string | null;
+  ytPrivacy?: string | null;
+  ytMadeForKids: boolean;
+  ytDvr: boolean;
+  ytStreamKeyId?: string | null;
+  ytBroadcastId?: string | null;
+  ytVideoId?: string | null;
+  ytStreamKeyRef?: string | null;
   status: StreamStatus;
   loop: boolean;
   youtubeLiveUrl: string | null;

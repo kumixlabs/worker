@@ -20,9 +20,22 @@ import { getDb } from "./client";
 function mapStreamRow(row: Record<string, unknown>): StreamRecord {
   return {
     id: row.id as string,
+    userId: (row.user_id as string | null) ?? null,
     title: row.title as string,
     sourceId: row.source_id as string,
-    targetId: row.target_id as string,
+    targetId: (row.target_id as string | null) ?? null,
+    mode: ((row.mode as string) || "rtmp") as "rtmp" | "youtube",
+    youtubeConnectionId: (row.youtube_connection_id as string | null) ?? null,
+    ytTitle: (row.yt_title as string | null) ?? null,
+    ytDescription: (row.yt_description as string | null) ?? null,
+    ytTags: (row.yt_tags as string | null) ?? null,
+    ytPrivacy: (row.yt_privacy as string | null) ?? null,
+    ytMadeForKids: Boolean(row.yt_made_for_kids),
+    ytDvr: Boolean(row.yt_dvr ?? 1),
+    ytStreamKeyId: (row.yt_stream_key_id as string | null) ?? null,
+    ytBroadcastId: (row.yt_broadcast_id as string | null) ?? null,
+    ytVideoId: (row.yt_video_id as string | null) ?? null,
+    ytStreamKeyRef: (row.yt_stream_key_ref as string | null) ?? null,
     status: row.status as StreamRecord["status"],
     loop: Boolean(row.loop),
     youtubeLiveUrl: (row.youtube_live_url as string | null) ?? null,
@@ -46,19 +59,21 @@ function mapStreamRow(row: Record<string, unknown>): StreamRecord {
  *
  * @returns An array of stream records with source and target objects included.
  */
-export function listStreams(): StreamRecord[] {
+export function listStreams(userId?: string): StreamRecord[] {
   const db = getDb();
-  const rows = db
-    .query(
-      `SELECT s.*,
+  const where = userId ? "WHERE s.user_id = ?" : "";
+  const sql = `SELECT s.*,
               src.name AS source_name, src.kind AS source_kind, src.status AS source_status,
               tgt.label AS target_label, tgt.ingest_url AS target_ingest_url, tgt.active AS target_active
        FROM streams s
        LEFT JOIN sources src ON s.source_id = src.id
        LEFT JOIN targets tgt ON s.target_id = tgt.id
-       ORDER BY s.created_at DESC`,
-    )
-    .all() as Record<string, unknown>[];
+       ${where}
+       ORDER BY s.created_at DESC`;
+  const rows = (userId ? db.query(sql).all(userId) : db.query(sql).all()) as Record<
+    string,
+    unknown
+  >[];
   const bytesMap = getAllStreamBytes();
   return rows.map((row) => {
     const s = mapStreamRow(row);
@@ -74,14 +89,15 @@ export function listStreams(): StreamRecord[] {
             status: row.source_status as SourceRecord["status"],
           }
         : undefined,
-      target: (row.target_label as string | undefined)
-        ? {
-            id: s.targetId,
-            label: row.target_label as string,
-            ingestUrl: row.target_ingest_url as string,
-            active: Boolean(row.target_active),
-          }
-        : undefined,
+      target:
+        row.target_label && s.targetId
+          ? {
+              id: s.targetId,
+              label: row.target_label as string,
+              ingestUrl: row.target_ingest_url as string,
+              active: Boolean(row.target_active),
+            }
+          : undefined,
     };
   });
 }
@@ -107,18 +123,33 @@ export function getStream(id: string): StreamRecord | null {
  * @param input - The creation payload including source and target mappings.
  * @returns The newly created stream record.
  */
-export function createStream(input: StreamCreateInput): StreamRecord {
+export function createStream(input: StreamCreateInput, userId?: string | null): StreamRecord {
   const id = `stm_${nanoid(12)}`;
   const now = nowIso();
   getDb()
     .query(
-      "INSERT INTO streams (id, title, source_id, target_id, loop, youtube_live_url, scheduled_for, auto_stop_at, recurrence, recurrence_rule, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      `INSERT INTO streams (
+        id, user_id, title, source_id, target_id, mode, youtube_connection_id,
+        yt_title, yt_description, yt_tags, yt_privacy,
+        yt_made_for_kids, yt_dvr, yt_stream_key_id, loop, youtube_live_url,
+        scheduled_for, auto_stop_at, recurrence, recurrence_rule, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
+      userId ?? null,
       input.title,
       input.sourceId,
-      input.targetId,
+      input.targetId ?? null,
+      input.mode ?? "rtmp",
+      input.youtubeConnectionId ?? null,
+      input.ytTitle ?? null,
+      input.ytDescription ?? null,
+      input.ytTags ?? null,
+      input.ytPrivacy ?? "public",
+      input.ytMadeForKids ? 1 : 0,
+      input.ytDvr ? 1 : 0,
+      input.ytStreamKeyId ?? null,
       1,
       input.youtubeLiveUrl ?? null,
       input.scheduledFor ?? null,
@@ -149,6 +180,22 @@ export function patchStream(id: string, input: StreamPatchInput): StreamRecord |
   if (input.title !== undefined) columns.push({ col: "title", val: input.title });
   if (input.sourceId !== undefined) columns.push({ col: "source_id", val: input.sourceId });
   if (input.targetId !== undefined) columns.push({ col: "target_id", val: input.targetId });
+  if (input.mode !== undefined) columns.push({ col: "mode", val: input.mode });
+  if (input.youtubeConnectionId !== undefined)
+    columns.push({ col: "youtube_connection_id", val: input.youtubeConnectionId });
+  if (input.ytTitle !== undefined) columns.push({ col: "yt_title", val: input.ytTitle });
+  if (input.ytDescription !== undefined)
+    columns.push({ col: "yt_description", val: input.ytDescription });
+  if (input.ytTags !== undefined) columns.push({ col: "yt_tags", val: input.ytTags });
+  if (input.ytPrivacy !== undefined) columns.push({ col: "yt_privacy", val: input.ytPrivacy });
+  if (input.ytMadeForKids !== undefined)
+    columns.push({ col: "yt_made_for_kids", val: input.ytMadeForKids ? 1 : 0 });
+  if (input.ytDvr !== undefined) columns.push({ col: "yt_dvr", val: input.ytDvr ? 1 : 0 });
+  if (input.ytStreamKeyId !== undefined)
+    columns.push({ col: "yt_stream_key_id", val: input.ytStreamKeyId });
+  if (input.ytBroadcastId !== undefined)
+    columns.push({ col: "yt_broadcast_id", val: input.ytBroadcastId });
+  if (input.ytVideoId !== undefined) columns.push({ col: "yt_video_id", val: input.ytVideoId });
   // loop is always on; ignore patch attempts that would disable it
   if (input.loop !== undefined) columns.push({ col: "loop", val: 1 });
   if (input.youtubeLiveUrl !== undefined)

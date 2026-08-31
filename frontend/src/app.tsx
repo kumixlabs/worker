@@ -1,9 +1,14 @@
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import type { ReactNode } from "react";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 
 import { NotFound, RouteError } from "@/components/RouteFallback";
+import { authClient } from "@/lib/auth";
+import { MonitoringPage } from "@/routes/admin/monitoring";
+import { AdminOverviewPage } from "@/routes/admin/overview";
+import { AdminSettingsPage } from "@/routes/admin/settings";
+import { UsersPage } from "@/routes/admin/users";
 import { Dashboard } from "@/routes/index";
 import { LogPage } from "@/routes/log";
-import { MonitoringPage } from "@/routes/monitoring";
 import { SettingsPage } from "@/routes/settings";
 import { SourcesPage } from "@/routes/sources";
 import { StreamsPage } from "@/routes/streams";
@@ -11,10 +16,57 @@ import { StreamAnalyticsPage } from "@/routes/streams.analytics";
 import { NewStreamPage } from "@/routes/streams.new";
 import { TargetsPage } from "@/routes/targets";
 
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { data: session, isPending } = authClient.useSession();
+  if (isPending) return null;
+  if (session?.user?.role !== "admin") return <Navigate to="/" replace />;
+  return children;
+}
+
 const router = createBrowserRouter([
   { path: "/", element: <Dashboard />, errorElement: <RouteError /> },
-  { path: "/monitoring", element: <MonitoringPage />, errorElement: <RouteError /> },
+  {
+    path: "/monitoring",
+    element: <Navigate to="/admin/monitoring" replace />,
+  },
+  {
+    path: "/admin/monitoring",
+    element: (
+      <RequireAdmin>
+        <MonitoringPage />
+      </RequireAdmin>
+    ),
+    errorElement: <RouteError />,
+  },
   { path: "/log", element: <LogPage />, errorElement: <RouteError /> },
+  { path: "/users", element: <Navigate to="/admin/users" replace /> },
+  {
+    path: "/admin",
+    element: (
+      <RequireAdmin>
+        <AdminOverviewPage />
+      </RequireAdmin>
+    ),
+    errorElement: <RouteError />,
+  },
+  {
+    path: "/admin/users",
+    element: (
+      <RequireAdmin>
+        <UsersPage />
+      </RequireAdmin>
+    ),
+    errorElement: <RouteError />,
+  },
+  {
+    path: "/admin/settings",
+    element: (
+      <RequireAdmin>
+        <AdminSettingsPage />
+      </RequireAdmin>
+    ),
+    errorElement: <RouteError />,
+  },
   { path: "/settings", element: <SettingsPage />, errorElement: <RouteError /> },
   { path: "/streams", element: <StreamsPage />, errorElement: <RouteError /> },
   { path: "/streams/new", element: <NewStreamPage />, errorElement: <RouteError /> },

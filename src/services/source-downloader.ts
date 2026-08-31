@@ -13,6 +13,7 @@ import { pipeline } from "node:stream/promises";
 
 import { Agent, fetch as undiciFetch } from "undici";
 
+import { getDb } from "../db/client";
 import { addEvent } from "../db/events";
 import { getSource, updateSourceProbe } from "../db/sources";
 import { safeFilenamePart } from "../lib/utils";
@@ -20,6 +21,7 @@ import { getCacheDir, readSettings } from "../runtime/config";
 import { runtimeMetrics } from "../runtime/metrics";
 import type { SourceDownloadProgress } from "../types/source";
 import { probeAndUpdateSource } from "./probe";
+import { assertStorageQuota } from "./quota";
 
 const DEFAULT_MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
 const maxDownloadBytes =
@@ -475,7 +477,7 @@ async function safeFetchInternal(
  * @param fileId - The Google Drive file ID.
  * @returns The resolved URL and any headers (cookies) required to download.
  */
-export async function resolveGDriveDownload(
+async function resolveGDriveDownload(
   fileId: string,
 ): Promise<{ url: string; headers?: Record<string, string> }> {
   const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
@@ -625,6 +627,27 @@ async function downloadAndProbeSourceInner(sourceId: string) {
         return undefined;
       }
       if (controller.signal.aborted) return undefined;
+      if (source.userId) {
+        const user = getDb()
+          .query("SELECT maxStorageBytes FROM user WHERE id = ?")
+          .get(source.userId) as { maxStorageBytes: number | null } | undefined;
+        if (user && user.maxStorageBytes !== null) {
+          try {
+            assertStorageQuota(source.userId, user.maxStorageBytes, bytesWritten);
+          } catch (quotaError) {
+            await removeCacheFile(target);
+            const quotaMsg = (quotaError as Error).message;
+            addEvent(
+              null,
+              "source_quota_exceeded",
+              quotaMsg,
+              { sourceId, userId: source.userId },
+              source.userId,
+            );
+            return updateSourceProbe(sourceId, { status: "invalid", invalidReason: quotaMsg });
+          }
+        }
+      }
       return await probeAndUpdateSource(sourceId, target);
     } catch (error) {
       await removeCacheFile(target);
@@ -636,10 +659,16 @@ async function downloadAndProbeSourceInner(sourceId: string) {
         });
       }
       const message = error instanceof Error ? error.message : "Download failed";
-      addEvent(null, "source_download_failed", `Source download failed: ${source.name}`, {
-        sourceId,
-        message,
-      });
+      addEvent(
+        null,
+        "source_download_failed",
+        `Source download failed: ${source.name}`,
+        {
+          sourceId,
+          message,
+        },
+        source.userId,
+      );
       return updateSourceProbe(sourceId, { status: "invalid", invalidReason: message });
     }
   } finally {

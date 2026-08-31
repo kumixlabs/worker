@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CircleAlertIcon, Clock, Copy, HardDrive, Key, Lock, RefreshCw, Save } from "lucide-react";
+import {
+  CircleAlertIcon,
+  Clock,
+  Copy,
+  HardDrive,
+  Lock,
+  MonitorSmartphone,
+  Plus,
+  Save,
+  Trash2,
+  Video,
+} from "lucide-react";
 import { useTranslations } from "use-intl";
 
-import { ConfirmDialog } from "@kumix/ui/custom/confirm-dialog";
 import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kumix/ui/motion/tabs";
 import { Alert, AlertTitle } from "@kumix/ui/reui/alert";
+import { Badge } from "@kumix/ui/reui/badge";
 import { Frame, FrameFooter, FrameHeader, FramePanel, FrameTitle } from "@kumix/ui/reui/frame";
 import {
   NumberField,
@@ -26,15 +37,20 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from "@kumix/ui/ui/combobox";
-import { Input } from "@kumix/ui/ui/input";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@kumix/ui/ui/input-group";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@kumix/ui/ui/dialog";
+import { Input } from "@kumix/ui/ui/input";
+import { ActiveSessions } from "@/components/ActiveSessions";
 import { AppShell } from "@/components/AppShell";
-import { api, clearPasswordIsDefault, getApiToken, queryClient, setApiToken } from "@/lib/api";
+import { api, queryClient } from "@/lib/api";
+import { authClient } from "@/lib/auth";
 
 function supportedTimezones(): string[] {
   const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
@@ -45,74 +61,80 @@ function supportedTimezones(): string[] {
   }
 }
 
-function randomApiToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
 export function SettingsPage() {
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
   const t = useTranslations("Settings");
   const common = useTranslations("Common");
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const ytConnectionsQuery = useQuery({
+    queryKey: ["youtubeConnections"],
+    queryFn: api.youtubeConnections,
+  });
+
   const [timezone, setTimezone] = useState("");
   const [diskLimit, setDiskLimit] = useState("");
-  const [youtubeApiKey, setYoutubeApiKey] = useState("");
-  const [youtubeKeyDirty, setYoutubeKeyDirty] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
-  const [apiTokenValue, setApiTokenValue] = useState(() => getApiToken());
+
+  const [ytClientId, setYtClientId] = useState("");
+  const [ytClientSecret, setYtClientSecret] = useState("");
+  const [isConnectOpen, setIsConnectOpen] = useState(false);
+
   const timezones = useMemo(supportedTimezones, []);
+  const redirectUri = `${window.location.origin}/api/youtube/callback`;
 
   const updateSettings = useMutation({
     mutationFn: () =>
       api.patchSettings({
         timezone,
         diskUsageLimitPercent: Number(diskLimit),
-        ...(youtubeKeyDirty ? { youtubeApiKey } : {}),
       }),
     onSuccess: () => {
       toastSuccess({ message: t("saved") });
-      setYoutubeApiKey("");
-      setYoutubeKeyDirty(false);
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: (error) => toastError({ message: error.message }),
+  });
+
+  const connectYoutube = useMutation({
+    mutationFn: () =>
+      api.createYoutubeConnection({
+        clientId: ytClientId.trim(),
+        clientSecret: ytClientSecret.trim(),
+      }),
+    onSuccess: (res) => {
+      if (res.authUrl) {
+        window.location.href = res.authUrl;
+      }
+    },
+    onError: (error) => toastError({ message: error.message }),
+  });
+
+  const disconnectYoutube = useMutation({
+    mutationFn: (id: string) => api.deleteYoutubeConnection(id),
+    onSuccess: () => {
+      toastSuccess({ message: t("disconnected") });
+      void queryClient.invalidateQueries({ queryKey: ["youtubeConnections"] });
     },
     onError: (error) => toastError({ message: error.message }),
   });
 
   const changePassword = useMutation({
-    mutationFn: () =>
-      api.changePassword({
+    mutationFn: async () => {
+      const { error } = await authClient.changePassword({
         currentPassword,
         newPassword,
-        confirmPassword,
-      }),
+        revokeOtherSessions: true,
+      });
+      if (error) throw new Error(error.message ?? t("passwordChangeError"));
+    },
     onSuccess: () => {
       toastSuccess({ message: t("passwordChanged") });
-      clearPasswordIsDefault();
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      void queryClient.invalidateQueries({ queryKey: ["settings"] });
-    },
-    onError: (error) => toastError({ message: error.message }),
-  });
-
-  const rotateToken = useMutation({
-    mutationFn: () => {
-      const next = randomApiToken();
-      return api.rotateToken(next).then((result) => ({ ...result, token: next }));
-    },
-    onSuccess: (data) => {
-      setApiToken(data.token, false);
-      setApiTokenValue(data.token);
-      toastSuccess({ message: t("apiTokenRotated") });
-      setConfirmRegenerate(false);
-      void queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
     onError: (error) => toastError({ message: error.message }),
   });
@@ -121,33 +143,18 @@ export function SettingsPage() {
     if (!settingsQuery.data) return;
     setTimezone(settingsQuery.data.timezone);
     setDiskLimit(String(settingsQuery.data.diskUsageLimitPercent));
-    setYoutubeApiKey("");
-    setYoutubeKeyDirty(false);
   }, [settingsQuery.data]);
 
   const diskValue = Number(diskLimit);
   const diskInvalid = !Number.isInteger(diskValue) || diskValue < 50 || diskValue > 99;
   const canSave = Boolean(timezone) && !diskInvalid && !updateSettings.isPending;
 
-  const passwordMismatch =
-    newPassword.length > 0 && confirmPassword.length > 0 && newPassword !== confirmPassword;
-  const passwordTooShort = newPassword.length > 0 && newPassword.length < 6;
   const canChangePassword =
     Boolean(currentPassword) &&
-    newPassword.length >= 6 &&
+    newPassword.length >= 8 &&
     newPassword === confirmPassword &&
     newPassword !== currentPassword &&
     !changePassword.isPending;
-
-  const copyToken = async () => {
-    if (!apiTokenValue) return;
-    try {
-      await navigator.clipboard.writeText(apiTokenValue);
-      toastSuccess({ message: t("apiTokenCopied") });
-    } catch {
-      toastError({ message: t("apiTokenCopy") });
-    }
-  };
 
   return (
     <AppShell title={t("title")} description={t("description")}>
@@ -161,118 +168,231 @@ export function SettingsPage() {
           </FramePanel>
         </Frame>
       ) : (
-        <Tabs defaultValue="general" variant="pill" className="space-y-5">
+        <Tabs defaultValue={isAdmin ? "general" : "youtube"} variant="pill" className="space-y-5">
           <TabsList>
-            <TabsTrigger value="general">{t("tabGeneral")}</TabsTrigger>
+            {isAdmin ? <TabsTrigger value="general">{t("tabGeneral")}</TabsTrigger> : null}
+            <TabsTrigger value="youtube">YouTube</TabsTrigger>
             <TabsTrigger value="security">{t("tabSecurity")}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="space-y-4">
-            <Frame>
-              <FrameHeader>
-                <FrameTitle className="flex items-center gap-2">
-                  <Clock className="size-4" />
-                  {t("timezone")}
-                </FrameTitle>
-              </FrameHeader>
-              <FramePanel className="space-y-2">
-                <span className="mb-2 block font-medium text-sm">{t("timezoneLabel")}</span>
-                <Combobox
-                  items={timezones}
-                  value={timezone}
-                  onValueChange={(value) => setTimezone(typeof value === "string" ? value : "")}
+          {isAdmin ? (
+            <TabsContent value="general" className="space-y-4">
+              <Frame>
+                <FrameHeader>
+                  <FrameTitle className="flex items-center gap-2">
+                    <Clock className="size-4" />
+                    {t("timezone")}
+                  </FrameTitle>
+                </FrameHeader>
+                <FramePanel className="space-y-2">
+                  <span className="mb-2 block font-medium text-sm">{t("timezoneLabel")}</span>
+                  <Combobox
+                    items={timezones}
+                    value={timezone}
+                    onValueChange={(value) => setTimezone(typeof value === "string" ? value : "")}
+                  >
+                    <ComboboxTrigger
+                      render={
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <ComboboxValue />
+                        </Button>
+                      }
+                    />
+                    <ComboboxContent>
+                      <ComboboxInput showTrigger={false} placeholder={t("searchTimezone")} />
+                      <ComboboxEmpty>{t("noTimezone")}</ComboboxEmpty>
+                      <ComboboxList>
+                        {(zone: string) => (
+                          <ComboboxItem key={zone} value={zone}>
+                            {zone}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                </FramePanel>
+                <FrameFooter>
+                  <p className="text-muted-foreground text-sm">{t("timezoneDescription")}</p>
+                </FrameFooter>
+              </Frame>
+
+              <Frame>
+                <FrameHeader>
+                  <FrameTitle className="flex items-center gap-2">
+                    <HardDrive className="size-4" />
+                    {t("diskLimit")}
+                  </FrameTitle>
+                </FrameHeader>
+                <FramePanel className="space-y-2">
+                  <span className="mb-2 block font-medium text-sm">{t("diskLimitLabel")}</span>
+                  <NumberField
+                    value={Number(diskLimit)}
+                    min={50}
+                    max={99}
+                    onValueChange={(value) => setDiskLimit(String(value))}
+                  >
+                    <NumberFieldGroup>
+                      <NumberFieldInput className="text-left" />
+                      <NumberFieldDecrement className="rounded-none!" />
+                      <NumberFieldIncrement />
+                    </NumberFieldGroup>
+                  </NumberField>
+                  {diskInvalid && diskLimit !== "" ? (
+                    <p className="text-destructive text-xs">{t("diskLimitInvalid")}</p>
+                  ) : null}
+                </FramePanel>
+                <FrameFooter>
+                  <p className="text-muted-foreground text-sm">{t("diskLimitDescription")}</p>
+                </FrameFooter>
+              </Frame>
+
+              <div className="flex justify-end">
+                <Button
+                  disabled={!canSave}
+                  onClick={() => updateSettings.mutate()}
+                  className="gap-2"
                 >
-                  <ComboboxTrigger
+                  <Save className="size-4" />
+                  {updateSettings.isPending ? common("loading") : common("save")}
+                </Button>
+              </div>
+            </TabsContent>
+          ) : null}
+
+          <TabsContent value="youtube" className="space-y-4">
+            <Frame>
+              <FrameHeader className="flex flex-row items-center justify-between">
+                <FrameTitle className="flex items-center gap-2">
+                  <Video className="size-4" />
+                  {t("youtubeTitle")}
+                </FrameTitle>
+                <Dialog open={isConnectOpen} onOpenChange={setIsConnectOpen}>
+                  <DialogTrigger
                     render={
-                      <Button variant="outline" className="w-full justify-between font-normal">
-                        <ComboboxValue />
+                      <Button size="sm" className="gap-1.5">
+                        <Plus className="size-4" />
+                        {t("connectChannel")}
                       </Button>
                     }
                   />
-                  <ComboboxContent>
-                    <ComboboxInput showTrigger={false} placeholder={t("searchTimezone")} />
-                    <ComboboxEmpty>{t("noTimezone")}</ComboboxEmpty>
-                    <ComboboxList>
-                      {(zone: string) => (
-                        <ComboboxItem key={zone} value={zone}>
-                          {zone}
-                        </ComboboxItem>
-                      )}
-                    </ComboboxList>
-                  </ComboboxContent>
-                </Combobox>
-              </FramePanel>
-              <FrameFooter>
-                <p className="text-muted-foreground text-sm">{t("timezoneDescription")}</p>
-              </FrameFooter>
-            </Frame>
-
-            <Frame>
-              <FrameHeader>
-                <FrameTitle className="flex items-center gap-2">
-                  <HardDrive className="size-4" />
-                  {t("diskLimit")}
-                </FrameTitle>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{t("connectTitle")}</DialogTitle>
+                      <DialogDescription>{t("connectDescription")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div>
+                        <span className="mb-1 block font-medium text-xs">{t("redirectUri")}</span>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={redirectUri}
+                            readOnly
+                            className="bg-muted font-mono text-xs"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              navigator.clipboard.writeText(redirectUri);
+                              toastSuccess({ message: t("redirectCopied") });
+                            }}
+                          >
+                            <Copy className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="font-medium text-xs">{t("googleClientId")}</span>
+                        <Input
+                          placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
+                          value={ytClientId}
+                          onChange={(e) => setYtClientId(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="font-medium text-xs">{t("googleClientSecret")}</span>
+                        <Input
+                          type="password"
+                          placeholder="GOCSPX-xxxxxxxxxxxxxxxx"
+                          value={ytClientSecret}
+                          onChange={(e) => setYtClientSecret(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        disabled={!ytClientId || !ytClientSecret || connectYoutube.isPending}
+                        onClick={() => connectYoutube.mutate()}
+                      >
+                        {connectYoutube.isPending ? t("connecting") : t("proceedGoogle")}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </FrameHeader>
-              <FramePanel className="space-y-2">
-                <span className="mb-2 block font-medium text-sm">{t("diskLimitLabel")}</span>
-                <NumberField
-                  value={Number(diskLimit)}
-                  min={50}
-                  max={99}
-                  onValueChange={(value) => setDiskLimit(String(value))}
-                >
-                  <NumberFieldGroup>
-                    <NumberFieldInput className="text-left" />
-                    <NumberFieldDecrement className="rounded-none!" />
-                    <NumberFieldIncrement />
-                  </NumberFieldGroup>
-                </NumberField>
-                {diskInvalid && diskLimit !== "" ? (
-                  <p className="text-destructive text-xs">{t("diskLimitInvalid")}</p>
-                ) : null}
+              <FramePanel>
+                <div className="space-y-3">
+                  {ytConnectionsQuery.data?.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">{t("youtubeEmpty")}</p>
+                  ) : (
+                    ytConnectionsQuery.data?.map((conn) => (
+                      <div
+                        key={conn.id}
+                        className="flex items-center justify-between rounded-lg border p-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          {conn.channelThumbnail ? (
+                            <img
+                              src={conn.channelThumbnail}
+                              alt=""
+                              className="size-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                              <Video className="size-5 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">
+                                {conn.channelTitle || t("channelFallback")}
+                              </span>
+                              <Badge
+                                variant={conn.status === "connected" ? "default" : "destructive"}
+                              >
+                                {conn.status}
+                              </Badge>
+                            </div>
+                            <p className="font-mono text-muted-foreground text-xs">
+                              {t("clientMasked", { masked: conn.clientIdMasked })}
+                            </p>
+                            {conn.subscriberCount !== undefined ? (
+                              <p className="text-muted-foreground text-xs">
+                                {t("subscribers", {
+                                  count: new Intl.NumberFormat().format(conn.subscriberCount),
+                                })}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => disconnectYoutube.mutate(conn.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </FramePanel>
               <FrameFooter>
-                <p className="text-muted-foreground text-sm">{t("diskLimitDescription")}</p>
+                <p className="text-muted-foreground text-xs">{t("quotaNote")}</p>
               </FrameFooter>
             </Frame>
-
-            <Frame>
-              <FrameHeader>
-                <FrameTitle className="flex items-center gap-2">
-                  <Key className="size-4" />
-                  {t("youtubeApiKey")}
-                </FrameTitle>
-              </FrameHeader>
-              <FramePanel className="space-y-2">
-                {settingsQuery.data?.hasYoutubeApiKey ? (
-                  <p className="text-muted-foreground text-xs">{t("youtubeApiKeyConfigured")}</p>
-                ) : null}
-                <Input
-                  type="password"
-                  value={youtubeApiKey}
-                  placeholder={
-                    settingsQuery.data?.hasYoutubeApiKey
-                      ? t("youtubeApiKeyKeepPlaceholder")
-                      : t("youtubeApiKeyPlaceholder")
-                  }
-                  onChange={(event) => {
-                    setYoutubeApiKey(event.target.value);
-                    setYoutubeKeyDirty(true);
-                  }}
-                />
-              </FramePanel>
-              <FrameFooter>
-                <p className="text-muted-foreground text-sm">{t("youtubeApiKeyDescription")}</p>
-              </FrameFooter>
-            </Frame>
-
-            <div className="flex justify-end">
-              <Button disabled={!canSave} onClick={() => updateSettings.mutate()}>
-                <Save />
-                {common("save")}
-              </Button>
-            </div>
           </TabsContent>
 
           <TabsContent value="security" className="space-y-4">
@@ -284,109 +404,57 @@ export function SettingsPage() {
                 </FrameTitle>
               </FrameHeader>
               <FramePanel className="space-y-3">
-                <div className="space-y-2">
-                  <span className="block font-medium text-sm">{t("currentPassword")}</span>
+                <div className="space-y-1">
+                  <span className="font-medium text-sm">{t("currentPassword")}</span>
                   <Input
                     type="password"
-                    autoComplete="current-password"
                     value={currentPassword}
                     onChange={(event) => setCurrentPassword(event.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <span className="block font-medium text-sm">{t("newPassword")}</span>
+                <div className="space-y-1">
+                  <span className="font-medium text-sm">{t("newPassword")}</span>
                   <Input
                     type="password"
-                    autoComplete="new-password"
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
                   />
-                  {passwordTooShort ? (
-                    <p className="text-destructive text-xs">{t("passwordTooShort")}</p>
-                  ) : null}
                 </div>
-                <div className="space-y-2">
-                  <span className="block font-medium text-sm">{t("confirmPassword")}</span>
+                <div className="space-y-1">
+                  <span className="font-medium text-sm">{t("confirmPassword")}</span>
                   <Input
                     type="password"
-                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                   />
-                  {passwordMismatch ? (
-                    <p className="text-destructive text-xs">{t("passwordMismatch")}</p>
-                  ) : null}
-                </div>
-                <div className="flex justify-end">
-                  <Button disabled={!canChangePassword} onClick={() => changePassword.mutate()}>
-                    {t("changePasswordSubmit")}
-                  </Button>
                 </div>
               </FramePanel>
-              <FrameFooter>
-                <p className="text-muted-foreground text-sm">{t("changePasswordDescription")}</p>
+              <FrameFooter className="flex justify-end">
+                <Button
+                  disabled={!canChangePassword}
+                  onClick={() => changePassword.mutate()}
+                  className="gap-2"
+                >
+                  <Lock className="size-4" />
+                  {changePassword.isPending ? common("loading") : t("changePasswordSubmit")}
+                </Button>
               </FrameFooter>
             </Frame>
 
             <Frame>
               <FrameHeader>
                 <FrameTitle className="flex items-center gap-2">
-                  <RefreshCw className="size-4" />
-                  {t("apiToken")}
+                  <MonitorSmartphone className="size-4" />
+                  {t("sessionsTitle")}
                 </FrameTitle>
               </FrameHeader>
-              <FramePanel className="space-y-3">
-                <div className="space-y-2">
-                  <span className="block font-medium text-sm">{t("apiTokenValueLabel")}</span>
-                  <InputGroup>
-                    <InputGroupInput
-                      readOnly
-                      value={apiTokenValue}
-                      className="font-mono text-xs"
-                      aria-label={t("apiToken")}
-                    />
-                    <InputGroupAddon align="inline-end">
-                      <InputGroupButton
-                        variant="ghost"
-                        size="icon-xs"
-                        disabled={!apiTokenValue}
-                        aria-label={t("apiTokenCopy")}
-                        onClick={() => void copyToken()}
-                      >
-                        <Copy className="size-4" />
-                      </InputGroupButton>
-                    </InputGroupAddon>
-                  </InputGroup>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="destructive"
-                    disabled={rotateToken.isPending}
-                    onClick={() => setConfirmRegenerate(true)}
-                  >
-                    <RefreshCw className={rotateToken.isPending ? "animate-spin" : undefined} />
-                    {t("apiTokenRegenerate")}
-                  </Button>
-                </div>
+              <FramePanel>
+                <ActiveSessions />
               </FramePanel>
-              <FrameFooter>
-                <p className="text-muted-foreground text-sm">{t("apiTokenDescription")}</p>
-              </FrameFooter>
             </Frame>
           </TabsContent>
         </Tabs>
       )}
-
-      <ConfirmDialog
-        open={confirmRegenerate}
-        onOpenChange={setConfirmRegenerate}
-        onConfirm={() => rotateToken.mutate()}
-        title={t("apiTokenConfirmTitle")}
-        description={t("apiTokenConfirmDescription")}
-        confirmText={t("apiTokenConfirm")}
-        cancelText={common("cancel")}
-        loading={rotateToken.isPending}
-      />
     </AppShell>
   );
 }

@@ -9,6 +9,7 @@
  */
 export interface TargetRecord {
   id: string;
+  userId?: string | null;
   label: string;
   ingestUrl: string;
   active: boolean;

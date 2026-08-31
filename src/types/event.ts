@@ -8,6 +8,7 @@
  */
 export interface EventRecord {
   id: string;
+  userId?: string | null;
   streamId: string | null;
   kind: string;
   message: string;

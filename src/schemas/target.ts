@@ -20,7 +20,7 @@ const ingestUrlSchema = z
  */
 export const targetCreateSchema = z.object({
   label: z.string().min(1).max(160),
-  ingestUrl: ingestUrlSchema.default("rtmp://a.rtmp.youtube.com/live2"),
+  ingestUrl: ingestUrlSchema,
   streamKey: z.string().min(1).max(512),
   active: z.boolean().default(true),
 });

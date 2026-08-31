@@ -20,11 +20,18 @@ describe("Kumix Worker schemas", () => {
     });
   });
 
-  it("applies target defaults", () => {
+  it("requires an explicit ingest URL for targets", () => {
+    expect(() =>
+      targetCreateSchema.parse({
+        label: "YouTube",
+        streamKey: "abcd-efgh",
+      }),
+    ).toThrow();
     expect(
       targetCreateSchema.parse({
         label: "YouTube",
         streamKey: "abcd-efgh",
+        ingestUrl: "rtmp://a.rtmp.youtube.com/live2",
       }),
     ).toEqual({
       active: true,
@@ -43,10 +50,14 @@ describe("Kumix Worker schemas", () => {
       }),
     ).toEqual({
       loop: true,
+      mode: "rtmp",
       recurrence: "none",
       sourceId: "src_123",
       targetId: "tgt_123",
       title: "Live test",
+      ytDvr: true,
+      ytMadeForKids: false,
+      ytPrivacy: "public",
     });
   });
 

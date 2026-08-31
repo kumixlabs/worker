@@ -52,12 +52,12 @@ describe("frontend smoke", () => {
     expect(log).toContain('event.type === "metrics"');
   });
 
-  it("uses fragment handoff codes and wall-clock worker timezone inputs", () => {
+  it("uses session auth and wall-clock worker timezone inputs", () => {
     const api = read("frontend/src/lib/api.ts");
-    const auth = read("src/http/routes/auth.ts");
+    const authGate = read("frontend/src/components/AuthGate.tsx");
     const picker = read("frontend/src/components/DateTimePicker.tsx");
-    expect(auth).toContain("#code=");
-    expect(api).toContain('hashParams.get("code")');
+    expect(authGate).toContain("authClient.signIn.email");
+    expect(api).toContain("kumix-worker-auth-invalid");
     expect(picker).toContain("toWallClockInput");
   });
 });

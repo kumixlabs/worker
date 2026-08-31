@@ -67,10 +67,14 @@ function getCacheControl(filePath: string): string {
  */
 export function findPublicDir(): string | null {
   const candidates = [
+    // Installed package layout: dist/http/static.js serves dist/public.
+    resolve(__dirname, "../public"),
+    // Source layout (tsx dev): src/http/static.ts serves repo public/.
+    resolve(__dirname, "../../public"),
+    // Dev fallbacks; NOT first, so an unrelated cwd with public/index.html
+    // can never shadow the bundled dashboard.
     join(process.cwd(), "public"),
     join(process.cwd(), "dist", "public"),
-    resolve(__dirname, "../public"),
-    resolve(__dirname, "../../public"),
   ];
 
   for (const candidate of candidates) {

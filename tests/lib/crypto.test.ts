@@ -17,7 +17,8 @@ beforeEach(() => {
     diskUsageLimitPercent: 90,
     port: 8080,
     timezone: "Asia/Jakarta",
-    token: "test-token-123456",
+    signingSecret: "test-signing-secret-01234567890123456789",
+    encryptionKey: "test-encryption-key-01234567890123456789",
   });
 });
 
@@ -42,7 +43,7 @@ describe("Kumix Worker secret crypto", () => {
   });
 
   it("masks short and long secrets", () => {
-    expect(maskSecret("short")).toBe("••••");
-    expect(maskSecret("abcd-efgh-ijkl")).toBe("abcd••••ijkl");
+    expect(maskSecret("short")).toBe("*hort");
+    expect(maskSecret("abcd-efgh-ijkl")).toBe("**********ijkl");
   });
 });

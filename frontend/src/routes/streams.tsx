@@ -181,7 +181,7 @@ export function StreamsPage() {
       setEditStream(stream);
       setEditTitle(stream.title);
       setEditSourceId(stream.sourceId);
-      setEditTargetId(stream.targetId);
+      setEditTargetId(stream.targetId ?? "");
       setEditScheduledFor(
         stream.scheduledFor ? toWallClockInput(new Date(stream.scheduledFor), workerTimezone) : "",
       );

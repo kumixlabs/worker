@@ -13,10 +13,18 @@ import { getDb } from "./client";
  * @param column - Column to group by.
  * @returns Map of column value → count.
  */
-function countBy(table: "sources" | "targets" | "streams", column: string): Map<string, number> {
-  const rows = getDb()
-    .query(`SELECT ${column} AS key, COUNT(*) AS count FROM ${table} GROUP BY ${column}`)
-    .all() as Array<{ key: string | number; count: number }>;
+function countBy(
+  table: "sources" | "targets" | "streams",
+  column: string,
+  userId?: string,
+): Map<string, number> {
+  const sql = userId
+    ? `SELECT ${column} AS key, COUNT(*) AS count FROM ${table} WHERE user_id = ? GROUP BY ${column}`
+    : `SELECT ${column} AS key, COUNT(*) AS count FROM ${table} GROUP BY ${column}`;
+  const rows = (userId ? getDb().query(sql).all(userId) : getDb().query(sql).all()) as Array<{
+    key: string | number;
+    count: number;
+  }>;
   const map = new Map<string, number>();
   for (const row of rows) map.set(String(row.key), row.count);
   return map;
@@ -29,10 +37,10 @@ function countBy(table: "sources" | "targets" | "streams", column: string): Map<
  *
  * @returns The summary counts and current system state details.
  */
-export function stats(): WorkerStats {
-  const sourceCounts = countBy("sources", "status");
-  const streamCounts = countBy("streams", "status");
-  const targetCounts = countBy("targets", "active");
+export function getWorkerStats(userId?: string): WorkerStats {
+  const sourceCounts = countBy("sources", "status", userId);
+  const streamCounts = countBy("streams", "status", userId);
+  const targetCounts = countBy("targets", "active", userId);
   const metrics = runtimeMetrics();
   const sourceTotal = [...sourceCounts.values()].reduce((sum, n) => sum + n, 0);
   const streamTotal = [...streamCounts.values()].reduce((sum, n) => sum + n, 0);
