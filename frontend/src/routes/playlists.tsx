@@ -35,6 +35,7 @@ import { Label } from "@kumix/ui/ui/label";
 import { AppShell } from "@/components/AppShell";
 import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
+import { useDateTimeFormatter } from "@/lib/date";
 import type { PlaylistRecord } from "../../../src/types/playlist";
 
 export function invalidatePlaylists() {
@@ -114,6 +115,8 @@ export function PlaylistDialog({
 export function PlaylistsPage() {
   const t = useTranslations("Playlists");
   const common = useTranslations("Common");
+  const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
   const [dialog, setDialog] = useState<PlaylistRecord | null | "new">(null);
   const [deleting, setDeleting] = useState<PlaylistRecord | null>(null);
 
@@ -179,7 +182,11 @@ export function PlaylistsPage() {
       {
         accessorKey: "updatedAt",
         header: t("updated"),
-        cell: ({ row }) => <span className="text-muted-foreground">{row.original.updatedAt}</span>,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {dateTimeFormatter.format(new Date(row.original.updatedAt))}
+          </span>
+        ),
       },
       {
         id: "actions",
@@ -195,7 +202,7 @@ export function PlaylistsPage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setDialog(row.original)}>
                   <Pencil className="size-4" />
-                  t("edit")
+                  {t("edit")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onClick={() => setDeleting(row.original)}>
@@ -208,7 +215,7 @@ export function PlaylistsPage() {
         ),
       },
     ],
-    [t, common],
+    [t, common, dateTimeFormatter],
   );
 
   return (

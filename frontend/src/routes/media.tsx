@@ -52,6 +52,7 @@ import { ToggleGroup, ToggleGroupItem } from "@kumix/ui/ui/toggle-group";
 import { AppShell } from "@/components/AppShell";
 import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
+import { useDateTimeFormatter } from "@/lib/date";
 import { formatBytes } from "@/lib/format";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 
@@ -82,6 +83,8 @@ function mediaSrc(media: MediaRecord): string {
 export function MediaPage() {
   const t = useTranslations("Media");
   const common = useTranslations("Common");
+  const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const dateTimeFormatter = useDateTimeFormatter(settingsQuery.data);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [view, setView] = useState<"grid" | "list">(
     () => (localStorage.getItem("kumix-media-view") as "grid" | "list") || "grid",
@@ -109,12 +112,11 @@ export function MediaPage() {
     queryFn: ({ signal }) => api.mediaFolders({ signal }),
   });
   const folders = foldersQuery.data ?? [];
-
-  const totalMediaCount = useMemo(
-    () => folders.reduce((total, folder) => total + folder.mediaCount, 0),
-    [folders],
-  );
   const rootCount = (mediaQuery.data ?? []).filter((m) => m.folderId === null).length;
+  const allCount =
+    folderId === null
+      ? folders.reduce((total, f) => total + f.mediaCount, 0) + rootCount
+      : undefined;
   const items = (mediaQuery.data ?? []).filter((item) =>
     item.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
@@ -167,7 +169,11 @@ export function MediaPage() {
       {
         accessorKey: "createdAt",
         header: t("colCreated"),
-        cell: ({ row }) => <span className="text-muted-foreground">{row.original.createdAt}</span>,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {dateTimeFormatter.format(new Date(row.original.createdAt))}
+          </span>
+        ),
       },
       {
         id: "actions",
@@ -183,7 +189,7 @@ export function MediaPage() {
         ),
       },
     ],
-    [common],
+    [t, common, dateTimeFormatter],
   );
 
   return (
@@ -218,7 +224,7 @@ export function MediaPage() {
               active={folderId === null}
               icon={<LayoutGrid className="size-4" />}
               label={t("allMedia")}
-              count={totalMediaCount}
+              count={allCount}
               onClick={() => setFolderId(null)}
             />
             <FolderButton
