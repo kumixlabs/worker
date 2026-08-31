@@ -42,12 +42,10 @@ describe("frontend smoke", () => {
     expect(log).toContain('event.type === "metrics"');
   });
 
-  it("uses session auth and wall-clock worker timezone inputs", () => {
+  it("uses session auth for the dashboard", () => {
     const api = read("frontend/src/lib/api.ts");
     const authGate = read("frontend/src/components/AuthGate.tsx");
-    const picker = read("frontend/src/components/DateTimePicker.tsx");
     expect(authGate).toContain("authClient.signIn.email");
     expect(api).toContain("kumix-worker-auth-invalid");
-    expect(picker).toContain("toWallClockInput");
   });
 });

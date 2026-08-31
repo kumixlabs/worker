@@ -82,8 +82,6 @@
     "actions": "Actions",
     "loading": "Loading...",
     "loadError": "Failed to load data. Check the worker connection and try again.",
-    "pickDateTime": "Pick date and time",
-    "clearDate": "Clear date",
     "statuses": {
       "active": "Active",
       "ready": "Ready",

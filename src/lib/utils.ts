@@ -32,18 +32,6 @@ export function parseJson<T>(value: string | null): T | null {
 }
 
 /**
- * Sanitizes an arbitrary string into a safe filename fragment. Non-alphanumeric
- * characters become underscores and the result is capped at 80 characters.
- *
- * @param value - The raw string to sanitize.
- * @param fallback - Value returned when sanitization yields an empty string.
- * @returns A filesystem-safe filename fragment.
- */
-export function safeFilenamePart(value: string, fallback = "file"): string {
-  return value.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80) || fallback;
-}
-
-/**
  * Converts a Node.js readable stream to a web ReadableStream for Response bodies.
  * Centralizes the cast so call sites stay clean.
  *

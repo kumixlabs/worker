@@ -82,8 +82,6 @@
     "actions": "Aksi",
     "loading": "Memuat...",
     "loadError": "Gagal memuat data. Periksa koneksi worker dan coba lagi.",
-    "pickDateTime": "Pilih tanggal dan waktu",
-    "clearDate": "Hapus tanggal",
     "statuses": {
       "active": "Aktif",
       "ready": "Siap",
