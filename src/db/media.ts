@@ -219,6 +219,13 @@ export function getMediaStorageBytes(userId: string): number {
   return row.total;
 }
 
+export function countMedia(userId: string): number {
+  const row = getDb()
+    .query("SELECT COUNT(*) AS total FROM media WHERE user_id = ?")
+    .get(userId) as { total: number };
+  return row.total;
+}
+
 export function listMediaFolders(userId: string): MediaFolderRecord[] {
   const rows = getDb()
     .query(
@@ -268,7 +275,6 @@ export function deleteMediaFolder(id: string, userId: string): boolean {
   if (!getMediaFolderById(id, userId)) return false;
   getDb().query("DELETE FROM media_folders WHERE id = ? AND user_id = ?").run(id, userId);
   // media.folder_id settles to NULL via ON DELETE SET NULL.
-  getDb().query("UPDATE media SET folder_id = NULL WHERE folder_id = ?").run(id);
   return true;
 }
 

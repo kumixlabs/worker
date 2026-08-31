@@ -243,7 +243,10 @@ async function uploadMediaChunked(
     }
     if (!response.ok) {
       await api.abortMediaUpload(init.uploadId).catch(() => undefined);
-      throw new Error("Chunk upload failed");
+      const body = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null;
+      throw new Error(
+        body && !body.ok ? body.error.message : `Chunk upload failed (${response.status})`,
+      );
     }
     offset = end;
     onProgress?.(offset / file.size);

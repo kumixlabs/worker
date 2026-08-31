@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, renameSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
 
@@ -101,6 +101,8 @@ export async function probeMediaFile(filePath: string): Promise<MediaProbeResult
 }
 
 export async function generateThumbnail(filePath: string, outputPath: string): Promise<boolean> {
+  // temp + rename so concurrent requests never observe a half-written jpeg
+  const tmpPath = `${outputPath}.${process.pid}.tmp.jpg`;
   for (const seek of ["2", "0"]) {
     try {
       await execFileAsync(
@@ -118,14 +120,22 @@ export async function generateThumbnail(filePath: string, outputPath: string): P
           "scale=320:-2",
           "-q:v",
           "4",
-          outputPath,
+          tmpPath,
         ],
         { timeout: 60_000 },
       );
-      if (existsSync(outputPath)) return true;
+      if (existsSync(tmpPath)) {
+        renameSync(tmpPath, outputPath);
+        return true;
+      }
     } catch {
       // try next seek offset
     }
+  }
+  try {
+    rmSync(tmpPath, { force: true });
+  } catch {
+    // best effort
   }
   return false;
 }

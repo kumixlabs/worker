@@ -200,7 +200,7 @@ export function replacePlaylistItems(
   if (rows.length !== mediaIds.length) return "MEDIA_NOT_FOUND";
   const typeById = new Map(rows.map((r) => [r.id, r.media_type]));
   const misplaced =
-    videos.some((id) => typeById.get(id) === "audio") ||
+    videos.some((id) => typeById.get(id) !== "video") ||
     audios.some((id) => typeById.get(id) !== "audio");
   if (misplaced) return "MISPLACED_KIND";
 

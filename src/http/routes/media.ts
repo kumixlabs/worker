@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readSync,
   renameSync,
   rmSync,
@@ -24,6 +25,7 @@ import { z } from "zod";
 
 import { addEvent } from "../../db/events";
 import {
+  countMedia,
   deleteMediaById,
   deleteMediaFolder,
   getMediaById,
@@ -105,7 +107,6 @@ async function persistStream(
       total += chunk.byteLength;
       if (total > limit)
         throw new UploadError("Upload exceeds size limit", "payload_too_large", 413);
-      assertQuota(user, total);
       if (head.length < headBytes) {
         const merged = new Uint8Array(Math.min(headBytes, head.length + chunk.length));
         merged.set(head);
@@ -119,6 +120,7 @@ async function persistStream(
     );
 
     if (total === 0) throw new UploadError("Empty upload body", "BAD_REQUEST", 400);
+    assertQuota(user, total);
     const sniff = sniffMedia(head);
     if (!sniff)
       throw new UploadError(
@@ -271,7 +273,7 @@ export function registerMediaRoutes(app: Hono) {
         ok({
           usedBytes: getMediaStorageBytes(user.id),
           quotaBytes: user.maxStorageBytes ?? null,
-          mediaCount: listMedia(user.id, null, 1_000_000).length,
+          mediaCount: countMedia(user.id),
         }),
       );
     },
@@ -324,9 +326,15 @@ export function registerMediaRoutes(app: Hono) {
         return c.body(toWebStream(mediaReadStream(media.fileName)), 200, headers);
       }
       const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
-      const start = match?.[1] ? Number(match[1]) : 0;
-      let end = match?.[2] ? Number(match[2]) : size - 1;
-      if (!match || Number.isNaN(start) || Number.isNaN(end) || start >= size || start > end) {
+      if (!match) return c.body(null, 416, { "Content-Range": `bytes */${size}`, ...headers });
+      let start = match[1] ? Number(match[1]) : 0;
+      let end = match[2] ? Number(match[2]) : size - 1;
+      if (!match[1] && match[2]) {
+        // suffix range "bytes=-N": last N bytes (sent by Safari on seek)
+        start = Math.max(0, size - Number(match[2]));
+        end = size - 1;
+      }
+      if (Number.isNaN(start) || Number.isNaN(end) || start >= size || start > end) {
         return c.body(null, 416, { "Content-Range": `bytes */${size}`, ...headers });
       }
       end = Math.min(end, size - 1);
@@ -487,6 +495,16 @@ function pruneStaleChunkUploads(): void {
       }
     }
   }
+  // sweep orphan .part files left behind by a restart (in-memory map was lost)
+  try {
+    for (const entry of readdirSync(chunkUploadDir())) {
+      const full = path.join(chunkUploadDir(), entry);
+      const stat = statSync(full);
+      if (now - stat.mtimeMs > chunkUploadTtlMs) rmSync(full, { force: true });
+    }
+  } catch {
+    // dir may not exist yet
+  }
 }
 
 function registerChunkUploads(app: Hono): void {
@@ -555,12 +573,21 @@ function registerChunkUploads(app: Hono): void {
       if (!body) return fail("BAD_REQUEST", "Empty chunk body", 400);
       let received = 0;
       const partPath = path.join(chunkUploadDir(), `${uploadId}.part`);
-      for await (const chunk of body) {
-        received += chunk.byteLength;
-        await appendFileAsync(partPath, chunk);
-      }
-      if (state.bytesReceived + received > state.size) {
-        return fail("BAD_REQUEST", "Chunk exceeds declared upload size", 400);
+      try {
+        for await (const chunk of body) {
+          received += chunk.byteLength;
+          if (state.bytesReceived + received > state.size)
+            throw new UploadError("Chunk exceeds declared upload size", "BAD_REQUEST", 400);
+          await appendFileAsync(partPath, chunk);
+        }
+      } catch (error) {
+        chunkUploads.delete(uploadId);
+        try {
+          rmSync(partPath, { force: true });
+        } catch {
+          // best effort
+        }
+        return uploadErrorResponse(error);
       }
       state.bytesReceived += received;
       return c.json(ok({ bytesReceived: state.bytesReceived }));
@@ -577,29 +604,48 @@ function registerChunkUploads(app: Hono): void {
         return fail("NOT_FOUND", "Upload session not found", 404);
       if (state.bytesReceived !== state.size) return fail("BAD_REQUEST", "Upload incomplete", 400);
       const partPath = path.join(chunkUploadDir(), `${uploadId}.part`);
+      const discardSession = () => {
+        chunkUploads.delete(uploadId);
+        try {
+          rmSync(partPath, { force: true });
+        } catch {
+          // best effort
+        }
+      };
       const fd = openSync(partPath, "r");
       const head = Buffer.alloc(headBytes);
       readSync(fd, head, 0, headBytes, 0);
       closeSync(fd);
       const sniff = sniffMedia(new Uint8Array(head));
-      if (!sniff)
+      if (!sniff) {
+        discardSession();
         return fail("unsupported_media_type", "Unsupported or unrecognized media type", 415);
+      }
       const id = newMediaId();
       const fileName = `${id}.${sniff.ext}`;
       renameSync(partPath, mediaPath(fileName));
       chunkUploads.delete(uploadId);
-      const record = insertMedia({
-        id,
-        userId: state.userId,
-        folderId: state.folderId,
-        name: state.name,
-        mediaType: sniff.mediaType,
-        mimeType: sniff.mimeType,
-        fileName,
-        sizeBytes: state.size,
-      });
-      addEvent(state.userId, "media", `Uploaded media "${state.name}" via chunked upload`);
-      return c.json(ok(await enrichMedia(record)));
+      try {
+        const record = insertMedia({
+          id,
+          userId: state.userId,
+          folderId: state.folderId,
+          name: state.name,
+          mediaType: sniff.mediaType,
+          mimeType: sniff.mimeType,
+          fileName,
+          sizeBytes: state.size,
+        });
+        addEvent(state.userId, "media", `Uploaded media "${state.name}" via chunked upload`);
+        return c.json(ok(await enrichMedia(record)));
+      } catch (error) {
+        try {
+          rmSync(mediaPath(fileName), { force: true });
+        } catch {
+          // best effort
+        }
+        throw error;
+      }
     },
   );
 
