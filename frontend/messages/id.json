@@ -267,7 +267,12 @@
     "colName": "Nama",
     "colType": "Tipe",
     "colSize": "Ukuran",
-    "colCreated": "Dibuat"
+    "colCreated": "Dibuat",
+    "colDuration": "Durasi",
+    "prevPage": "Sebelumnya",
+    "nextPage": "Berikutnya",
+    "storageUsed": "Penyimpanan: {used} terpakai{quota, select, null {} other { dari {quota}}}",
+    "storageUnlimited": "tanpa batas"
   },
   "Playlists": {
     "title": "Playlist",
@@ -297,6 +302,15 @@
     "removeItem": "Hapus dari playlist",
     "deleteTitle": "Hapus playlist?",
     "deleteDescription": "\"{name}\" dan urutan itemnya akan dihapus permanen.",
-    "deleted": "Playlist dihapus"
+    "deleted": "Playlist dihapus",
+    "duration": "Durasi",
+    "videoCount": "{count, plural, =0 {0 video} =1 {1 video} other {# video}}",
+    "audioCount": "{count, plural, =0 {0 audio} =1 {1 audio} other {# audio}}",
+    "videosSection": "Video",
+    "audiosSection": "Audio latar",
+    "addVideos": "Tambah video",
+    "addAudios": "Tambah audio",
+    "addAudiosDescription": "Pilih trek audio yang diputar di atas rangkaian video.",
+    "emptyAudios": "Belum ada audio latar. Tambahkan audio untuk di-mix ke playlist."
   }
 }

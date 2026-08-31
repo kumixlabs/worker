@@ -34,7 +34,7 @@ export function sniffMedia(bytes: Uint8Array): SniffResult | null {
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP")
     return { mediaType: "image", mimeType: "image/webp", ext: "webp" };
 
-  if (ascii(bytes, 0, 4) === "ftyp") {
+  if (ascii(bytes, 4, 4) === "ftyp") {
     const brand = ascii(bytes, 8, 4);
     if (brand.startsWith("M4A")) return { mediaType: "audio", mimeType: "audio/mp4", ext: "m4a" };
     const videoBrands = ["isom", "iso2", "mp41", "mp42", "avc1", "dash", "MSNV", "F4V", "qt  "];

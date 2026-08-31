@@ -3,9 +3,23 @@
  * import, folders, rename/move, delete.
  */
 
-import { renameSync, rmSync, statSync } from "node:fs";
+import {
+  appendFile,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
 
 import type { Hono } from "hono";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 
 import { addEvent } from "../../db/events";
@@ -13,22 +27,28 @@ import {
   deleteMediaById,
   deleteMediaFolder,
   getMediaById,
+  getMediaDir,
   getMediaFolderById,
+  getMediaStorageBytes,
   insertMedia,
   insertMediaFolder,
   listMedia,
   listMediaFolders,
   mediaPath,
   mediaReadStream,
+  mediaThumbPath,
   newMediaId,
   openTempMediaFile,
   renameMediaFolder,
   updateMedia,
+  updateMediaMetadata,
 } from "../../db/media";
 import { sniffMedia } from "../../lib/sniff";
 import { toWebStream } from "../../lib/utils";
+import { generateThumbnail, probeMediaFile } from "../../runtime/ffmpeg";
 import { extractGDriveFileId, resolveGDriveDownload } from "../../services/gdrive";
 import { assertStorageQuota } from "../../services/quota";
+import type { MediaRecord } from "../../types/media";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
 
@@ -119,7 +139,7 @@ async function persistStream(
       fileName,
       sizeBytes: statSync(mediaPath(fileName)).size,
     });
-    return record;
+    return await enrichMedia(record);
   } catch (error) {
     writeStream.destroy();
     try {
@@ -129,6 +149,36 @@ async function persistStream(
     }
     throw error;
   }
+}
+
+const appendFileAsync = promisify(appendFile);
+
+async function enrichMedia(record: MediaRecord): Promise<MediaRecord> {
+  if (record.mediaType === "image") return record;
+  const filePath = mediaPath(record.fileName);
+  const probe = await probeMediaFile(filePath);
+  const meta: Parameters<typeof updateMediaMetadata>[1] = probe
+    ? {
+        duration: probe.duration,
+        width: probe.width,
+        height: probe.height,
+        fps: probe.fps,
+        bitrate: probe.bitrate,
+        hasAudio: probe.hasAudio,
+      }
+    : {};
+  if (record.mediaType === "video") {
+    meta.hasThumb = await generateThumbnail(filePath, mediaThumbPath(record.id));
+  }
+  updateMediaMetadata(record.id, meta);
+  return (
+    getMediaById(record.id, record.userId ?? "") ?? {
+      ...record,
+      ...meta,
+      hasAudio: Boolean(meta.hasAudio),
+      hasThumb: Boolean(meta.hasThumb),
+    }
+  );
 }
 
 function assertQuota(user: SessionUser, incoming: number): void {
@@ -212,24 +262,77 @@ export function registerMediaRoutes(app: Hono) {
         : fail("NOT_FOUND", "Folder not found", 404),
   );
 
+  app.get(
+    "/api/media/stats",
+    doc("Media", "Media stats", "Storage usage and quota for the current user."),
+    (c) => {
+      const user = sessionUser(c);
+      return c.json(
+        ok({
+          usedBytes: getMediaStorageBytes(user.id),
+          quotaBytes: user.maxStorageBytes ?? null,
+          mediaCount: listMedia(user.id, null, 1_000_000).length,
+        }),
+      );
+    },
+  );
+
   app.get("/api/media/:id", doc("Media", "Read media", "Returns a single media record."), (c) => {
     const media = getMediaById(c.req.param("id"), sessionUser(c).id);
     return media ? c.json(ok(media)) : fail("NOT_FOUND", "Media not found", 404);
   });
 
   app.get(
+    "/api/media/:id/thumbnail",
+    doc(
+      "Media",
+      "Media thumbnail",
+      "Serves the generated JPEG thumbnail; generates on first request for videos.",
+    ),
+    async (c) => {
+      const media = getMediaById(c.req.param("id"), sessionUser(c).id);
+      if (media?.mediaType !== "video") return fail("NOT_FOUND", "Thumbnail not available", 404);
+      const thumbPath = mediaThumbPath(media.id);
+      if (!existsSync(thumbPath)) {
+        const generated = await generateThumbnail(mediaPath(media.fileName), thumbPath);
+        if (generated) updateMediaMetadata(media.id, { hasThumb: true });
+        if (!existsSync(thumbPath)) return fail("NOT_FOUND", "Thumbnail not available", 404);
+      }
+      const buffer = await import("node:fs/promises").then((fs) => fs.readFile(thumbPath));
+      return c.body(buffer, 200, {
+        "Content-Type": "image/jpeg",
+        "Cache-Control": "private, max-age=86400",
+      });
+    },
+  );
+
+  app.get(
     "/api/media/:id/content",
-    doc("Media", "Stream content", "Streams the media binary payload."),
+    doc("Media", "Stream content", "Streams the media binary payload (Range aware for seeking)."),
     (c) => {
       const media = getMediaById(c.req.param("id"), sessionUser(c).id);
       if (!media) return fail("NOT_FOUND", "Media not found", 404);
-      // ponytail: no Range support yet — <video> seeking breaks; add when the
-      // gallery player needs it.
-      return c.body(toWebStream(mediaReadStream(media.fileName)), 200, {
+      const size = media.sizeBytes;
+      const rangeHeader = c.req.header("range");
+      const headers: Record<string, string> = {
         "Content-Type": media.mimeType,
-        "Content-Length": String(media.sizeBytes),
         "Cache-Control": "private, max-age=3600",
-      });
+        "Accept-Ranges": "bytes",
+      };
+      if (!rangeHeader) {
+        headers["Content-Length"] = String(size);
+        return c.body(toWebStream(mediaReadStream(media.fileName)), 200, headers);
+      }
+      const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+      const start = match?.[1] ? Number(match[1]) : 0;
+      let end = match?.[2] ? Number(match[2]) : size - 1;
+      if (!match || Number.isNaN(start) || Number.isNaN(end) || start >= size || start > end) {
+        return c.body(null, 416, { "Content-Range": `bytes */${size}`, ...headers });
+      }
+      end = Math.min(end, size - 1);
+      headers["Content-Range"] = `bytes ${start}-${end}/${size}`;
+      headers["Content-Length"] = String(end - start + 1);
+      return c.body(toWebStream(mediaReadStream(media.fileName, { start, end })), 206, headers);
     },
   );
 
@@ -348,6 +451,173 @@ export function registerMediaRoutes(app: Hono) {
       if (!deleted) return fail("NOT_FOUND", "Media not found", 404);
       addEvent(deleted.userId, "media", `Deleted media "${deleted.name}"`);
       return c.json(ok(deleted));
+    },
+  );
+
+  registerChunkUploads(app);
+}
+
+interface ChunkUploadState {
+  userId: string;
+  name: string;
+  folderId: string | null;
+  size: number;
+  bytesReceived: number;
+  createdAt: number;
+}
+
+const chunkUploads = new Map<string, ChunkUploadState>();
+const chunkUploadTtlMs = 24 * 60 * 60 * 1000;
+
+function chunkUploadDir(): string {
+  const dir = path.join(getMediaDir(), ".uploads");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function pruneStaleChunkUploads(): void {
+  const now = Date.now();
+  for (const [id, state] of chunkUploads) {
+    if (now - state.createdAt > chunkUploadTtlMs) {
+      chunkUploads.delete(id);
+      try {
+        rmSync(path.join(chunkUploadDir(), `${id}.part`), { force: true });
+      } catch {
+        // best effort
+      }
+    }
+  }
+}
+
+function registerChunkUploads(app: Hono): void {
+  const initSchema = z.object({
+    name: z.string().trim().min(1).max(200),
+    size: z.number().int().positive(),
+    folderId: z.string().nullable().optional(),
+  });
+
+  app.post(
+    "/api/media/uploads/init",
+    doc("Media", "Chunk init", "Starts a resumable chunked upload session."),
+    async (c) => {
+      const parsed = initSchema.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return fail("BAD_REQUEST", "Invalid upload init body", 400);
+      const user = sessionUser(c);
+      const limit = maxUploadBytes();
+      if (parsed.data.size > limit)
+        return fail("payload_too_large", `Upload exceeds ${limit} bytes`, 413);
+      const folderId = parsed.data.folderId ?? null;
+      if (folderId && !getMediaFolderById(folderId, user.id))
+        return fail("NOT_FOUND", "Folder not found", 404);
+      try {
+        assertStorageQuota(user.id, user.maxStorageBytes, parsed.data.size);
+      } catch {
+        return fail("QUOTA_STORAGE_EXCEEDED", "Upload exceeds storage quota", 413);
+      }
+      pruneStaleChunkUploads();
+      const uploadId = `upl_${nanoid(12)}`;
+      chunkUploads.set(uploadId, {
+        userId: user.id,
+        name: parsed.data.name,
+        folderId,
+        size: parsed.data.size,
+        bytesReceived: 0,
+        createdAt: Date.now(),
+      });
+      const partPath = path.join(chunkUploadDir(), `${uploadId}.part`);
+      writeFileSync(partPath, "");
+      return c.json(ok({ uploadId, chunkSize: 8 * 1024 * 1024 }));
+    },
+  );
+
+  app.get(
+    "/api/media/uploads/:id",
+    doc("Media", "Chunk status", "Returns bytes received so far for a chunked upload."),
+    (c) => {
+      const state = chunkUploads.get(c.req.param("id"));
+      if (!state || state.userId !== sessionUser(c).id)
+        return fail("NOT_FOUND", "Upload session not found", 404);
+      return c.json(ok({ bytesReceived: state.bytesReceived, size: state.size }));
+    },
+  );
+
+  app.put(
+    "/api/media/uploads/:id/chunk",
+    doc("Media", "Chunk append", "Appends one raw octet-stream chunk at the given offset."),
+    async (c) => {
+      const uploadId = c.req.param("id");
+      const state = chunkUploads.get(uploadId);
+      if (!state || state.userId !== sessionUser(c).id)
+        return fail("NOT_FOUND", "Upload session not found", 404);
+      const offset = Number(c.req.query("offset") ?? "-1");
+      if (offset !== state.bytesReceived) return fail("BAD_REQUEST", "Offset mismatch", 409);
+      const body = c.req.raw.body;
+      if (!body) return fail("BAD_REQUEST", "Empty chunk body", 400);
+      let received = 0;
+      const partPath = path.join(chunkUploadDir(), `${uploadId}.part`);
+      for await (const chunk of body) {
+        received += chunk.byteLength;
+        await appendFileAsync(partPath, chunk);
+      }
+      if (state.bytesReceived + received > state.size) {
+        return fail("BAD_REQUEST", "Chunk exceeds declared upload size", 400);
+      }
+      state.bytesReceived += received;
+      return c.json(ok({ bytesReceived: state.bytesReceived }));
+    },
+  );
+
+  app.post(
+    "/api/media/uploads/:id/complete",
+    doc("Media", "Chunk complete", "Finalizes a chunked upload into a media record."),
+    async (c) => {
+      const uploadId = c.req.param("id");
+      const state = chunkUploads.get(uploadId);
+      if (!state || state.userId !== sessionUser(c).id)
+        return fail("NOT_FOUND", "Upload session not found", 404);
+      if (state.bytesReceived !== state.size) return fail("BAD_REQUEST", "Upload incomplete", 400);
+      const partPath = path.join(chunkUploadDir(), `${uploadId}.part`);
+      const fd = openSync(partPath, "r");
+      const head = Buffer.alloc(headBytes);
+      readSync(fd, head, 0, headBytes, 0);
+      closeSync(fd);
+      const sniff = sniffMedia(new Uint8Array(head));
+      if (!sniff)
+        return fail("unsupported_media_type", "Unsupported or unrecognized media type", 415);
+      const id = newMediaId();
+      const fileName = `${id}.${sniff.ext}`;
+      renameSync(partPath, mediaPath(fileName));
+      chunkUploads.delete(uploadId);
+      const record = insertMedia({
+        id,
+        userId: state.userId,
+        folderId: state.folderId,
+        name: state.name,
+        mediaType: sniff.mediaType,
+        mimeType: sniff.mimeType,
+        fileName,
+        sizeBytes: state.size,
+      });
+      addEvent(state.userId, "media", `Uploaded media "${state.name}" via chunked upload`);
+      return c.json(ok(await enrichMedia(record)));
+    },
+  );
+
+  app.delete(
+    "/api/media/uploads/:id",
+    doc("Media", "Chunk abort", "Aborts a chunked upload session."),
+    (c) => {
+      const uploadId = c.req.param("id");
+      const state = chunkUploads.get(uploadId);
+      if (!state || state.userId !== sessionUser(c).id)
+        return fail("NOT_FOUND", "Upload session not found", 404);
+      chunkUploads.delete(uploadId);
+      try {
+        rmSync(path.join(chunkUploadDir(), `${uploadId}.part`), { force: true });
+      } catch {
+        // best effort
+      }
+      return c.json(ok({ aborted: true }));
     },
   );
 }

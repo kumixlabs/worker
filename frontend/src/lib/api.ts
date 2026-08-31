@@ -156,22 +156,84 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  replacePlaylistItems: (id: string, mediaIds: string[]) =>
+  replacePlaylistItems: (
+    id: string,
+    body: { videos?: string[]; audios?: string[]; mediaIds?: string[] },
+  ) =>
     request<PlaylistItemRecord[]>(`/api/playlists/${id}/items`, {
       method: "PUT",
-      body: JSON.stringify({ mediaIds }),
+      body: JSON.stringify(body),
     }),
+  mediaStats: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<{ usedBytes: number; quotaBytes: number | null; mediaCount: number }>(
+      "/api/media/stats",
+      { signal },
+    ),
+  mediaUploadInit: (body: { name: string; size: number; folderId?: string }) =>
+    request<{ uploadId: string; chunkSize: number }>("/api/media/uploads/init", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  completeMediaUpload: (uploadId: string) =>
+    request<MediaRecord>(`/api/media/uploads/${uploadId}/complete`, { method: "POST" }),
+  abortMediaUpload: (uploadId: string) =>
+    request<{ aborted: boolean }>(`/api/media/uploads/${uploadId}`, { method: "DELETE" }),
   deletePlaylist: (id: string) =>
     request<{ deleted: boolean }>(`/api/playlists/${id}`, { method: "DELETE" }),
-  uploadMedia: async (file: File, options: { name?: string; folderId?: string } = {}) => {
+  uploadMedia: async (
+    file: File,
+    options: { name?: string; folderId?: string; onProgress?: (fraction: number) => void } = {},
+  ) => {
+    const name = options.name ?? file.name;
+    const folderId = options.folderId && options.folderId !== "root" ? options.folderId : undefined;
+    const chunkThreshold = 8 * 1024 * 1024;
+    if (file.size > chunkThreshold) {
+      return uploadMediaChunked(file, { name, folderId, onProgress: options.onProgress });
+    }
     const params = new URLSearchParams();
-    if (options.name) params.set("name", options.name);
-    if (options.folderId && options.folderId !== "root") params.set("folderId", options.folderId);
+    if (name) params.set("name", name);
+    if (folderId) params.set("folderId", folderId);
     const query = params.size > 0 ? `?${params.toString()}` : "";
+    options.onProgress?.(0.05);
     const response = await fetch(`/api/media${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body: file,
+      credentials: "same-origin",
+    });
+    options.onProgress?.(1);
+    return unwrapUploadResponse(response);
+  },
+};
+
+async function unwrapUploadResponse(response: Response): Promise<MediaRecord> {
+  if (response.status === 401) {
+    queryClient.clear();
+    window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
+    throw new Error("Session expired");
+  }
+  const body = (await response.json().catch(() => null)) as ApiEnvelope<MediaRecord> | null;
+  if (!body?.ok) throw new Error(body && !body.ok ? body.error.message : "Upload failed");
+  return body.data;
+}
+
+const CHUNK_SIZE = 8 * 1024 * 1024;
+
+async function uploadMediaChunked(
+  file: File,
+  {
+    name,
+    folderId,
+    onProgress,
+  }: { name: string; folderId?: string; onProgress?: (f: number) => void },
+): Promise<MediaRecord> {
+  const init = await api.mediaUploadInit({ name, size: file.size, folderId });
+  let offset = 0;
+  while (offset < file.size) {
+    const end = Math.min(offset + CHUNK_SIZE, file.size);
+    const response = await fetch(`/api/media/uploads/${init.uploadId}/chunk?offset=${offset}`, {
+      method: "PUT",
+      body: file.slice(offset, end),
       credentials: "same-origin",
     });
     if (response.status === 401) {
@@ -179,8 +241,12 @@ export const api = {
       window.dispatchEvent(new CustomEvent("kumix-worker-auth-invalid"));
       throw new Error("Session expired");
     }
-    const body = (await response.json().catch(() => null)) as ApiEnvelope<MediaRecord> | null;
-    if (!body?.ok) throw new Error(body && !body.ok ? body.error.message : "Upload failed");
-    return body.data;
-  },
-};
+    if (!response.ok) {
+      await api.abortMediaUpload(init.uploadId).catch(() => undefined);
+      throw new Error("Chunk upload failed");
+    }
+    offset = end;
+    onProgress?.(offset / file.size);
+  }
+  return api.completeMediaUpload(init.uploadId);
+}

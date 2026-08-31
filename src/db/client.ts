@@ -80,6 +80,18 @@ export function getDb(): SqliteDatabase {
       "folder_id",
       "TEXT REFERENCES media_folders(id) ON DELETE SET NULL",
     );
+    for (const [column, type] of [
+      ["duration", "REAL"],
+      ["width", "INTEGER"],
+      ["height", "INTEGER"],
+      ["fps", "REAL"],
+      ["bitrate", "INTEGER"],
+      ["has_audio", "INTEGER"],
+      ["has_thumb", "INTEGER NOT NULL DEFAULT 0"],
+    ] as const) {
+      tryColumnMigration(wrapper, "media", column, type);
+    }
+    tryColumnMigration(wrapper, "playlist_items", "kind", "TEXT NOT NULL DEFAULT 'video'");
     dbInstance = instance;
     dbWrapper = wrapper;
     return wrapper;
@@ -185,7 +197,14 @@ function ensureSchema(database: SqliteDatabase): void {
       mime_type TEXT NOT NULL,
       file_name TEXT NOT NULL,
       size_bytes INTEGER NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      duration REAL,
+      width INTEGER,
+      height INTEGER,
+      fps REAL,
+      bitrate INTEGER,
+      has_audio INTEGER,
+      has_thumb INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS playlists (
       id TEXT PRIMARY KEY,
@@ -201,6 +220,7 @@ function ensureSchema(database: SqliteDatabase): void {
       playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
       media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
       position INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'video',
       created_at TEXT NOT NULL
     );
 

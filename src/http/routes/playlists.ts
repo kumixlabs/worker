@@ -35,7 +35,9 @@ const playlistPatchSchema = z.object({
 });
 
 const playlistItemsSchema = z.object({
-  mediaIds: z.array(z.string().min(1)).max(500),
+  videos: z.array(z.string().min(1)).max(500).optional(),
+  audios: z.array(z.string().min(1)).max(500).optional(),
+  mediaIds: z.array(z.string().min(1)).max(500).optional(),
 });
 
 export function registerPlaylistRoutes(app: Hono) {
@@ -83,20 +85,25 @@ export function registerPlaylistRoutes(app: Hono) {
     doc(
       "Playlists",
       "Replace items",
-      "Replaces the full ordered item list. Body: { mediaIds: [...] } — every ID must belong to the user and appear at most once.",
+      "Replaces the full ordered item list. Body: { videos: [...], audios: [...] } — media lands in the section matching its type; legacy { mediaIds } sends everything to the video order.",
     ),
     async (c) => {
       const parsed = playlistItemsSchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return fail("BAD_REQUEST", "Invalid request body", 400);
+      const { videos, audios, mediaIds } = parsed.data;
+      if (!videos && !audios && !mediaIds)
+        return fail("BAD_REQUEST", "Provide videos, audios, or mediaIds", 400);
       const result = replacePlaylistItems(
         c.req.param("id"),
         sessionUserId(c),
-        parsed.data.mediaIds,
+        mediaIds ? { videos: mediaIds } : { videos, audios },
       );
       if (result === "MEDIA_NOT_FOUND")
         return fail("NOT_FOUND", "Playlist or media not found", 404);
       if (result === "DUPLICATE_MEDIA")
         return fail("DUPLICATE_MEDIA", "Duplicate media in playlist order", 409);
+      if (result === "MISPLACED_KIND")
+        return fail("BAD_REQUEST", "Media type does not match the target section", 400);
       return c.json(ok(result));
     },
   );

@@ -6,6 +6,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  HardDrive,
   Image as ImageIcon,
   LayoutGrid,
   Link2,
@@ -53,7 +54,7 @@ import { AppShell } from "@/components/AppShell";
 import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatDuration } from "@/lib/format";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 
 const maxUploadBytes = 2 * 1024 * 1024 * 1024;
@@ -111,6 +112,10 @@ export function MediaPage() {
     queryKey: foldersQueryKey,
     queryFn: ({ signal }) => api.mediaFolders({ signal }),
   });
+  const statsQuery = useQuery({
+    queryKey: ["media", "stats"],
+    queryFn: ({ signal }) => api.mediaStats({ signal }),
+  });
   const folders = foldersQuery.data ?? [];
   const rootCount = (mediaQuery.data ?? []).filter((m) => m.folderId === null).length;
   const allCount =
@@ -120,6 +125,14 @@ export function MediaPage() {
   const items = (mediaQuery.data ?? []).filter((item) =>
     item.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
+
+  const [gridPage, setGridPage] = useState(0);
+  const gridPageSize = 24;
+  const gridPageCount = Math.max(1, Math.ceil(items.length / gridPageSize));
+  const gridItems = items.slice(gridPage * gridPageSize, (gridPage + 1) * gridPageSize);
+  useEffect(() => {
+    setGridPage(0);
+  }, []);
 
   const deleteMediaMutation = useMutation({
     mutationFn: (id: string) => api.deleteMedia(id),
@@ -157,6 +170,15 @@ export function MediaPage() {
           <Badge variant="secondary" className="capitalize">
             {row.original.mediaType}
           </Badge>
+        ),
+      },
+      {
+        accessorKey: "duration",
+        header: t("colDuration"),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground tabular-nums">
+            {formatDuration(row.original.duration) || "—"}
+          </span>
         ),
       },
       {
@@ -309,6 +331,30 @@ export function MediaPage() {
             </ToggleGroup>
           </div>
 
+          {statsQuery.data ? (
+            <div className="mb-4 flex items-center gap-3 text-muted-foreground text-xs">
+              <HardDrive className="size-3.5 shrink-0" />
+              <span className="whitespace-nowrap tabular-nums">
+                {t("storageUsed", {
+                  used: formatBytes(statsQuery.data.usedBytes),
+                  quota: statsQuery.data.quotaBytes
+                    ? formatBytes(statsQuery.data.quotaBytes)
+                    : t("storageUnlimited"),
+                })}
+              </span>
+              {statsQuery.data.quotaBytes ? (
+                <div className="h-1.5 max-w-64 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{
+                      width: `${Math.min(100, (statsQuery.data.usedBytes / statsQuery.data.quotaBytes) * 100)}%`,
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {items.length === 0 && !mediaQuery.isLoading ? (
             <Empty className="border-border border-dashed">
               <EmptyHeader>
@@ -326,17 +372,42 @@ export function MediaPage() {
               </EmptyContent>
             </Empty>
           ) : view === "grid" ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {items.map((media) => (
-                <MediaCard
-                  key={media.id}
-                  media={media}
-                  onPreview={setPreview}
-                  onRename={setRenameMedia}
-                  onMove={setMoveMedia}
-                  onDelete={setDeleteMedia}
-                />
-              ))}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                {gridItems.map((media) => (
+                  <MediaCard
+                    key={media.id}
+                    media={media}
+                    onPreview={setPreview}
+                    onRename={setRenameMedia}
+                    onMove={setMoveMedia}
+                    onDelete={setDeleteMedia}
+                  />
+                ))}
+              </div>
+              {gridPageCount > 1 ? (
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={gridPage === 0}
+                    onClick={() => setGridPage((p) => p - 1)}
+                  >
+                    {t("prevPage")}
+                  </Button>
+                  <span className="text-muted-foreground text-sm tabular-nums">
+                    {gridPage + 1} / {gridPageCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={gridPage >= gridPageCount - 1}
+                    onClick={() => setGridPage((p) => p + 1)}
+                  >
+                    {t("nextPage")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <DataTable
@@ -525,17 +596,22 @@ function MediaCard({
             loading="lazy"
           />
         ) : media.mediaType === "video" ? (
-          <video
-            src={mediaSrc(media)}
+          <img
+            src={`/api/media/${media.id}/thumbnail`}
+            alt={media.name}
             className="size-full object-cover"
-            preload="metadata"
-            muted
+            loading="lazy"
           />
         ) : (
           <span className="flex size-full items-center justify-center text-muted-foreground">
             <AudioLines className="size-8" />
           </span>
         )}
+        {media.duration ? (
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1 font-medium text-[10px] text-white tabular-nums">
+            {formatDuration(media.duration)}
+          </span>
+        ) : null}
       </button>
       <div className="pointer-events-none absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
         <MediaActions media={media} onRename={onRename} onMove={onMove} onDelete={onDelete} />
@@ -593,6 +669,15 @@ function UploadDialog({
                 .uploadMedia(item.file, {
                   name: item.name,
                   folderId: folderId ?? undefined,
+                  onProgress: (fraction) => {
+                    setItems((current) =>
+                      current.map((entry) =>
+                        entry.id === item.id
+                          ? { ...entry, progress: Math.round(fraction * 100) }
+                          : entry,
+                      ),
+                    );
+                  },
                 })
                 .then(() => invalidateMedia())
                 .catch((error: Error) => {

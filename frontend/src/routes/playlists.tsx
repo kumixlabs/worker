@@ -36,10 +36,35 @@ import { AppShell } from "@/components/AppShell";
 import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
 import { useDateTimeFormatter } from "@/lib/date";
+import { formatDuration } from "@/lib/format";
 import type { PlaylistRecord } from "../../../src/types/playlist";
 
 export function invalidatePlaylists() {
   void queryClient.invalidateQueries({ queryKey: ["playlists"] });
+}
+
+function PlaylistCollage({ thumbnails }: { thumbnails: string[] }) {
+  if (!thumbnails.length) {
+    return (
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+        <ListVideo className="size-4 text-muted-foreground" />
+      </span>
+    );
+  }
+  return (
+    <span className="relative flex size-9 shrink-0">
+      {thumbnails.slice(0, 3).map((mediaId, index) => (
+        <img
+          key={mediaId}
+          src={`/api/media/${mediaId}/thumbnail`}
+          alt=""
+          className="absolute top-1/2 size-7 -translate-y-1/2 rounded-md border bg-muted object-cover shadow-sm"
+          style={{ left: index * 5, zIndex: 3 - index }}
+          loading="lazy"
+        />
+      ))}
+    </span>
+  );
 }
 
 export function PlaylistDialog({
@@ -143,9 +168,10 @@ export function PlaylistsPage() {
         cell: ({ row }) => (
           <Link
             to={`/playlists/${row.original.id}`}
-            className="flex min-w-0 items-center gap-2 font-medium hover:underline"
+            className="flex min-w-0 items-center gap-3 font-medium hover:underline"
           >
-            {row.original.name}
+            <PlaylistCollage thumbnails={row.original.thumbnails} />
+            <span className="truncate">{row.original.name}</span>
           </Link>
         ),
       },
@@ -153,7 +179,21 @@ export function PlaylistsPage() {
         accessorKey: "itemCount",
         header: t("items"),
         cell: ({ row }) => (
-          <span className="text-muted-foreground tabular-nums">{row.original.itemCount}</span>
+          <span className="flex flex-wrap items-center gap-1">
+            <Badge variant="secondary">{t("videoCount", { count: row.original.videoCount })}</Badge>
+            {row.original.audioCount > 0 ? (
+              <Badge variant="outline">{t("audioCount", { count: row.original.audioCount })}</Badge>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "totalDuration",
+        header: t("duration"),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground tabular-nums">
+            {formatDuration(row.original.totalDuration) || "—"}
+          </span>
         ),
       },
       {

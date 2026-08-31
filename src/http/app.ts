@@ -111,6 +111,8 @@ export function createApiApp() {
   // their own streaming size cap.
   app.use("/api/*", async (c, next) => {
     if (c.req.path === "/api/media" && c.req.method === "POST") return next();
+    if (c.req.path.startsWith("/api/media/uploads/") && ["PUT", "POST"].includes(c.req.method))
+      return next();
     return bodyLimit({
       maxSize: 1024 * 1024,
       onError: () => fail("payload_too_large", "Request body too large", 413),

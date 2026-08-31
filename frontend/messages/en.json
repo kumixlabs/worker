@@ -267,7 +267,12 @@
     "colName": "Name",
     "colType": "Type",
     "colSize": "Size",
-    "colCreated": "Created"
+    "colCreated": "Created",
+    "colDuration": "Duration",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "storageUsed": "Storage: {used} used{quota, select, null {} other { of {quota}}}",
+    "storageUnlimited": "unlimited"
   },
   "Playlists": {
     "title": "Playlists",
@@ -297,6 +302,15 @@
     "removeItem": "Remove from playlist",
     "deleteTitle": "Delete playlist?",
     "deleteDescription": "\"{name}\" and its item order will be removed permanently.",
-    "deleted": "Playlist deleted"
+    "deleted": "Playlist deleted",
+    "duration": "Duration",
+    "videoCount": "{count, plural, =0 {0 videos} =1 {1 video} other {# videos}}",
+    "audioCount": "{count, plural, =0 {0 audios} =1 {1 audio} other {# audios}}",
+    "videosSection": "Videos",
+    "audiosSection": "Background audio",
+    "addVideos": "Add videos",
+    "addAudios": "Add audio",
+    "addAudiosDescription": "Pick audio tracks that play over the video sequence.",
+    "emptyAudios": "No background audio. Add audio to mix over the playlist."
   }
 }

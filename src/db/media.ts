@@ -43,14 +43,39 @@ function rowToRecord(row: Record<string, unknown>): MediaRecord {
     fileName: row.file_name as string,
     sizeBytes: row.size_bytes as number,
     createdAt: row.created_at as string,
+    duration: (row.duration as number | null) ?? null,
+    width: (row.width as number | null) ?? null,
+    height: (row.height as number | null) ?? null,
+    fps: (row.fps as number | null) ?? null,
+    bitrate: (row.bitrate as number | null) ?? null,
+    hasAudio: Boolean(row.has_audio),
+    hasThumb: Boolean(row.has_thumb),
   };
 }
 
-export function insertMedia(record: Omit<MediaRecord, "createdAt">): MediaRecord {
-  const withDates = { ...record, createdAt: nowIso() };
+export type InsertMedia = Omit<
+  MediaRecord,
+  "createdAt" | "duration" | "width" | "height" | "fps" | "bitrate" | "hasAudio" | "hasThumb"
+> &
+  Partial<
+    Pick<MediaRecord, "duration" | "width" | "height" | "fps" | "bitrate" | "hasAudio" | "hasThumb">
+  >;
+
+export function insertMedia(record: InsertMedia): MediaRecord {
+  const withDates: MediaRecord = {
+    duration: null,
+    width: null,
+    height: null,
+    fps: null,
+    bitrate: null,
+    hasAudio: false,
+    hasThumb: false,
+    ...record,
+    createdAt: nowIso(),
+  };
   getDb()
     .query(
-      "INSERT INTO media (id, user_id, folder_id, name, media_type, mime_type, file_name, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO media (id, user_id, folder_id, name, media_type, mime_type, file_name, size_bytes, created_at, duration, width, height, fps, bitrate, has_audio, has_thumb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       withDates.id,
@@ -62,8 +87,63 @@ export function insertMedia(record: Omit<MediaRecord, "createdAt">): MediaRecord
       withDates.fileName,
       withDates.sizeBytes,
       withDates.createdAt,
+      withDates.duration,
+      withDates.width,
+      withDates.height,
+      withDates.fps,
+      withDates.bitrate,
+      withDates.hasAudio ? 1 : 0,
+      withDates.hasThumb ? 1 : 0,
     );
   return withDates;
+}
+
+export function updateMediaMetadata(
+  id: string,
+  meta: {
+    duration?: number | null;
+    width?: number | null;
+    height?: number | null;
+    fps?: number | null;
+    bitrate?: number | null;
+    hasAudio?: boolean;
+    hasThumb?: boolean;
+  },
+): void {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (meta.duration !== undefined) {
+    sets.push("duration = ?");
+    params.push(meta.duration);
+  }
+  if (meta.width !== undefined) {
+    sets.push("width = ?");
+    params.push(meta.width);
+  }
+  if (meta.height !== undefined) {
+    sets.push("height = ?");
+    params.push(meta.height);
+  }
+  if (meta.fps !== undefined) {
+    sets.push("fps = ?");
+    params.push(meta.fps);
+  }
+  if (meta.bitrate !== undefined) {
+    sets.push("bitrate = ?");
+    params.push(meta.bitrate);
+  }
+  if (meta.hasAudio !== undefined) {
+    sets.push("has_audio = ?");
+    params.push(meta.hasAudio ? 1 : 0);
+  }
+  if (meta.hasThumb !== undefined) {
+    sets.push("has_thumb = ?");
+    params.push(meta.hasThumb ? 1 : 0);
+  }
+  if (!sets.length) return;
+  getDb()
+    .query(`UPDATE media SET ${sets.join(", ")} WHERE id = ?`)
+    .run(...params, id);
 }
 
 /**
@@ -118,7 +198,18 @@ export function deleteMediaById(id: string, userId: string): MediaRecord | null 
   } catch {
     // Row removal already succeeded; orphaned file is cleaned by future sweeps.
   }
+  try {
+    rmSync(mediaThumbPath(id), { force: true });
+  } catch {
+    // thumbnail cleanup is best effort
+  }
   return existing;
+}
+
+export function mediaThumbPath(id: string): string {
+  const dir = path.join(getMediaDir(), "thumbs");
+  mkdirSync(dir, { recursive: true });
+  return path.join(dir, `${id}.jpg`);
 }
 
 export function getMediaStorageBytes(userId: string): number {
@@ -192,6 +283,8 @@ export function openTempMediaFile(id: string) {
   return { tempPath, writeStream: createWriteStream(tempPath) };
 }
 
-export function mediaReadStream(fileName: string) {
-  return createReadStream(mediaPath(fileName));
+export function mediaReadStream(fileName: string, range?: { start: number; end: number }) {
+  return range
+    ? createReadStream(mediaPath(fileName), range)
+    : createReadStream(mediaPath(fileName));
 }

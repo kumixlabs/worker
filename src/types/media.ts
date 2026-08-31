@@ -14,6 +14,13 @@ export interface MediaRecord {
   fileName: string;
   sizeBytes: number;
   createdAt: string;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  bitrate: number | null;
+  hasAudio: boolean;
+  hasThumb: boolean;
 }
 
 export interface MediaFolderRecord {
