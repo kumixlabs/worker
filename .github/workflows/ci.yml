@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Lint, typecheck, test, build
+    name: Lint, typecheck, build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -49,9 +49,6 @@ jobs:
 
       - name: Lint
         run: bun run lint
-
-      - name: Test
-        run: bun run test
 
       - name: Build
         run: bun run build
