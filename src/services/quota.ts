@@ -1,8 +1,8 @@
 /**
  * Per-user quota engine: storage bytes and stream concurrency.
- * Usage counters return zeros until media/stream features land on the new foundation.
- * ponytail: plug real SUM/COUNT queries back in when tables return.
  */
+
+import { getMediaStorageBytes } from "../db/media";
 
 export interface UserUsage {
   storageBytes: number;
@@ -11,9 +11,10 @@ export interface UserUsage {
 
 /**
  * Computes current usage for a user.
+ * ponytail: streamCount stays 0 until streams land again.
  */
-export function getUserUsage(_userId: string): UserUsage {
-  return { storageBytes: 0, streamCount: 0 };
+export function getUserUsage(userId: string): UserUsage {
+  return { storageBytes: getMediaStorageBytes(userId), streamCount: 0 };
 }
 
 /**
@@ -28,9 +29,10 @@ export function assertStorageQuota(
 ): void {
   if (!userId || maxStorageBytes === null || maxStorageBytes === undefined) return;
   if (incomingBytes <= 0) return;
-  if (incomingBytes > maxStorageBytes) {
+  const used = getMediaStorageBytes(userId);
+  if (used + incomingBytes > maxStorageBytes) {
     const error = new Error(
-      `Storage quota exceeded: requires ${incomingBytes} bytes, limit is ${maxStorageBytes} bytes`,
+      `Storage quota exceeded: requires ${used + incomingBytes} bytes total, limit is ${maxStorageBytes} bytes`,
     );
     (error as { code?: string }).code = "QUOTA_STORAGE_EXCEEDED";
     throw error;
@@ -41,6 +43,7 @@ export function assertStorageQuota(
  * Checks whether user can create/start another stream.
  * Throws an Error with code QUOTA_STREAMS_EXCEEDED if quota is reached.
  * Admin (maxStreams === null/undefined) is unlimited.
+ * ponytail: no-op until streams land again.
  */
 export function assertStreamQuota(
   userId: string | null | undefined,

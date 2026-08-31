@@ -91,13 +91,13 @@ export function resetWorkerData(includeConfig: boolean): void {
   assertSafeDataDir(dir);
 
   const dbDir = path.join(dir, "db");
-  const cacheDir = getCacheDir();
   const tombstonesDir = path.join(dir, "tombstones");
+  const mediaDir = path.join(dir, "media");
   const configFile = getConfigPath();
 
   if (existsSync(dbDir)) rmSync(dbDir, { recursive: true, force: true });
-  if (existsSync(cacheDir)) rmSync(cacheDir, { recursive: true, force: true });
   if (existsSync(tombstonesDir)) rmSync(tombstonesDir, { recursive: true, force: true });
+  if (existsSync(mediaDir)) rmSync(mediaDir, { recursive: true, force: true });
 
   if (includeConfig && existsSync(configFile)) {
     rmSync(configFile, { force: true });
@@ -107,7 +107,7 @@ export function resetWorkerData(includeConfig: boolean): void {
   ensureDataDir();
 }
 
-function getDataDir(): string {
+export function getDataDir(): string {
   return process.env.KUMIX_WORKER_DATA_DIR || DEFAULT_DIR;
 }
 
@@ -129,10 +129,6 @@ export function getConfigPath(): string {
 
 export function getDbPath(): string {
   return path.join(ensureDataDir(), "db", "db.sqlite");
-}
-
-export function getCacheDir(): string {
-  return path.join(ensureDataDir(), "cache");
 }
 
 let secretCache: {

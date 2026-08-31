@@ -2,8 +2,8 @@
  * Hono API application, OpenAPI documentation, and dashboard route wiring.
  */
 
-import { Scalar } from "@scalar/hono-api-reference";
 import { getConnInfo } from "@hono/node-server/conninfo";
+import { Scalar } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { openAPIRouteHandler } from "hono-openapi";
@@ -15,6 +15,7 @@ import { fail, ok, signedRequest } from "./middleware";
 import { registerAdminUserRoutes } from "./routes/admin-users";
 import { doc } from "./routes/common";
 import { registerEventRoutes } from "./routes/events";
+import { registerMediaRoutes } from "./routes/media";
 import { registerSystemRoutes } from "./routes/system";
 import { findPublicDir, serveStatic } from "./static";
 
@@ -105,14 +106,15 @@ export function createApiApp() {
     },
   );
 
-  // Body limit applies to all /api/*
-  app.use(
-    "/api/*",
-    bodyLimit({
+  // Body limit applies to all /api/* except raw media uploads, which enforce
+  // their own streaming size cap.
+  app.use("/api/*", async (c, next) => {
+    if (c.req.path === "/api/media" && c.req.method === "POST") return next();
+    return bodyLimit({
       maxSize: 1024 * 1024,
       onError: () => fail("payload_too_large", "Request body too large", 413),
-    }),
-  );
+    })(c, next);
+  });
 
   // Auth: one-time admin bootstrap, then the Better Auth handler owns /api/auth/*.
   let setupClaimed = false;
@@ -224,6 +226,7 @@ export function createApiApp() {
   registerSystemRoutes(app);
   registerAdminUserRoutes(app);
   registerEventRoutes(app);
+  registerMediaRoutes(app);
 
   app.all("/api/*", (c) => fail("NOT_FOUND", "Unknown API route", 404));
 

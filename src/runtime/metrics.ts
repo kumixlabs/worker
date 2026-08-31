@@ -7,7 +7,7 @@ import { readdir, stat } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, totalmem } from "node:os";
 import path from "node:path";
 
-import { getCacheDir } from "./config";
+import { getMediaDir } from "../db/media";
 
 const processStartedAt = new Date().toISOString();
 
@@ -144,8 +144,7 @@ function cpuUsagePercent(usage: NodeJS.ResourceUsage, coreCount: number): number
 export function runtimeMetrics() {
   const totalMemoryBytes = totalmem();
   const freeMemoryBytes = freemem();
-  const cacheDir = getCacheDir();
-  const storage = storageMetrics(cacheDir);
+  const storage = storageMetrics(getMediaDir());
   const usage = process.resourceUsage();
   const coreCount = cpus().length;
   return {
