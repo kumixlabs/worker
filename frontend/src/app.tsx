@@ -10,6 +10,8 @@ import { UsersPage } from "@/routes/admin/users";
 import { Dashboard } from "@/routes/index";
 import { LogPage } from "@/routes/log";
 import { MediaPage } from "@/routes/media";
+import { PlaylistDetailPage } from "@/routes/playlist-detail";
+import { PlaylistsPage } from "@/routes/playlists";
 import { SettingsPage } from "@/routes/settings";
 
 function RequireAdmin({ children }: { children: ReactNode }) {
@@ -35,6 +37,8 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
   },
   { path: "/media", element: <MediaPage />, errorElement: <RouteError /> },
+  { path: "/playlists", element: <PlaylistsPage />, errorElement: <RouteError /> },
+  { path: "/playlists/:id", element: <PlaylistDetailPage />, errorElement: <RouteError /> },
   { path: "/log", element: <LogPage />, errorElement: <RouteError /> },
   { path: "/users", element: <Navigate to="/admin/users" replace /> },
   {

@@ -16,6 +16,7 @@ import { registerAdminUserRoutes } from "./routes/admin-users";
 import { doc } from "./routes/common";
 import { registerEventRoutes } from "./routes/events";
 import { registerMediaRoutes } from "./routes/media";
+import { registerPlaylistRoutes } from "./routes/playlists";
 import { registerSystemRoutes } from "./routes/system";
 import { findPublicDir, serveStatic } from "./static";
 
@@ -227,6 +228,7 @@ export function createApiApp() {
   registerAdminUserRoutes(app);
   registerEventRoutes(app);
   registerMediaRoutes(app);
+  registerPlaylistRoutes(app);
 
   app.all("/api/*", (c) => fail("NOT_FOUND", "Unknown API route", 404));
 

@@ -2,6 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 
 import type { EventRecord } from "../../../src/types/event";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
+import type { PlaylistItemRecord, PlaylistRecord } from "../../../src/types/playlist";
 import type { WorkerMetrics, WorkerSettings, WorkerStats } from "../../../src/types/worker";
 
 export const queryClient = new QueryClient({
@@ -136,6 +137,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  playlists: ({ signal }: { signal?: AbortSignal } = {}) =>
+    request<PlaylistRecord[]>("/api/playlists", { signal }),
+  playlist: (id: string, { signal }: { signal?: AbortSignal } = {}) =>
+    request<PlaylistRecord & { items: PlaylistItemRecord[] }>(`/api/playlists/${id}`, {
+      signal,
+    }),
+  createPlaylist: (body: { name: string; description?: string | null; shuffle?: boolean }) =>
+    request<PlaylistRecord>("/api/playlists", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchPlaylist: (
+    id: string,
+    body: { name?: string; description?: string | null; shuffle?: boolean },
+  ) =>
+    request<PlaylistRecord>(`/api/playlists/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  replacePlaylistItems: (id: string, mediaIds: string[]) =>
+    request<PlaylistItemRecord[]>(`/api/playlists/${id}/items`, {
+      method: "PUT",
+      body: JSON.stringify({ mediaIds }),
+    }),
+  deletePlaylist: (id: string) =>
+    request<{ deleted: boolean }>(`/api/playlists/${id}`, { method: "DELETE" }),
   uploadMedia: async (file: File, options: { name?: string; folderId?: string } = {}) => {
     const params = new URLSearchParams();
     if (options.name) params.set("name", options.name);

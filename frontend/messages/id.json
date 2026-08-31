@@ -18,7 +18,8 @@
       "targets": "Target",
       "admin": "Admin",
       "users": "Pengguna",
-      "media": "Media"
+      "media": "Media",
+      "playlists": "Playlist"
     },
     "impersonating": "Meniru pengguna",
     "stopImpersonatingFailed": "Gagal berhenti meniru"
@@ -267,5 +268,35 @@
     "colType": "Tipe",
     "colSize": "Ukuran",
     "colCreated": "Dibuat"
+  },
+  "Playlists": {
+    "title": "Playlist",
+    "description": "Deskripsi",
+    "create": "Playlist baru",
+    "createTitle": "Buat playlist",
+    "editTitle": "Edit playlist",
+    "edit": "Edit",
+    "name": "Nama",
+    "namePlaceholder": "Nama playlist",
+    "descriptionPlaceholder": "Untuk apa playlist ini?",
+    "items": "Item",
+    "itemCount": "{count, plural} item",
+    "shuffle": "Acak",
+    "updated": "Diperbarui",
+    "back": "Playlist",
+    "addMedia": "Tambah media",
+    "addMediaDescription": "Pilih media dari pustaka Anda untuk ditambahkan ke playlist.",
+    "addSelected": "Tambah {count} item",
+    "noMedia": "Belum ada media. Unggah berkas di halaman Media terlebih dahulu.",
+    "emptyTitle": "Belum ada playlist",
+    "emptyDescription": "Buat playlist untuk menyusun urutan media streaming.",
+    "emptyItemsTitle": "Playlist kosong",
+    "emptyItemsDescription": "Tambahkan media untuk menyusun urutan pemutaran.",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "removeItem": "Hapus dari playlist",
+    "deleteTitle": "Hapus playlist?",
+    "deleteDescription": "\"{name}\" dan urutan itemnya akan dihapus permanen.",
+    "deleted": "Playlist dihapus"
   }
 }

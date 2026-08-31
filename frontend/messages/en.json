@@ -18,7 +18,8 @@
       "targets": "Targets",
       "admin": "Admin",
       "users": "Users",
-      "media": "Media"
+      "media": "Media",
+      "playlists": "Playlists"
     },
     "impersonating": "Impersonating",
     "stopImpersonatingFailed": "Could not stop impersonating"
@@ -267,5 +268,35 @@
     "colType": "Type",
     "colSize": "Size",
     "colCreated": "Created"
+  },
+  "Playlists": {
+    "title": "Playlists",
+    "description": "Description",
+    "create": "New playlist",
+    "createTitle": "Create playlist",
+    "editTitle": "Edit playlist",
+    "edit": "Edit",
+    "name": "Name",
+    "namePlaceholder": "Playlist name",
+    "descriptionPlaceholder": "What is this playlist for?",
+    "items": "Items",
+    "itemCount": "{count, plural, =1 {1 item} other {# items}}",
+    "shuffle": "Shuffle",
+    "updated": "Updated",
+    "back": "Playlists",
+    "addMedia": "Add media",
+    "addMediaDescription": "Pick media from your library to append to the playlist.",
+    "addSelected": "Add {count, plural, =1 {1 item} other {# items}}",
+    "noMedia": "No media available. Upload files in the Media page first.",
+    "emptyTitle": "No playlists yet",
+    "emptyDescription": "Create a playlist to line up media for streaming.",
+    "emptyItemsTitle": "Empty playlist",
+    "emptyItemsDescription": "Add media to build the playback order.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removeItem": "Remove from playlist",
+    "deleteTitle": "Delete playlist?",
+    "deleteDescription": "\"{name}\" and its item order will be removed permanently.",
+    "deleted": "Playlist deleted"
   }
 }

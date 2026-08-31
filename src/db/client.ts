@@ -187,6 +187,23 @@ function ensureSchema(database: SqliteDatabase): void {
       size_bytes INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS playlists (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      shuffle INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS playlist_items (
+      id TEXT PRIMARY KEY,
+      playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS media_folders (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -199,5 +216,8 @@ function ensureSchema(database: SqliteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_media_user ON media(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_media_folders_user ON media_folders(user_id);
     CREATE INDEX IF NOT EXISTS idx_media_folder ON media(folder_id);
+    CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist ON playlist_items(playlist_id, position);
+    CREATE INDEX IF NOT EXISTS idx_playlist_items_media ON playlist_items(media_id);
   `);
 }
