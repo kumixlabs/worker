@@ -65,12 +65,13 @@ function buildAuth() {
     advanced: {
       ipAddress: {
         ipAddressHeaders: ["x-forwarded-for", "x-real-ip"],
-        // Loopback only by default (Vite dev proxy); broadened behind an
-        // explicit reverse proxy opt-in.
+        // Empty by default: app.ts stamps the socket peer address into
+        // x-real-ip itself (no client-supplied header is trusted). Broadened
+        // only behind an explicit reverse proxy opt-in.
         trustedProxies:
           process.env.KUMIX_WORKER_TRUST_PROXY === "1"
             ? ["127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-            : ["127.0.0.1", "::1"],
+            : [],
       },
     },
     rateLimit: {

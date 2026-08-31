@@ -3,6 +3,7 @@
  */
 
 import { Scalar } from "@scalar/hono-api-reference";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { openAPIRouteHandler } from "hono-openapi";
@@ -194,7 +195,22 @@ export function createApiApp() {
     }
     return getAuth().handler(c.req.raw);
   });
-  app.all("/api/auth/*", (c) => getAuth().handler(c.req.raw));
+  app.all("/api/auth/*", (c) => {
+    // Node runtime requests carry no peer address, which breaks Better Auth
+    // rate-limit bucketing. Direct mode: overwrite x-real-ip with the socket
+    // remote address and drop client-supplied forwarding headers. Proxy mode
+    // (TRUST_PROXY=1): keep the proxy's x-forwarded-for, drop spoofable ones.
+    const headers = new Headers(c.req.raw.headers);
+    if (process.env.KUMIX_WORKER_TRUST_PROXY === "1") {
+      headers.delete("x-real-ip");
+    } else {
+      const ip = getConnInfo(c).remote.address;
+      headers.delete("x-forwarded-for");
+      if (ip) headers.set("x-real-ip", ip);
+      else headers.delete("x-real-ip");
+    }
+    return getAuth().handler(new Request(c.req.raw, { headers }));
+  });
 
   // Dashboard /api/* routes: require a Better Auth session unless explicitly public.
   app.use("/api/*", async (c, next) => {
