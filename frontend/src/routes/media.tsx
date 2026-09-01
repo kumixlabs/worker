@@ -93,6 +93,7 @@ export function MediaPage() {
   const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [gdriveOpen, setGdriveOpen] = useState(false);
+  const [urlOpen, setUrlOpen] = useState(false);
   const [renameFolder, setRenameFolder] = useState<MediaFolderRecord | null>(null);
   const [renameMedia, setRenameMedia] = useState<MediaRecord | null>(null);
   const [moveMedia, setMoveMedia] = useState<MediaRecord | null>(null);
@@ -229,6 +230,10 @@ export function MediaPage() {
               <DropdownMenuItem onClick={() => setGdriveOpen(true)}>
                 <FolderOpen className="size-4" />
                 {t("importGdrive")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setUrlOpen(true)}>
+                <Link2 className="size-4" />
+                {t("importUrl")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -421,11 +426,19 @@ export function MediaPage() {
       </div>
 
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} folderId={folderId} />
-      <GDriveDialog
+      <ImportDialog
         open={gdriveOpen}
         onOpenChange={setGdriveOpen}
         folderId={folderId}
         folders={folders}
+        kind="gdrive"
+      />
+      <ImportDialog
+        open={urlOpen}
+        onOpenChange={setUrlOpen}
+        folderId={folderId}
+        folders={folders}
+        kind="url"
       />
       <FolderDialog folder={renameFolder} onClose={() => setRenameFolder(null)} />
       <RenameMediaDialog media={renameMedia} onClose={() => setRenameMedia(null)} />
@@ -699,16 +712,18 @@ function UploadDialog({
   );
 }
 
-function GDriveDialog({
+function ImportDialog({
   open,
   onOpenChange,
   folderId,
   folders,
+  kind,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   folderId: string | null;
   folders: MediaFolderRecord[];
+  kind: "gdrive" | "url";
 }) {
   const t = useTranslations("Media");
   const common = useTranslations("Common");
@@ -718,11 +733,17 @@ function GDriveDialog({
   const [folder, setFolder] = useState(targetFolder);
   const mutation = useMutation({
     mutationFn: () =>
-      api.importGdrive({
-        url,
-        name: name.trim() || undefined,
-        folderId: folder || undefined,
-      }),
+      kind === "gdrive"
+        ? api.importGdrive({
+            url,
+            name: name.trim() || undefined,
+            folderId: folder || undefined,
+          })
+        : api.importUrl({
+            url,
+            name: name.trim() || undefined,
+            folderId: folder || undefined,
+          }),
     onSuccess: () => {
       invalidateMedia();
       toastSuccess({ message: t("imported") });
@@ -736,8 +757,10 @@ function GDriveDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("importGdrive")}</DialogTitle>
-          <DialogDescription>{t("gdriveDescription")}</DialogDescription>
+          <DialogTitle>{kind === "gdrive" ? t("importGdrive") : t("importUrl")}</DialogTitle>
+          <DialogDescription>
+            {kind === "gdrive" ? t("gdriveDescription") : t("importUrlDescription")}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -746,7 +769,11 @@ function GDriveDialog({
               id="gdrive-url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://drive.google.com/file/d/..."
+              placeholder={
+                kind === "gdrive"
+                  ? "https://drive.google.com/file/d/..."
+                  : "https://example.com/video.mp4"
+              }
             />
           </div>
           <div className="space-y-2">

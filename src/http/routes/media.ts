@@ -50,6 +50,7 @@ import { toWebStream } from "../../lib/utils";
 import { generateThumbnail, probeMediaFile } from "../../runtime/ffmpeg";
 import { extractGDriveFileId, resolveGDriveDownload } from "../../services/gdrive";
 import { assertStorageQuota } from "../../services/quota";
+import { safeFetch } from "../../services/url-import";
 import type { MediaRecord } from "../../types/media";
 import { fail, ok } from "../middleware";
 import { doc } from "./common";
@@ -57,6 +58,7 @@ import { doc } from "./common";
 const headBytes = 64;
 const maxUploadBytesDefault = 2 * 1024 * 1024 * 1024;
 const gdriveTimeoutMs = Number(process.env.KUMIX_WORKER_IMPORT_TIMEOUT_MS) || 10 * 60 * 1000;
+const urlImportTimeoutMs = gdriveTimeoutMs;
 
 type SessionUser = {
   id: string;
@@ -451,6 +453,62 @@ export function registerMediaRoutes(app: Hono) {
     },
   );
 
+  app.post(
+    "/api/media/import-url",
+    doc(
+      "Media",
+      "Import from URL",
+      "Downloads a direct http(s) file URL into the library. Body: { url, name?, folderId? }.",
+    ),
+    async (c) => {
+      const parsed = urlImportSchema.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return fail("BAD_REQUEST", "A valid http(s) URL is required", 400);
+      const user = sessionUser(c);
+      const folderId = parsed.data.folderId ?? null;
+      if (folderId && !getMediaFolderById(folderId, user.id))
+        return fail("NOT_FOUND", "Folder not found", 404);
+
+      try {
+        const response = await safeFetch(parsed.data.url, {
+          headers: { "User-Agent": "KumixWorker/1.0" },
+          signal: AbortSignal.timeout(urlImportTimeoutMs),
+        });
+        if (!response.ok)
+          return fail("import_failed", `Remote server returned ${response.status}`, 502);
+        const body = response.body as AsyncIterable<Uint8Array> | null;
+        if (!body) return fail("BAD_REQUEST", "Remote URL returned an empty body", 400);
+        const urlName = decodeURIComponent(
+          new URL(parsed.data.url).pathname.split("/").filter(Boolean).pop() ?? "",
+        );
+        const name =
+          parsed.data.name?.trim().slice(0, 200) || urlName.slice(0, 200) || "Imported from URL";
+        const record = await persistStream(
+          body,
+          Number(response.headers.get("content-length") ?? "") || 0,
+          user,
+          name,
+          folderId,
+        );
+        addEvent(
+          user.id,
+          "media",
+          `Imported media "${name}" from URL (${record.mediaType}, ${record.sizeBytes} bytes)`,
+        );
+        return c.json(ok(record), 201);
+      } catch (error) {
+        if (error instanceof Error && error.name === "TimeoutError")
+          return fail("import_timeout", "URL import timed out", 504);
+        if (error instanceof Error && error.message.startsWith("URL blocked"))
+          return fail("SSRF_BLOCKED", error.message, 400);
+        if (error instanceof Error && error.message.startsWith("Unsupported media type"))
+          return fail("UNSUPPORTED_MEDIA_TYPE", error.message, 415);
+        if (error instanceof Error && error.message.startsWith("Storage quota"))
+          return fail("QUOTA_EXCEEDED", error.message, 403);
+        throw error;
+      }
+    },
+  );
+
   app.delete(
     "/api/media/:id",
     doc("Media", "Delete media", "Deletes the record and its stored file."),
@@ -675,6 +733,15 @@ const mediaPatchSchema = z.object({
 
 const gdriveImportSchema = z.object({
   url: z.string().url(),
+  name: z.string().trim().max(200).optional(),
+  folderId: z.string().optional(),
+});
+
+const urlImportSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .regex(/^https?:\/\//i, "Must be an http(s) URL"),
   name: z.string().trim().max(200).optional(),
   folderId: z.string().optional(),
 });

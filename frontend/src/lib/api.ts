@@ -136,6 +136,13 @@ export const api = {
   importGdrive: (body: { url: string; name?: string; folderId?: string }) =>
     request<MediaRecord>("/api/media/import-gdrive", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  importUrl: (body: { url: string; name?: string; folderId?: string }) =>
+    request<MediaRecord>("/api/media/import-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
   playlists: ({ signal }: { signal?: AbortSignal } = {}) =>

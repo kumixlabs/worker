@@ -273,7 +273,9 @@
     "prevPage": "Sebelumnya",
     "nextPage": "Berikutnya",
     "storageUsed": "Penyimpanan: {used} terpakai{quota, select, null {} other { dari {quota}}}",
-    "storageUnlimited": "tanpa batas"
+    "storageUnlimited": "tanpa batas",
+    "importUrl": "Impor dari URL",
+    "importUrlDescription": "Unduh tautan file http(s) langsung (mp4, mp3, jpg, png) ke pustaka."
   },
   "Playlists": {
     "title": "Playlist",

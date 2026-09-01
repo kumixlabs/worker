@@ -273,7 +273,9 @@
     "prevPage": "Previous",
     "nextPage": "Next",
     "storageUsed": "Storage: {used} used{quota, select, null {} other { of {quota}}}",
-    "storageUnlimited": "unlimited"
+    "storageUnlimited": "unlimited",
+    "importUrl": "Import from URL",
+    "importUrlDescription": "Download a direct http(s) file link (mp4, mp3, jpg, png) into the library."
   },
   "Playlists": {
     "title": "Playlists",
