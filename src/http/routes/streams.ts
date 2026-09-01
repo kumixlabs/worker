@@ -18,6 +18,7 @@ import {
   updateStream,
 } from "../../db/streams";
 import { encryptSecret } from "../../lib/crypto";
+import { scheduleFromInput } from "../../runtime/scheduler";
 import { assertStreamQuota } from "../../services/quota";
 import { StreamStartError, startStream, stopStream } from "../../services/stream-runner";
 import { fail, ok } from "../middleware";
@@ -31,6 +32,14 @@ function sessionQuota(c: { get: (key: string) => unknown }): number | null {
   return (c.get("user") as { maxStreams?: number | null }).maxStreams ?? null;
 }
 
+const scheduleSchema = z.object({
+  recurrence: z.enum(["none", "daily", "weekly", "monthly"]),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM"),
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  day: z.number().int().min(1).max(31).optional(),
+  durationMinutes: z.number().int().min(1).max(1440).optional(),
+});
+
 const streamCreateSchema = z.object({
   name: z.string().trim().min(1).max(200),
   playlistId: z.string().min(1),
@@ -41,6 +50,7 @@ const streamCreateSchema = z.object({
     .regex(/^rtmps?:\/\//i, "Must be an rtmp:// or rtmps:// URL"),
   shuffle: z.boolean().optional(),
   loop: z.boolean().optional(),
+  schedule: scheduleSchema.optional(),
 });
 
 const streamPatchSchema = z.object({
@@ -54,6 +64,7 @@ const streamPatchSchema = z.object({
     .optional(),
   shuffle: z.boolean().optional(),
   loop: z.boolean().optional(),
+  schedule: scheduleSchema.nullable().optional(),
 });
 
 function startErrorResponse(error: unknown) {
@@ -93,6 +104,7 @@ export function registerStreamRoutes(app: Hono): void {
         targetUrl: encryptSecret(parsed.data.targetUrl),
         shuffle: parsed.data.shuffle ?? false,
         loop: parsed.data.loop ?? true,
+        ...(parsed.data.schedule ? scheduleFromInput(parsed.data.schedule) : {}),
       });
       addEvent(userId, "stream", `Created stream "${record.name}"`);
       return c.json(ok({ ...record, targetUrl: "" }), 201);
@@ -118,6 +130,16 @@ export function registerStreamRoutes(app: Hono): void {
         shuffle: parsed.data.shuffle,
         loop: parsed.data.loop,
         playlistId: parsed.data.playlistId,
+        ...(parsed.data.schedule !== undefined
+          ? parsed.data.schedule
+            ? scheduleFromInput(parsed.data.schedule)
+            : {
+                recurrence: "none" as const,
+                recurrenceRule: null,
+                scheduledFor: null,
+                autoStopAt: null,
+              }
+          : {}),
       });
       addEvent(userId, "stream", `Updated stream "${record?.name ?? current.name}"`);
       return c.json(ok({ ...(record ?? current), targetUrl: "" }));

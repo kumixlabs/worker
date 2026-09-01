@@ -344,6 +344,17 @@
     "deleteTitle": "Delete stream",
     "deleteDescription": "Delete stream \"{name}\"? This cannot be undone.",
     "searchPlaceholder": "Search streams",
-    "empty": "No streams yet. Create one to go live."
+    "empty": "No streams yet. Create one to go live.",
+    "colNextRun": "Next run",
+    "untilLabel": "until",
+    "schedule": "Schedule",
+    "scheduleNone": "Manual only",
+    "scheduleDaily": "Every day",
+    "scheduleWeekly": "Weekly",
+    "scheduleTime": "Start time (server timezone)",
+    "scheduleHour": "Hour",
+    "scheduleMinute": "Minute",
+    "scheduleDuration": "Duration (min)",
+    "scheduleDays": "Days"
   }
 }

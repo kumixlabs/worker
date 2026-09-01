@@ -344,6 +344,17 @@
     "deleteTitle": "Hapus stream",
     "deleteDescription": "Hapus stream \"{name}\"? Tidak bisa dibatalkan.",
     "searchPlaceholder": "Cari stream",
-    "empty": "Belum ada stream. Buat satu untuk mulai siaran."
+    "empty": "Belum ada stream. Buat satu untuk mulai siaran.",
+    "colNextRun": "Jadwal berikutnya",
+    "untilLabel": "sampai",
+    "schedule": "Jadwal",
+    "scheduleNone": "Manual saja",
+    "scheduleDaily": "Setiap hari",
+    "scheduleWeekly": "Mingguan",
+    "scheduleTime": "Jam mulai (zona waktu server)",
+    "scheduleHour": "Jam",
+    "scheduleMinute": "Menit",
+    "scheduleDuration": "Durasi (mnt)",
+    "scheduleDays": "Hari"
   }
 }

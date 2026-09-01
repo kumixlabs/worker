@@ -217,15 +217,33 @@ export async function stopStream(userId: string, streamId: string): Promise<Stre
 }
 
 /**
- * Reconciles DB state after a crash/restart: anything left 'running' has no
- * live process in this worker, so mark it failed. Call once on boot.
+ * Reconciles DB state after a crash/restart. Anything left 'running' has no
+ * live process in this worker: auto-resume it (default) or mark failed via
+ * KUMIX_WORKER_AUTO_RESUME=0. Call once on boot.
  */
-export function reconcileStreamsOnBoot(): void {
-  getDb()
-    .query(
-      "UPDATE streams SET status = 'failed', error = 'Worker restarted while stream was running' WHERE status = 'running'",
-    )
-    .run();
+export async function reconcileStreamsOnBoot(): Promise<void> {
+  const rows = getDb().query("SELECT id, user_id FROM streams WHERE status = 'running'").all() as {
+    id: string;
+    user_id: string;
+  }[];
+  if (rows.length === 0) return;
+  const disabled = ["0", "false", "off"].includes(
+    (process.env.KUMIX_WORKER_AUTO_RESUME ?? "").toLowerCase(),
+  );
+  for (const row of rows) {
+    if (disabled) {
+      setStreamStatus(row.id, "failed", {
+        error: "Worker restarted while stream was running",
+        stoppedAt: new Date().toISOString(),
+      });
+      continue;
+    }
+    try {
+      await startStream(row.user_id, row.id);
+    } catch {
+      // startStream already recorded the failure cause on the row.
+    }
+  }
 }
 
 export async function stopAllStreams(): Promise<void> {

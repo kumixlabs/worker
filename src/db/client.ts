@@ -92,6 +92,14 @@ export function getDb(): SqliteDatabase {
       tryColumnMigration(wrapper, "media", column, type);
     }
     tryColumnMigration(wrapper, "playlist_items", "kind", "TEXT NOT NULL DEFAULT 'video'");
+    for (const [column, type] of [
+      ["scheduled_for", "TEXT"],
+      ["auto_stop_at", "TEXT"],
+      ["recurrence", "TEXT NOT NULL DEFAULT 'none'"],
+      ["recurrence_rule", "TEXT"],
+    ] as const) {
+      tryColumnMigration(wrapper, "streams", column, type);
+    }
     dbInstance = instance;
     dbWrapper = wrapper;
     return wrapper;
@@ -253,6 +261,10 @@ function ensureSchema(database: SqliteDatabase): void {
       started_at TEXT,
       stopped_at TEXT,
       error TEXT,
+      scheduled_for TEXT,
+      auto_stop_at TEXT,
+      recurrence TEXT NOT NULL DEFAULT 'none',
+      recurrence_rule TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

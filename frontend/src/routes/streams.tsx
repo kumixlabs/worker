@@ -29,8 +29,12 @@ import { Switch } from "@kumix/ui/ui/switch";
 import { AppShell } from "@/components/AppShell";
 import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
-import { useDateTimeFormatter } from "@/lib/date";
-import type { StreamRecord } from "../../../src/types/stream";
+import { useDateTimeFormatter, useTimeFormatter } from "@/lib/date";
+import type {
+  StreamRecord,
+  StreamRecurrence,
+  StreamScheduleInput,
+} from "../../../src/types/stream";
 
 function invalidateStreams() {
   void queryClient.invalidateQueries({ queryKey: ["streams"] });
@@ -46,6 +50,7 @@ export function StreamsPage() {
   const t = useTranslations("Streams");
   const common = useTranslations("Common");
   const dateTimeFormatter = useDateTimeFormatter();
+  const timeFormatter = useTimeFormatter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editStream, setEditStream] = useState<StreamRecord | null>(null);
   const [deleteStream, setDeleteStream] = useState<StreamRecord | null>(null);
@@ -125,6 +130,23 @@ export function StreamsPage() {
         ),
       },
       {
+        accessorKey: "scheduledFor",
+        header: t("colNextRun"),
+        cell: ({ row }) =>
+          row.original.recurrence !== "none" && row.original.scheduledFor ? (
+            <div className="flex min-w-0 flex-col">
+              <span>{dateTimeFormatter.format(new Date(row.original.scheduledFor))}</span>
+              <span className="text-muted-foreground text-xs">
+                {row.original.autoStopAt
+                  ? `${t("untilLabel")} ${timeFormatter.format(new Date(row.original.autoStopAt))}`
+                  : "∞"}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
         accessorKey: "createdAt",
         header: t("colCreated"),
         cell: ({ row }) => (
@@ -194,7 +216,7 @@ export function StreamsPage() {
         },
       },
     ],
-    [t, common, dateTimeFormatter, startMutation, stopMutation],
+    [t, common, dateTimeFormatter, startMutation, stopMutation, timeFormatter.format],
   );
 
   return (
@@ -214,7 +236,11 @@ export function StreamsPage() {
         searchPlaceholder={t("searchPlaceholder")}
         empty={<EmptyDescription>{t("empty")}</EmptyDescription>}
       />
-      <StreamDialog stream={editStream} onClose={() => setEditStream(null)} />
+      <StreamDialog
+        key={editStream?.id ?? "edit"}
+        stream={editStream}
+        onClose={() => setEditStream(null)}
+      />
       {createOpen && <StreamDialog stream={null} onClose={() => setCreateOpen(false)} />}
       {deleteStream && (
         <Dialog open onOpenChange={(open) => !open && setDeleteStream(null)}>
@@ -253,12 +279,29 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
   const [targetUrl, setTargetUrl] = useState("");
   const [shuffle, setShuffle] = useState(stream?.shuffle ?? false);
   const [loop, setLoop] = useState(stream?.loop ?? true);
+  const [recurrence, setRecurrence] = useState<StreamRecurrence>(stream?.recurrence ?? "none");
+  const [hour, setHour] = useState((stream?.recurrenceRule?.time ?? "09:00").split(":")[0]);
+  const [minute, setMinute] = useState(
+    (stream?.recurrenceRule?.time ?? "09:00").split(":")[1] ?? "00",
+  );
+  const [weekdays, setWeekdays] = useState<number[]>(stream?.recurrenceRule?.weekdays ?? []);
+  const [duration, setDuration] = useState(String(stream?.recurrenceRule?.durationMinutes ?? ""));
 
   const playlistsQuery = useQuery({
     queryKey: ["playlists"],
     queryFn: ({ signal }) => api.playlists({ signal }),
   });
   const playlists = playlistsQuery.data ?? [];
+
+  const buildSchedule = (): StreamScheduleInput | null => {
+    if (recurrence === "none") return { recurrence: "none", time: "00:00" };
+    return {
+      recurrence,
+      time: `${hour}:${minute}`,
+      ...(recurrence === "weekly" && weekdays.length ? { weekdays } : {}),
+      ...(duration.trim() ? { durationMinutes: Number(duration) } : {}),
+    };
+  };
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -269,8 +312,16 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
             ...(targetUrl ? { targetUrl } : {}),
             shuffle,
             loop,
+            schedule: buildSchedule(),
           })
-        : api.createStream({ name, playlistId, targetUrl, shuffle, loop }),
+        : api.createStream({
+            name,
+            playlistId,
+            targetUrl,
+            shuffle,
+            loop,
+            schedule: buildSchedule() ?? undefined,
+          }),
     onSuccess: () => {
       invalidateStreams();
       onClose();
@@ -351,6 +402,18 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
             <Label htmlFor="stream-loop">{t("loop")}</Label>
             <Switch id="stream-loop" checked={loop} onCheckedChange={(v) => setLoop(Boolean(v))} />
           </div>
+          <ScheduleFields
+            recurrence={recurrence}
+            onRecurrence={setRecurrence}
+            hour={hour}
+            onHour={setHour}
+            minute={minute}
+            onMinute={setMinute}
+            weekdays={weekdays}
+            onWeekdays={setWeekdays}
+            duration={duration}
+            onDuration={setDuration}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -362,6 +425,131 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ScheduleFields({
+  recurrence,
+  onRecurrence,
+  hour,
+  onHour,
+  minute,
+  onMinute,
+  weekdays,
+  onWeekdays,
+  duration,
+  onDuration,
+}: {
+  recurrence: StreamRecurrence;
+  onRecurrence: (value: StreamRecurrence) => void;
+  hour: string;
+  onHour: (value: string) => void;
+  minute: string;
+  onMinute: (value: string) => void;
+  weekdays: number[];
+  onWeekdays: (value: number[]) => void;
+  duration: string;
+  onDuration: (value: string) => void;
+}) {
+  const t = useTranslations("Streams");
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const toggleWeekday = (day: number) =>
+    onWeekdays(weekdays.includes(day) ? weekdays.filter((d) => d !== day) : [...weekdays, day]);
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div className="space-y-2">
+        <Label>{t("schedule")}</Label>
+        <Select
+          value={recurrence}
+          onValueChange={(value) => {
+            if (value) onRecurrence(value as StreamRecurrence);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {(value) =>
+                value === "daily"
+                  ? t("scheduleDaily")
+                  : value === "weekly"
+                    ? t("scheduleWeekly")
+                    : t("scheduleNone")
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">{t("scheduleNone")}</SelectItem>
+            <SelectItem value="daily">{t("scheduleDaily")}</SelectItem>
+            <SelectItem value="weekly">{t("scheduleWeekly")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {recurrence !== "none" && (
+        <>
+          <div className="flex items-end gap-2">
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="stream-hour">{t("scheduleTime")}</Label>
+              <div className="flex gap-2">
+                <Select value={hour} onValueChange={(value) => value && onHour(value)}>
+                  <SelectTrigger className="w-full" aria-label={t("scheduleHour")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={minute} onValueChange={(value) => value && onMinute(value)}>
+                  <SelectTrigger className="w-full" aria-label={t("scheduleMinute")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["00", "15", "30", "45"].map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="w-28 space-y-2">
+              <Label htmlFor="stream-duration">{t("scheduleDuration")}</Label>
+              <Input
+                id="stream-duration"
+                type="number"
+                min={1}
+                max={1440}
+                value={duration}
+                onChange={(event) => onDuration(event.target.value)}
+                placeholder="∞"
+              />
+            </div>
+          </div>
+          {recurrence === "weekly" && (
+            <div className="space-y-2">
+              <Label>{t("scheduleDays")}</Label>
+              <div className="flex flex-wrap gap-1">
+                {weekdayLabels.map((label, day) => (
+                  <Button
+                    key={label}
+                    type="button"
+                    size="sm"
+                    variant={weekdays.includes(day) ? "default" : "outline"}
+                    aria-pressed={weekdays.includes(day)}
+                    onClick={() => toggleWeekday(day)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

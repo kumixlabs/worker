@@ -3,7 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import type { EventRecord } from "../../../src/types/event";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 import type { PlaylistItemRecord, PlaylistRecord } from "../../../src/types/playlist";
-import type { StreamRecord } from "../../../src/types/stream";
+import type { StreamRecord, StreamScheduleInput } from "../../../src/types/stream";
 import type { WorkerMetrics, WorkerSettings, WorkerStats } from "../../../src/types/worker";
 
 export const queryClient = new QueryClient({
@@ -214,6 +214,7 @@ export const api = {
     targetUrl: string;
     shuffle?: boolean;
     loop?: boolean;
+    schedule?: StreamScheduleInput;
   }) =>
     request<StreamRecord>("/api/streams", {
       method: "POST",
@@ -227,6 +228,7 @@ export const api = {
       targetUrl?: string;
       shuffle?: boolean;
       loop?: boolean;
+      schedule?: StreamScheduleInput | null;
     },
   ) =>
     request<StreamRecord>(`/api/streams/${id}`, {

@@ -16,6 +16,7 @@ import { createApiApp } from "./http/app";
 import { readPackageVersion } from "./lib/version";
 import { ensureDataDir, readSettings, resetWorkerData } from "./runtime/config";
 import { runtimeMetrics } from "./runtime/metrics";
+import { startScheduler, stopScheduler } from "./runtime/scheduler";
 import { latestVersion, performSelfUpdate, type RestartMode } from "./runtime/update";
 import { reconcileStreamsOnBoot, stopAllStreams } from "./services/stream-runner";
 
@@ -54,7 +55,8 @@ export function buildCli(): Command {
       const hostname = options.host ?? "localhost";
 
       const app = createApiApp();
-      reconcileStreamsOnBoot();
+      await reconcileStreamsOnBoot();
+      startScheduler();
 
       const server = serve({ fetch: app.fetch, port, hostname }, () => {
         console.log(`Kumix Worker running on http://${hostname}:${port}`);
@@ -67,6 +69,7 @@ export function buildCli(): Command {
         console.log(`\nReceived ${signal}, shutting down...`);
 
         server.close(() => {
+          stopScheduler();
           void stopAllStreams().finally(() => {
             closeDb();
             closeAuthDb();
