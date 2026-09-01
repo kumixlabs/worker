@@ -109,7 +109,11 @@
       "info": "Info",
       "restart_scheduled": "Restart dijadwalkan",
       "restart_failed": "Restart gagal",
-      "reconciled": "Direkonsiliasi"
+      "reconciled": "Direkonsiliasi",
+      "media": "Media",
+      "playlist": "Playlist",
+      "stream": "Stream",
+      "admin_user_deleted": "Pengguna dihapus"
     },
     "close": "Tutup"
   },

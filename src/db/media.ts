@@ -50,19 +50,32 @@ function rowToRecord(row: Record<string, unknown>): MediaRecord {
     bitrate: (row.bitrate as number | null) ?? null,
     hasAudio: Boolean(row.has_audio),
     hasThumb: Boolean(row.has_thumb),
+    contentHash: (row.content_hash as string | null) ?? null,
   };
 }
 
 export type InsertMedia = Omit<
   MediaRecord,
-  "createdAt" | "duration" | "width" | "height" | "fps" | "bitrate" | "hasAudio" | "hasThumb"
+  | "createdAt"
+  | "duration"
+  | "width"
+  | "height"
+  | "fps"
+  | "bitrate"
+  | "hasAudio"
+  | "hasThumb"
+  | "contentHash"
 > &
   Partial<
-    Pick<MediaRecord, "duration" | "width" | "height" | "fps" | "bitrate" | "hasAudio" | "hasThumb">
+    Pick<
+      MediaRecord,
+      "duration" | "width" | "height" | "fps" | "bitrate" | "hasAudio" | "hasThumb" | "contentHash"
+    >
   >;
 
 export function insertMedia(record: InsertMedia): MediaRecord {
   const withDates: MediaRecord = {
+    contentHash: null,
     duration: null,
     width: null,
     height: null,
@@ -75,7 +88,7 @@ export function insertMedia(record: InsertMedia): MediaRecord {
   };
   getDb()
     .query(
-      "INSERT INTO media (id, user_id, folder_id, name, media_type, mime_type, file_name, size_bytes, created_at, duration, width, height, fps, bitrate, has_audio, has_thumb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO media (id, user_id, folder_id, name, media_type, mime_type, file_name, size_bytes, created_at, duration, width, height, fps, bitrate, has_audio, has_thumb, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       withDates.id,
@@ -94,8 +107,19 @@ export function insertMedia(record: InsertMedia): MediaRecord {
       withDates.bitrate,
       withDates.hasAudio ? 1 : 0,
       withDates.hasThumb ? 1 : 0,
+      withDates.contentHash ?? null,
     );
   return withDates;
+}
+
+export function findMediaIdByHash(
+  userId: string,
+  contentHash: string,
+): { id: string; name: string } | null {
+  const row = getDb()
+    .query("SELECT id, name FROM media WHERE user_id = ? AND content_hash = ? LIMIT 1")
+    .get(userId, contentHash) as { id: string; name: string } | undefined;
+  return row ?? null;
 }
 
 export function updateMediaMetadata(

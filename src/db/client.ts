@@ -88,9 +88,11 @@ export function getDb(): SqliteDatabase {
       ["bitrate", "INTEGER"],
       ["has_audio", "INTEGER"],
       ["has_thumb", "INTEGER NOT NULL DEFAULT 0"],
+      ["content_hash", "TEXT"],
     ] as const) {
       tryColumnMigration(wrapper, "media", column, type);
     }
+    wrapper.exec("CREATE INDEX IF NOT EXISTS idx_media_hash ON media(user_id, content_hash)");
     tryColumnMigration(wrapper, "playlist_items", "kind", "TEXT NOT NULL DEFAULT 'video'");
     for (const [column, type] of [
       ["scheduled_for", "TEXT"],

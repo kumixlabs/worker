@@ -21,6 +21,7 @@ export interface MediaRecord {
   bitrate: number | null;
   hasAudio: boolean;
   hasThumb: boolean;
+  contentHash: string | null;
 }
 
 export interface MediaFolderRecord {

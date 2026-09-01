@@ -3,6 +3,7 @@
  * import, folders, rename/move, delete.
  */
 
+import { createHash } from "node:crypto";
 import {
   appendFile,
   closeSync,
@@ -28,6 +29,7 @@ import {
   countMedia,
   deleteMediaById,
   deleteMediaFolder,
+  findMediaIdByHash,
   getMediaById,
   getMediaDir,
   getMediaFolderById,
@@ -74,7 +76,7 @@ class UploadError extends Error {
   constructor(
     message: string,
     readonly code: string,
-    readonly status: 400 | 413 | 415,
+    readonly status: 400 | 409 | 413 | 415,
   ) {
     super(message);
   }
@@ -104,9 +106,11 @@ async function persistStream(
   const { tempPath, writeStream } = openTempMediaFile(id);
   let total = 0;
   let head = new Uint8Array(0);
+  const digest = createHash("sha256");
   try {
     for await (const chunk of body) {
       total += chunk.byteLength;
+      digest.update(chunk);
       if (total > limit)
         throw new UploadError("Upload exceeds size limit", "payload_too_large", 413);
       if (head.length < headBytes) {
@@ -131,6 +135,12 @@ async function persistStream(
         415,
       );
 
+    const contentHash = digest.digest("hex");
+    const duplicate = findMediaIdByHash(user.id, contentHash);
+    if (duplicate) {
+      throw new UploadError(`Duplicate of "${duplicate.name}"`, "duplicate_media", 409);
+    }
+
     const fileName = `${id}.${sniff.ext}`;
     renameSync(tempPath, mediaPath(fileName));
     const record = insertMedia({
@@ -142,6 +152,7 @@ async function persistStream(
       mimeType: sniff.mimeType,
       fileName,
       sizeBytes: statSync(mediaPath(fileName)).size,
+      contentHash,
     });
     return await enrichMedia(record);
   } catch (error) {
@@ -496,6 +507,7 @@ export function registerMediaRoutes(app: Hono) {
         );
         return c.json(ok(record), 201);
       } catch (error) {
+        if (error instanceof UploadError) return uploadErrorResponse(error);
         if (error instanceof Error && error.name === "TimeoutError")
           return fail("import_timeout", "URL import timed out", 504);
         if (error instanceof Error && error.message.startsWith("URL blocked"))

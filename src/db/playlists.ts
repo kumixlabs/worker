@@ -50,6 +50,7 @@ function rowToMedia(row: Record<string, unknown>): MediaRecord {
     bitrate: (row.media_bitrate as number | null) ?? null,
     hasAudio: Boolean(row.media_has_audio),
     hasThumb: Boolean(row.media_has_thumb),
+    contentHash: (row.media_content_hash as string | null) ?? null,
   };
 }
 

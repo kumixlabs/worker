@@ -109,7 +109,11 @@
       "info": "Info",
       "restart_scheduled": "Restart scheduled",
       "restart_failed": "Restart failed",
-      "reconciled": "Reconciled"
+      "reconciled": "Reconciled",
+      "media": "Media",
+      "playlist": "Playlist",
+      "stream": "Stream",
+      "admin_user_deleted": "User deleted"
     },
     "close": "Close"
   },
