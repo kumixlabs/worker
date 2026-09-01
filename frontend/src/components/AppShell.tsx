@@ -7,6 +7,7 @@ import {
   Radio,
   Settings,
   Terminal,
+  Tv,
   X,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -44,6 +45,7 @@ const navItems = [
   { to: "/media", key: "media", icon: Images },
   { to: "/playlists", key: "playlists", icon: ListVideo },
   { to: "/streams", key: "streams", icon: Radio },
+  { to: "/channels", key: "channels", icon: Tv },
   { to: "/log", key: "log", icon: Terminal },
 ] as const;
 

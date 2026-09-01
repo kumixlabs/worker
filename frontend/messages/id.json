@@ -19,7 +19,8 @@
       "admin": "Admin",
       "users": "Pengguna",
       "media": "Media",
-      "playlists": "Playlist"
+      "playlists": "Playlist",
+      "channels": "Channel"
     },
     "impersonating": "Meniru pengguna",
     "stopImpersonatingFailed": "Gagal berhenti meniru"
@@ -209,11 +210,13 @@
     "youtubeDescription": "Bawa OAuth client Google Cloud sendiri. Buat kredensial dengan redirect URI {origin}/api/youtube/callback, lalu hubungkan kanal Anda.",
     "youtubeClientId": "Client ID",
     "youtubeClientSecret": "Client secret",
-    "youtubeConnect": "Hubungkan kanal",
-    "youtubeAuthorizeOpened": "Halaman otorisasi dibuka — selesaikan persetujuan di tab baru.",
     "youtubeStatus_pending": "Menunggu otorisasi",
     "youtubeStatus_connected": "Terhubung",
-    "youtubeStatus_expired": "Kedaluwarsa — hubungkan ulang"
+    "youtubeStatus_expired": "Kedaluwarsa — hubungkan ulang",
+    "youtubeClientDescription": "Bawa OAuth client Google Cloud Anda sendiri. Buat kredensial dengan redirect URI {origin}/api/youtube/callback. Channel dikelola di halaman Channel.",
+    "youtubeClientConfigured": "Client terpasang",
+    "youtubeClientSave": "Simpan OAuth client",
+    "youtubeClientSaved": "OAuth client YouTube tersimpan."
   },
   "Users": {
     "title": "Pengguna",
@@ -384,5 +387,22 @@
     "youtubeMadeForKids": "Untuk anak-anak",
     "youtubeDvr": "Aktifkan DVR",
     "colLiveUrl": "URL Live"
+  },
+  "Channels": {
+    "title": "Channel",
+    "description": "Channel YouTube yang tersambung untuk siaran langsung.",
+    "connectChannel": "Sambungkan channel",
+    "authorizeOpened": "Halaman otorisasi terbuka — selesaikan persetujuan di tab baru.",
+    "connectedToast": "Channel YouTube tersambung.",
+    "connectFailed": "Koneksi channel gagal",
+    "errorCode": "Kode error: {code}",
+    "colChannel": "Channel",
+    "colStatus": "Status",
+    "colConnectedAt": "Tanggal tersambung",
+    "emptyTitle": "Belum ada channel",
+    "emptyDescription": "Sambungkan channel YouTube untuk menyiarkan langsung ke sana.",
+    "status_pending": "Menunggu",
+    "status_connected": "Tersambung",
+    "status_expired": "Kedaluwarsa"
   }
 }

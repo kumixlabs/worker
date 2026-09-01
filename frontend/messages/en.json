@@ -19,7 +19,8 @@
       "admin": "Admin",
       "users": "Users",
       "media": "Media",
-      "playlists": "Playlists"
+      "playlists": "Playlists",
+      "channels": "Channels"
     },
     "impersonating": "Impersonating",
     "stopImpersonatingFailed": "Could not stop impersonating"
@@ -209,11 +210,13 @@
     "youtubeDescription": "Bring your own Google Cloud OAuth client. Create credentials with redirect URI {origin}/api/youtube/callback, then connect your channel.",
     "youtubeClientId": "Client ID",
     "youtubeClientSecret": "Client secret",
-    "youtubeConnect": "Connect channel",
-    "youtubeAuthorizeOpened": "Authorization page opened — complete consent in the new tab.",
     "youtubeStatus_pending": "Waiting for authorization",
     "youtubeStatus_connected": "Connected",
-    "youtubeStatus_expired": "Expired — reconnect"
+    "youtubeStatus_expired": "Expired — reconnect",
+    "youtubeClientDescription": "Bring your own Google Cloud OAuth client. Create credentials with redirect URI {origin}/api/youtube/callback. Channels are managed on the Channels page.",
+    "youtubeClientConfigured": "Configured client",
+    "youtubeClientSave": "Save OAuth client",
+    "youtubeClientSaved": "YouTube OAuth client saved."
   },
   "Users": {
     "title": "Users",
@@ -384,5 +387,22 @@
     "youtubeMadeForKids": "Made for kids",
     "youtubeDvr": "Enable DVR",
     "colLiveUrl": "Live URL"
+  },
+  "Channels": {
+    "title": "Channels",
+    "description": "Connected YouTube channels used for live broadcasts.",
+    "connectChannel": "Connect channel",
+    "authorizeOpened": "Authorization page opened — complete consent in the new tab.",
+    "connectedToast": "YouTube channel connected.",
+    "connectFailed": "Channel connection failed",
+    "errorCode": "Error code: {code}",
+    "colChannel": "Channel",
+    "colStatus": "Status",
+    "colConnectedAt": "Connected at",
+    "emptyTitle": "No channels yet",
+    "emptyDescription": "Connect a YouTube channel to stream directly to it.",
+    "status_pending": "Pending",
+    "status_connected": "Connected",
+    "status_expired": "Expired"
   }
 }

@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  CircleAlertIcon,
-  Clock,
-  HardDrive,
-  Lock,
-  MonitorSmartphone,
-  Save,
-  Trash2,
-  Tv,
-} from "lucide-react";
+import { CircleAlertIcon, Clock, HardDrive, Lock, MonitorSmartphone, Save, Tv } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
@@ -40,7 +31,6 @@ import { ActiveSessions } from "@/components/ActiveSessions";
 import { AppShell } from "@/components/AppShell";
 import { api, queryClient } from "@/lib/api";
 import { authClient } from "@/lib/auth";
-import type { SafeYoutubeConnection } from "../../../src/types/stream";
 
 function supportedTimezones(): string[] {
   const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
@@ -51,36 +41,26 @@ function supportedTimezones(): string[] {
   }
 }
 
-function YoutubeConnections() {
+function YoutubeClientSettings() {
   const t = useTranslations("Settings");
-  const common = useTranslations("Common");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const connectionsQuery = useQuery({
-    queryKey: ["youtubeConnections"],
-    queryFn: ({ signal }) => api.youtubeConnections({ signal }),
+  const clientQuery = useQuery({
+    queryKey: ["youtubeClient"],
+    queryFn: ({ signal }) => api.youtubeClient({ signal }),
   });
-  const connections = connectionsQuery.data ?? [];
-
-  const createMutation = useMutation({
+  const client = clientQuery.data;
+  const saveMutation = useMutation({
     mutationFn: () =>
-      api.createYoutubeConnection({ clientId: clientId.trim(), clientSecret: clientSecret.trim() }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["youtubeConnections"] });
+      api.saveYoutubeClient({ clientId: clientId.trim(), clientSecret: clientSecret.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["youtubeClient"] });
       setClientId("");
       setClientSecret("");
-      window.open(data.authUrl, "_blank", "noopener");
-      toastSuccess({ message: t("youtubeAuthorizeOpened") });
+      toastSuccess({ message: t("youtubeClientSaved") });
     },
     onError: (error: Error) => toastError({ message: error.message }),
   });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.deleteYoutubeConnection(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["youtubeConnections"] }),
-    onError: (error: Error) => toastError({ message: error.message }),
-  });
-
   return (
     <Frame>
       <FrameHeader>
@@ -90,37 +70,11 @@ function YoutubeConnections() {
         </FrameTitle>
       </FrameHeader>
       <FramePanel className="space-y-5">
-        <p className="text-muted-foreground text-sm">{t("youtubeDescription")}</p>
-        {connections.length > 0 && (
-          <ul className="divide-y rounded-lg border">
-            {connections.map((connection: SafeYoutubeConnection) => (
-              <li key={connection.id} className="flex items-center gap-3 p-3">
-                {connection.channelThumbnail ? (
-                  <img src={connection.channelThumbnail} alt="" className="size-8 rounded-full" />
-                ) : (
-                  <div className="flex size-8 items-center justify-center rounded-full bg-muted">
-                    <Tv className="size-4 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-sm">
-                    {connection.channelTitle ?? connection.clientIdMasked}
-                  </p>
-                  <p className="truncate text-muted-foreground text-xs">
-                    {connection.clientIdMasked} · {t(`youtubeStatus_${connection.status}`)}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => deleteMutation.mutate(connection.id)}
-                  aria-label={common("delete")}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </li>
-            ))}
-          </ul>
+        <p className="text-muted-foreground text-sm">{t("youtubeClientDescription")}</p>
+        {client?.configured && (
+          <p className="text-muted-foreground text-xs">
+            {t("youtubeClientConfigured")}: <code>{client.clientIdMasked}</code>
+          </p>
         )}
         <div className="space-y-3 rounded-lg border p-3">
           <div className="space-y-2">
@@ -143,10 +97,10 @@ function YoutubeConnections() {
             />
           </div>
           <Button
-            onClick={() => createMutation.mutate()}
-            disabled={!clientId.trim() || !clientSecret.trim() || createMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+            disabled={!clientId.trim() || !clientSecret.trim() || saveMutation.isPending}
           >
-            {t("youtubeConnect")}
+            {t("youtubeClientSave")}
           </Button>
         </div>
       </FramePanel>
@@ -320,7 +274,7 @@ export function SettingsPage() {
           ) : null}
 
           <TabsContent value="youtube" className="space-y-4">
-            <YoutubeConnections />
+            <YoutubeClientSettings />
           </TabsContent>
 
           <TabsContent value="security" className="space-y-4">

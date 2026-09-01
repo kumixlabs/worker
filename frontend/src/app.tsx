@@ -7,6 +7,7 @@ import { MonitoringPage } from "@/routes/admin/monitoring";
 import { AdminOverviewPage } from "@/routes/admin/overview";
 import { AdminSettingsPage } from "@/routes/admin/settings";
 import { UsersPage } from "@/routes/admin/users";
+import { ChannelsPage } from "@/routes/channels";
 import { Dashboard } from "@/routes/index";
 import { LogPage } from "@/routes/log";
 import { MediaPage } from "@/routes/media";
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
   },
   { path: "/media", element: <MediaPage />, errorElement: <RouteError /> },
+  { path: "/channels", element: <ChannelsPage />, errorElement: <RouteError /> },
   { path: "/playlists", element: <PlaylistsPage />, errorElement: <RouteError /> },
   { path: "/playlists/:id", element: <PlaylistDetailPage />, errorElement: <RouteError /> },
   { path: "/streams", element: <StreamsPage />, errorElement: <RouteError /> },

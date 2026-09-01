@@ -14,6 +14,20 @@ export interface YoutubeConnectionRecord {
   updatedAt: string;
 }
 
+export interface YoutubeClientRecord {
+  userId: string;
+  clientId: string;
+  clientSecret: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SafeYoutubeClient {
+  configured: boolean;
+  clientIdMasked: string | null;
+  updatedAt: string | null;
+}
+
 export interface SafeYoutubeConnection {
   id: string;
   userId: string;

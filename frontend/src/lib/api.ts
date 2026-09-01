@@ -4,6 +4,7 @@ import type { EventRecord } from "../../../src/types/event";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 import type { PlaylistItemRecord, PlaylistRecord } from "../../../src/types/playlist";
 import type {
+  SafeYoutubeClient,
   SafeYoutubeConnection,
   StreamRecord,
   StreamScheduleInput,
@@ -234,12 +235,18 @@ export const api = {
 
   // Streams
   streams: (options?: RequestInit) => request<StreamRecord[]>("/api/streams", options),
+  youtubeClient: (options?: RequestInit) =>
+    request<SafeYoutubeClient>("/api/youtube/client", options),
+  saveYoutubeClient: (body: { clientId: string; clientSecret: string }) =>
+    request<{ saved: boolean }>("/api/youtube/client", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   youtubeConnections: (options?: RequestInit) =>
     request<SafeYoutubeConnection[]>("/api/youtube/connections", options),
-  createYoutubeConnection: (body: { clientId: string; clientSecret: string }) =>
+  createYoutubeConnection: () =>
     request<{ connection: SafeYoutubeConnection; authUrl: string }>("/api/youtube/connections", {
       method: "POST",
-      body: JSON.stringify(body),
     }),
   deleteYoutubeConnection: (id: string) =>
     request<{ deleted: boolean }>(`/api/youtube/connections/${id}`, { method: "DELETE" }),

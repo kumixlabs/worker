@@ -11,10 +11,13 @@ import { z } from "zod";
 import {
   createYoutubeConnection,
   deleteYoutubeConnection,
+  getYoutubeClient,
   getYoutubeConnection,
   listYoutubeConnections,
+  safeYoutubeClient,
   safeYoutubeConnection,
   updateYoutubeConnectionAuth,
+  upsertYoutubeClient,
 } from "../../db/youtube";
 import { currentEncryptionKey } from "../../runtime/config";
 import { fail, ok } from "../middleware";
@@ -67,26 +70,41 @@ function verifyState(state: string): { connectionId: string; userId: string } | 
   }
 }
 
-const connectionCreateSchema = z.object({
+const clientSchema = z.object({
   clientId: z.string().min(10),
   clientSecret: z.string().min(10),
 });
 
 export function registerYoutubeRoutes(app: Hono): void {
+  app.get("/api/youtube/client", (c) =>
+    c.json(ok(safeYoutubeClient(getYoutubeClient(sessionUserId(c))))),
+  );
+
+  app.put("/api/youtube/client", async (c) => {
+    const parsed = clientSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail("VALIDATION_ERROR", "clientId and clientSecret are required", 400);
+    }
+    upsertYoutubeClient(sessionUserId(c), parsed.data);
+    return c.json(ok({ saved: true }));
+  });
+
   app.get("/api/youtube/connections", (c) =>
     c.json(ok(listYoutubeConnections(sessionUserId(c)).map(safeYoutubeConnection))),
   );
 
-  app.post("/api/youtube/connections", async (c) => {
-    const raw = await c.req.json().catch(() => null);
-    const parsed = connectionCreateSchema.safeParse(raw);
-    if (!parsed.success) {
-      return fail("VALIDATION_ERROR", "clientId and clientSecret are required", 400);
-    }
+  app.post("/api/youtube/connections", (c) => {
     const userId = sessionUserId(c);
-    const record = createYoutubeConnection(parsed.data, userId);
+    const client = getYoutubeClient(userId);
+    if (!client) {
+      return fail("VALIDATION_ERROR", "Configure the YouTube OAuth client in Settings first", 400);
+    }
+    const record = createYoutubeConnection(
+      { clientId: client.clientId, clientSecret: client.clientSecret },
+      userId,
+    );
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", parsed.data.clientId.trim());
+    authUrl.searchParams.set("client_id", client.clientId);
     authUrl.searchParams.set("redirect_uri", redirectUriFor(c));
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set(
@@ -114,15 +132,15 @@ export function registerYoutubeRoutes(app: Hono): void {
     const code = c.req.query("code");
     const state = c.req.query("state");
     const error = c.req.query("error");
-    if (error) return c.redirect(`/settings?youtube_error=${encodeURIComponent(error)}`);
-    if (!code || !state) return c.redirect("/settings?youtube_error=missing_params");
+    if (error) return c.redirect(`/channels?youtube_error=${encodeURIComponent(error)}`);
+    if (!code || !state) return c.redirect("/channels?youtube_error=missing_params");
 
     const verified = verifyState(state);
-    if (!verified) return c.redirect("/settings?youtube_error=invalid_state");
+    if (!verified) return c.redirect("/channels?youtube_error=invalid_state");
 
     const conn = getYoutubeConnection(verified.connectionId);
     if (!conn || conn.userId !== verified.userId) {
-      return c.redirect("/settings?youtube_error=connection_not_found");
+      return c.redirect("/channels?youtube_error=connection_not_found");
     }
 
     const origin = new URL(c.req.url).origin;
@@ -137,10 +155,10 @@ export function registerYoutubeRoutes(app: Hono): void {
         grant_type: "authorization_code",
       }).toString(),
     });
-    if (!tokenRes.ok) return c.redirect("/settings?youtube_error=token_exchange_failed");
+    if (!tokenRes.ok) return c.redirect("/channels?youtube_error=token_exchange_failed");
 
     const tokenData = (await tokenRes.json()) as { access_token: string; refresh_token?: string };
-    if (!tokenData.refresh_token) return c.redirect("/settings?youtube_error=no_refresh_token");
+    if (!tokenData.refresh_token) return c.redirect("/channels?youtube_error=no_refresh_token");
 
     let channelId = "unknown";
     let channelTitle = "YouTube Channel";
@@ -170,6 +188,6 @@ export function registerYoutubeRoutes(app: Hono): void {
       channelTitle,
       channelThumbnail,
     });
-    return c.redirect("/settings?youtube_connected=true");
+    return c.redirect("/channels?youtube_connected=true");
   });
 }

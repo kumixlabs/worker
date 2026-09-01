@@ -293,6 +293,14 @@ function ensureSchema(database: SqliteDatabase): void {
 
     CREATE INDEX IF NOT EXISTS idx_streams_user ON streams(user_id, created_at);
 
+    CREATE TABLE IF NOT EXISTS youtube_clients (
+      user_id TEXT PRIMARY KEY,
+      client_id_cipher TEXT NOT NULL,
+      client_secret_cipher TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS youtube_connections (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

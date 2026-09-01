@@ -48,6 +48,12 @@ export interface StreamScheduleInput {
 
 export type YoutubeConnectionStatus = "pending" | "connected" | "expired";
 
+export interface SafeYoutubeClient {
+  configured: boolean;
+  clientIdMasked: string | null;
+  updatedAt: string | null;
+}
+
 export interface SafeYoutubeConnection {
   id: string;
   userId: string;

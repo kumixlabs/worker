@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
 
 import { decryptSecret, encryptSecret, maskSecret } from "../lib/crypto";
-import type { SafeYoutubeConnection, YoutubeConnectionRecord } from "../types/youtube";
+import type {
+  SafeYoutubeClient,
+  SafeYoutubeConnection,
+  YoutubeClientRecord,
+  YoutubeConnectionRecord,
+} from "../types/youtube";
 import { getDb } from "./client";
 
 interface YoutubeConnectionRow {
@@ -51,6 +56,60 @@ export function safeYoutubeConnection(record: YoutubeConnectionRecord): SafeYout
     status: record.status,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+  };
+}
+
+interface YoutubeClientRow {
+  user_id: string;
+  client_id_cipher: string;
+  client_secret_cipher: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getYoutubeClient(userId: string): YoutubeClientRecord | null {
+  const row = getDb().query("SELECT * FROM youtube_clients WHERE user_id = ?").get(userId) as
+    | YoutubeClientRow
+    | undefined;
+  if (!row) return null;
+  return {
+    userId: row.user_id,
+    clientId: decryptSecret(row.client_id_cipher),
+    clientSecret: decryptSecret(row.client_secret_cipher),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function upsertYoutubeClient(
+  userId: string,
+  input: { clientId: string; clientSecret: string },
+): YoutubeClientRecord {
+  const now = nowIso();
+  getDb()
+    .query(
+      `INSERT INTO youtube_clients (user_id, client_id_cipher, client_secret_cipher, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         client_id_cipher = excluded.client_id_cipher,
+         client_secret_cipher = excluded.client_secret_cipher,
+         updated_at = excluded.updated_at`,
+    )
+    .run(
+      userId,
+      encryptSecret(input.clientId.trim()),
+      encryptSecret(input.clientSecret.trim()),
+      now,
+      now,
+    );
+  return getYoutubeClient(userId) as YoutubeClientRecord;
+}
+
+export function safeYoutubeClient(record: YoutubeClientRecord | null): SafeYoutubeClient {
+  return {
+    configured: Boolean(record),
+    clientIdMasked: record ? maskSecret(record.clientId) : null,
+    updatedAt: record?.updatedAt ?? null,
   };
 }
 
