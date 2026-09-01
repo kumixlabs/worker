@@ -328,7 +328,8 @@
     "addVideos": "Tambah video",
     "addAudios": "Tambah audio",
     "addAudiosDescription": "Pilih trek audio yang diputar di atas rangkaian video.",
-    "emptyAudios": "Belum ada audio latar. Tambahkan audio untuk di-mix ke playlist."
+    "emptyAudios": "Belum ada audio latar. Tambahkan audio untuk di-mix ke playlist.",
+    "dragReorder": "Geser untuk mengurutkan"
   },
   "Streams": {
     "title": "Stream",

@@ -328,7 +328,8 @@
     "addVideos": "Add videos",
     "addAudios": "Add audio",
     "addAudiosDescription": "Pick audio tracks that play over the video sequence.",
-    "emptyAudios": "No background audio. Add audio to mix over the playlist."
+    "emptyAudios": "No background audio. Add audio to mix over the playlist.",
+    "dragReorder": "Drag to reorder"
   },
   "Streams": {
     "title": "Streams",

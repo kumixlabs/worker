@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowUp,
   AudioLines,
+  GripVertical,
   Image as ImageIcon,
   ListVideo,
   Pencil,
@@ -17,6 +18,7 @@ import { useTranslations } from "use-intl";
 
 import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
 import { Badge } from "@kumix/ui/reui/badge";
+import { Sortable, SortableItem, SortableItemHandle } from "@kumix/ui/reui/sortable";
 import { Button } from "@kumix/ui/ui/button";
 import {
   Dialog,
@@ -88,6 +90,13 @@ export function PlaylistDetailPage() {
     saveOrder.mutate(
       kind === "audio" ? { videos: other, audios: ids } : { videos: ids, audios: other },
     );
+  };
+
+  const reorder = (next: PlaylistItemRecord[]) => {
+    const ids = next.map((item) => item.mediaId);
+    const moved = videoIds.some((current, index) => current !== ids[index]);
+    if (!moved) return;
+    saveOrder.mutate({ videos: ids, audios: audioIds });
   };
 
   const remove = (kind: PlaylistItemKind, mediaId: string) => {
@@ -193,7 +202,12 @@ export function PlaylistDetailPage() {
             </EmptyHeader>
           </Empty>
         ) : (
-          <ol className="space-y-2">
+          <Sortable
+            className="list-none space-y-2"
+            value={videos}
+            getItemValue={(item) => item.id}
+            onValueChange={reorder}
+          >
             {videos.map((item, index) => (
               <PlaylistRow
                 key={item.id}
@@ -205,7 +219,7 @@ export function PlaylistDetailPage() {
                 onRemove={() => remove("video", item.mediaId)}
               />
             ))}
-          </ol>
+          </Sortable>
         )}
       </section>
 
@@ -301,7 +315,10 @@ function PlaylistRow({
   const Icon = typeIcons[item.media.mediaType] ?? ListVideo;
   const thumb = mediaThumb(item.media);
   return (
-    <li className="flex items-center gap-3 rounded-lg border bg-card p-3">
+    <SortableItem value={item.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+      <SortableItemHandle cursor aria-label={t("dragReorder")}>
+        <GripVertical className="size-4 text-muted-foreground" />
+      </SortableItemHandle>
       <span className="w-6 text-right text-muted-foreground text-sm tabular-nums">
         {item.position}
       </span>
@@ -347,7 +364,7 @@ function PlaylistRow({
           <Trash2 className="size-4" />
         </Button>
       </div>
-    </li>
+    </SortableItem>
   );
 }
 
