@@ -36,6 +36,16 @@ export interface StreamRecord {
   autoStopAt: string | null;
   recurrence: StreamRecurrence;
   recurrenceRule: StreamRecurrenceRule | null;
+  youtubeConnectionId: string | null;
+  ytTitle: string | null;
+  ytDescription: string | null;
+  ytPrivacy: string | null;
+  ytMadeForKids: boolean;
+  ytDvr: boolean;
+  ytStreamKeyId: string | null;
+  ytBroadcastId: string | null;
+  ytVideoId: string | null;
+  youtubeLiveUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +65,12 @@ export interface InsertStream {
   autoStopAt?: string | null;
   recurrence?: StreamRecurrence;
   recurrenceRule?: StreamRecurrenceRule | null;
+  youtubeConnectionId?: string | null;
+  ytTitle?: string | null;
+  ytDescription?: string | null;
+  ytPrivacy?: string | null;
+  ytMadeForKids?: boolean;
+  ytDvr?: boolean;
 }
 
 function nowIso(): string {
@@ -82,6 +98,16 @@ interface StreamRow {
   auto_stop_at: string | null;
   recurrence: string;
   recurrence_rule: string | null;
+  youtube_connection_id: string | null;
+  yt_title: string | null;
+  yt_description: string | null;
+  yt_privacy: string | null;
+  yt_made_for_kids: number;
+  yt_dvr: number;
+  yt_stream_key_id: string | null;
+  yt_broadcast_id: string | null;
+  yt_video_id: string | null;
+  youtube_live_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +140,16 @@ function toRecord(row: StreamRow): StreamRecord {
     autoStopAt: row.auto_stop_at,
     recurrence: (row.recurrence as StreamRecurrence) ?? "none",
     recurrenceRule: parseRule(row.recurrence_rule),
+    youtubeConnectionId: row.youtube_connection_id ?? null,
+    ytTitle: row.yt_title ?? null,
+    ytDescription: row.yt_description ?? null,
+    ytPrivacy: row.yt_privacy ?? null,
+    ytMadeForKids: row.yt_made_for_kids === 1,
+    ytDvr: row.yt_dvr === 1,
+    ytStreamKeyId: row.yt_stream_key_id ?? null,
+    ytBroadcastId: row.yt_broadcast_id ?? null,
+    ytVideoId: row.yt_video_id ?? null,
+    youtubeLiveUrl: row.youtube_live_url ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -123,6 +159,8 @@ const listColumns = `
   s.id, s.user_id, s.playlist_id, s.name, s.shuffle, s.loop, s.status,
   s.log_path, s.started_at, s.stopped_at, s.error,
   s.scheduled_for, s.auto_stop_at, s.recurrence, s.recurrence_rule,
+  s.youtube_connection_id, s.yt_title, s.yt_description, s.yt_privacy, s.yt_made_for_kids, s.yt_dvr,
+  s.yt_stream_key_id, s.yt_broadcast_id, s.yt_video_id, s.youtube_live_url,
   s.created_at, s.updated_at, p.name AS playlist_name
 `;
 
@@ -147,6 +185,16 @@ function toListRecord(row: StreamListRow): StreamListRecord {
     auto_stop_at,
     recurrence,
     recurrence_rule,
+    youtube_connection_id,
+    yt_title,
+    yt_description,
+    yt_privacy,
+    yt_made_for_kids,
+    yt_dvr,
+    yt_stream_key_id,
+    yt_broadcast_id,
+    yt_video_id,
+    youtube_live_url,
     created_at,
     updated_at,
     playlist_name,
@@ -167,6 +215,16 @@ function toListRecord(row: StreamListRow): StreamListRecord {
     autoStopAt: auto_stop_at,
     recurrence: (recurrence as StreamRecurrence) ?? "none",
     recurrenceRule: parseRule(recurrence_rule),
+    youtubeConnectionId: youtube_connection_id ?? null,
+    ytTitle: yt_title ?? null,
+    ytDescription: yt_description ?? null,
+    ytPrivacy: yt_privacy ?? null,
+    ytMadeForKids: yt_made_for_kids === 1,
+    ytDvr: yt_dvr === 1,
+    ytStreamKeyId: yt_stream_key_id ?? null,
+    ytBroadcastId: yt_broadcast_id ?? null,
+    ytVideoId: yt_video_id ?? null,
+    youtubeLiveUrl: youtube_live_url ?? null,
     createdAt: created_at,
     updatedAt: updated_at,
     playlistName: playlist_name,
@@ -178,8 +236,8 @@ export function insertStream(data: InsertStream): StreamRecord {
   const now = nowIso();
   getDb()
     .query(
-      `INSERT INTO streams (id, user_id, playlist_id, name, target_url, shuffle, loop, status, scheduled_for, auto_stop_at, recurrence, recurrence_rule, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO streams (id, user_id, playlist_id, name, target_url, shuffle, loop, status, scheduled_for, auto_stop_at, recurrence, recurrence_rule, youtube_connection_id, yt_title, yt_description, yt_privacy, yt_made_for_kids, yt_dvr, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -193,6 +251,12 @@ export function insertStream(data: InsertStream): StreamRecord {
       data.autoStopAt ?? null,
       data.recurrence ?? "none",
       data.recurrenceRule ? JSON.stringify(data.recurrenceRule) : null,
+      data.youtubeConnectionId ?? null,
+      data.ytTitle ?? null,
+      data.ytDescription ?? null,
+      data.ytPrivacy ?? null,
+      data.ytMadeForKids ? 1 : 0,
+      data.ytDvr === false ? 0 : 1,
       now,
       now,
     );
@@ -252,6 +316,12 @@ export function updateStream(
       | "autoStopAt"
       | "recurrence"
       | "recurrenceRule"
+      | "youtubeConnectionId"
+      | "ytTitle"
+      | "ytDescription"
+      | "ytPrivacy"
+      | "ytMadeForKids"
+      | "ytDvr"
     >
   >,
 ): StreamRecord | null {
@@ -260,7 +330,9 @@ export function updateStream(
   getDb()
     .query(
       `UPDATE streams SET name = ?, target_url = ?, shuffle = ?, loop = ?, playlist_id = ?,
-        scheduled_for = ?, auto_stop_at = ?, recurrence = ?, recurrence_rule = ?, updated_at = ?
+        scheduled_for = ?, auto_stop_at = ?, recurrence = ?, recurrence_rule = ?,
+        youtube_connection_id = ?, yt_title = ?, yt_description = ?, yt_privacy = ?,
+        yt_made_for_kids = ?, yt_dvr = ?, updated_at = ?
         WHERE id = ?`,
     )
     .run(
@@ -279,10 +351,44 @@ export function updateStream(
         : current.recurrenceRule
           ? JSON.stringify(current.recurrenceRule)
           : null,
+      patch.youtubeConnectionId !== undefined
+        ? patch.youtubeConnectionId
+        : current.youtubeConnectionId,
+      patch.ytTitle !== undefined ? patch.ytTitle : current.ytTitle,
+      patch.ytDescription !== undefined ? patch.ytDescription : current.ytDescription,
+      patch.ytPrivacy !== undefined ? patch.ytPrivacy : current.ytPrivacy,
+      (patch.ytMadeForKids !== undefined ? patch.ytMadeForKids : current.ytMadeForKids) ? 1 : 0,
+      (patch.ytDvr !== undefined ? patch.ytDvr : current.ytDvr) ? 1 : 0,
       nowIso(),
       id,
     );
   return getStreamById(id, userId);
+}
+
+export function updateStreamYoutubeRuntime(
+  id: string,
+  userId: string,
+  runtime: {
+    ytStreamKeyId: string;
+    ytBroadcastId: string;
+    ytVideoId: string;
+    youtubeLiveUrl: string;
+  },
+): void {
+  getDb()
+    .query(
+      `UPDATE streams SET yt_stream_key_id = ?, yt_broadcast_id = ?, yt_video_id = ?,
+       youtube_live_url = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    )
+    .run(
+      runtime.ytStreamKeyId,
+      runtime.ytBroadcastId,
+      runtime.ytVideoId,
+      runtime.youtubeLiveUrl,
+      nowIso(),
+      id,
+      userId,
+    );
 }
 
 export function setStreamStatus(

@@ -199,7 +199,17 @@
     "sessionsRevokeAll": "Keluar dari perangkat lain",
     "sessionsRevoked": "Sesi dicabut",
     "sessionsLoading": "Memuat sesi…",
-    "sessionsLoadError": "Gagal memuat sesi"
+    "sessionsLoadError": "Gagal memuat sesi",
+    "tabYoutube": "YouTube",
+    "youtubeTitleTab": "Koneksi YouTube Live",
+    "youtubeDescription": "Bawa OAuth client Google Cloud sendiri. Buat kredensial dengan redirect URI {origin}/api/youtube/callback, lalu hubungkan kanal Anda.",
+    "youtubeClientId": "Client ID",
+    "youtubeClientSecret": "Client secret",
+    "youtubeConnect": "Hubungkan kanal",
+    "youtubeAuthorizeOpened": "Halaman otorisasi dibuka — selesaikan persetujuan di tab baru.",
+    "youtubeStatus_pending": "Menunggu otorisasi",
+    "youtubeStatus_connected": "Terhubung",
+    "youtubeStatus_expired": "Kedaluwarsa — hubungkan ulang"
   },
   "Users": {
     "title": "Pengguna",
@@ -357,6 +367,17 @@
     "scheduleHour": "Jam",
     "scheduleMinute": "Menit",
     "scheduleDuration": "Durasi (mnt)",
-    "scheduleDays": "Hari"
+    "scheduleDays": "Hari",
+    "youtubeConnection": "Kanal YouTube",
+    "youtubeNone": "Tidak ada (URL RTMP manual)",
+    "youtubeTitle": "Judul siaran",
+    "youtubeDescription": "Deskripsi",
+    "youtubePrivacy": "Privasi",
+    "privacyPublic": "Publik",
+    "privacyUnlisted": "Tidak terdaftar",
+    "privacyPrivate": "Privat",
+    "youtubeMadeForKids": "Untuk anak-anak",
+    "youtubeDvr": "Aktifkan DVR",
+    "colLiveUrl": "URL Live"
   }
 }

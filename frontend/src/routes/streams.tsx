@@ -26,6 +26,7 @@ import { Input } from "@kumix/ui/ui/input";
 import { Label } from "@kumix/ui/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kumix/ui/ui/select";
 import { Switch } from "@kumix/ui/ui/switch";
+import { Textarea } from "@kumix/ui/ui/textarea";
 import { AppShell } from "@/components/AppShell";
 import { DataTable, type GridColumnDef } from "@/components/DataTable";
 import { api, queryClient } from "@/lib/api";
@@ -286,12 +287,25 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
   );
   const [weekdays, setWeekdays] = useState<number[]>(stream?.recurrenceRule?.weekdays ?? []);
   const [duration, setDuration] = useState(String(stream?.recurrenceRule?.durationMinutes ?? ""));
+  const [ytConnId, setYtConnId] = useState(stream?.youtubeConnectionId ?? "");
+  const [ytTitle, setYtTitle] = useState(stream?.ytTitle ?? "");
+  const [ytDescription, setYtDescription] = useState(stream?.ytDescription ?? "");
+  const [ytPrivacy, setYtPrivacy] = useState<"public" | "unlisted" | "private">(
+    (stream?.ytPrivacy as "public" | "unlisted" | "private" | null) ?? "public",
+  );
+  const [ytMadeForKids, setYtMadeForKids] = useState(stream?.ytMadeForKids ?? false);
+  const [ytDvr, setYtDvr] = useState(stream?.ytDvr ?? true);
 
   const playlistsQuery = useQuery({
     queryKey: ["playlists"],
     queryFn: ({ signal }) => api.playlists({ signal }),
   });
   const playlists = playlistsQuery.data ?? [];
+  const connectionsQuery = useQuery({
+    queryKey: ["youtubeConnections"],
+    queryFn: ({ signal }) => api.youtubeConnections({ signal }),
+  });
+  const connections = (connectionsQuery.data ?? []).filter((c) => c.status === "connected");
 
   const buildSchedule = (): StreamScheduleInput | null => {
     if (recurrence === "none") return { recurrence: "none", time: "00:00" };
@@ -312,15 +326,39 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
             ...(targetUrl ? { targetUrl } : {}),
             shuffle,
             loop,
-            schedule: buildSchedule(),
+            schedule: buildSchedule() ?? undefined,
+            ...(stream.youtubeConnectionId !== (ytConnId || null) || ytConnId
+              ? {
+                  youtubeConnectionId: ytConnId || null,
+                  ...(ytConnId
+                    ? {
+                        ytTitle: ytTitle.trim() || null,
+                        ytDescription: ytDescription.trim() || null,
+                        ytPrivacy,
+                        ytMadeForKids,
+                        ytDvr,
+                      }
+                    : {}),
+                }
+              : {}),
           })
         : api.createStream({
             name,
             playlistId,
-            targetUrl,
+            ...(targetUrl.trim() ? { targetUrl: targetUrl.trim() } : {}),
             shuffle,
             loop,
             schedule: buildSchedule() ?? undefined,
+            ...(ytConnId
+              ? {
+                  youtubeConnectionId: ytConnId,
+                  ytTitle: ytTitle.trim() || null,
+                  ytDescription: ytDescription.trim() || null,
+                  ytPrivacy,
+                  ytMadeForKids,
+                  ytDvr,
+                }
+              : {}),
           }),
     onSuccess: () => {
       invalidateStreams();
@@ -331,7 +369,7 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
   });
 
   const submit = () => {
-    if (!name.trim() || !playlistId || (!stream && !targetUrl.trim())) return;
+    if (!name.trim() || !playlistId || (!stream && !targetUrl.trim() && !ytConnId)) return;
     mutation.mutate();
   };
 
@@ -390,6 +428,87 @@ function StreamDialog({ stream, onClose }: { stream: StreamRecord | null; onClos
               autoComplete="off"
             />
           </div>
+          {connections.length > 0 && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="space-y-2">
+                <Label>{t("youtubeConnection")}</Label>
+                <Select
+                  value={ytConnId}
+                  onValueChange={(value) => {
+                    setYtConnId(value ?? "");
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={t("youtubeNone")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("youtubeNone")}</SelectItem>
+                    {connections.map((connection) => (
+                      <SelectItem key={connection.id} value={connection.id}>
+                        {connection.channelTitle ?? connection.clientIdMasked}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {ytConnId && ytConnId !== "none" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="yt-title">{t("youtubeTitle")}</Label>
+                    <Input
+                      id="yt-title"
+                      value={ytTitle}
+                      onChange={(event) => setYtTitle(event.target.value)}
+                      placeholder={name || "Live"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="yt-desc">{t("youtubeDescription")}</Label>
+                    <Textarea
+                      id="yt-desc"
+                      value={ytDescription}
+                      onChange={(event) => setYtDescription(event.target.value)}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("youtubePrivacy")}</Label>
+                    <Select
+                      value={ytPrivacy}
+                      onValueChange={(value) => {
+                        if (value) setYtPrivacy(value);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="public">{t("privacyPublic")}</SelectItem>
+                        <SelectItem value="unlisted">{t("privacyUnlisted")}</SelectItem>
+                        <SelectItem value="private">{t("privacyPrivate")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="yt-kids">{t("youtubeMadeForKids")}</Label>
+                    <Switch
+                      id="yt-kids"
+                      checked={ytMadeForKids}
+                      onCheckedChange={(v) => setYtMadeForKids(Boolean(v))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="yt-dvr">{t("youtubeDvr")}</Label>
+                    <Switch
+                      id="yt-dvr"
+                      checked={ytDvr}
+                      onCheckedChange={(v) => setYtDvr(Boolean(v))}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <Label htmlFor="stream-shuffle">{t("shuffle")}</Label>
             <Switch

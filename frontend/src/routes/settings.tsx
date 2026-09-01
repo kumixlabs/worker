@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CircleAlertIcon, Clock, HardDrive, Lock, MonitorSmartphone, Save } from "lucide-react";
+import {
+  CircleAlertIcon,
+  Clock,
+  HardDrive,
+  Lock,
+  MonitorSmartphone,
+  Save,
+  Trash2,
+  Tv,
+} from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { toastError, toastSuccess } from "@kumix/ui/custom/toast";
@@ -26,10 +35,12 @@ import {
   ComboboxValue,
 } from "@kumix/ui/ui/combobox";
 import { Input } from "@kumix/ui/ui/input";
+import { Label } from "@kumix/ui/ui/label";
 import { ActiveSessions } from "@/components/ActiveSessions";
 import { AppShell } from "@/components/AppShell";
 import { api, queryClient } from "@/lib/api";
 import { authClient } from "@/lib/auth";
+import type { SafeYoutubeConnection } from "../../../src/types/stream";
 
 function supportedTimezones(): string[] {
   const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
@@ -38,6 +49,109 @@ function supportedTimezones(): string[] {
   } catch {
     return ["UTC", "Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"];
   }
+}
+
+function YoutubeConnections() {
+  const t = useTranslations("Settings");
+  const common = useTranslations("Common");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const connectionsQuery = useQuery({
+    queryKey: ["youtubeConnections"],
+    queryFn: ({ signal }) => api.youtubeConnections({ signal }),
+  });
+  const connections = connectionsQuery.data ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.createYoutubeConnection({ clientId: clientId.trim(), clientSecret: clientSecret.trim() }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["youtubeConnections"] });
+      setClientId("");
+      setClientSecret("");
+      window.open(data.authUrl, "_blank", "noopener");
+      toastSuccess({ message: t("youtubeAuthorizeOpened") });
+    },
+    onError: (error: Error) => toastError({ message: error.message }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteYoutubeConnection(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["youtubeConnections"] }),
+    onError: (error: Error) => toastError({ message: error.message }),
+  });
+
+  return (
+    <Frame>
+      <FrameHeader>
+        <FrameTitle className="flex items-center gap-2">
+          <Tv className="size-4" />
+          {t("youtubeTitleTab")}
+        </FrameTitle>
+      </FrameHeader>
+      <FramePanel className="space-y-5">
+        <p className="text-muted-foreground text-sm">{t("youtubeDescription")}</p>
+        {connections.length > 0 && (
+          <ul className="divide-y rounded-lg border">
+            {connections.map((connection: SafeYoutubeConnection) => (
+              <li key={connection.id} className="flex items-center gap-3 p-3">
+                {connection.channelThumbnail ? (
+                  <img src={connection.channelThumbnail} alt="" className="size-8 rounded-full" />
+                ) : (
+                  <div className="flex size-8 items-center justify-center rounded-full bg-muted">
+                    <Tv className="size-4 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-sm">
+                    {connection.channelTitle ?? connection.clientIdMasked}
+                  </p>
+                  <p className="truncate text-muted-foreground text-xs">
+                    {connection.clientIdMasked} · {t(`youtubeStatus_${connection.status}`)}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => deleteMutation.mutate(connection.id)}
+                  aria-label={common("delete")}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-2">
+            <Label htmlFor="yt-client-id">{t("youtubeClientId")}</Label>
+            <Input
+              id="yt-client-id"
+              value={clientId}
+              onChange={(event) => setClientId(event.target.value)}
+              placeholder="1234567890-abc.apps.googleusercontent.com"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="yt-client-secret">{t("youtubeClientSecret")}</Label>
+            <Input
+              id="yt-client-secret"
+              type="password"
+              value={clientSecret}
+              onChange={(event) => setClientSecret(event.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={!clientId.trim() || !clientSecret.trim() || createMutation.isPending}
+          >
+            {t("youtubeConnect")}
+          </Button>
+        </div>
+      </FramePanel>
+    </Frame>
+  );
 }
 
 export function SettingsPage() {
@@ -117,6 +231,7 @@ export function SettingsPage() {
         <Tabs defaultValue={isAdmin ? "general" : "security"} variant="pill" className="space-y-5">
           <TabsList>
             {isAdmin ? <TabsTrigger value="general">{t("tabGeneral")}</TabsTrigger> : null}
+            <TabsTrigger value="youtube">{t("tabYoutube")}</TabsTrigger>
             <TabsTrigger value="security">{t("tabSecurity")}</TabsTrigger>
           </TabsList>
 
@@ -203,6 +318,10 @@ export function SettingsPage() {
               </div>
             </TabsContent>
           ) : null}
+
+          <TabsContent value="youtube" className="space-y-4">
+            <YoutubeConnections />
+          </TabsContent>
 
           <TabsContent value="security" className="space-y-4">
             <Frame>

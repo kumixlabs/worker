@@ -97,6 +97,16 @@ export function getDb(): SqliteDatabase {
       ["auto_stop_at", "TEXT"],
       ["recurrence", "TEXT NOT NULL DEFAULT 'none'"],
       ["recurrence_rule", "TEXT"],
+      ["youtube_connection_id", "TEXT"],
+      ["yt_title", "TEXT"],
+      ["yt_description", "TEXT"],
+      ["yt_privacy", "TEXT"],
+      ["yt_made_for_kids", "INTEGER NOT NULL DEFAULT 0"],
+      ["yt_dvr", "INTEGER NOT NULL DEFAULT 1"],
+      ["yt_stream_key_id", "TEXT"],
+      ["yt_broadcast_id", "TEXT"],
+      ["yt_video_id", "TEXT"],
+      ["youtube_live_url", "TEXT"],
     ] as const) {
       tryColumnMigration(wrapper, "streams", column, type);
     }
@@ -265,10 +275,34 @@ function ensureSchema(database: SqliteDatabase): void {
       auto_stop_at TEXT,
       recurrence TEXT NOT NULL DEFAULT 'none',
       recurrence_rule TEXT,
+      youtube_connection_id TEXT REFERENCES youtube_connections(id) ON DELETE SET NULL,
+      yt_title TEXT,
+      yt_description TEXT,
+      yt_privacy TEXT,
+      yt_made_for_kids INTEGER NOT NULL DEFAULT 0,
+      yt_dvr INTEGER NOT NULL DEFAULT 1,
+      yt_stream_key_id TEXT,
+      yt_broadcast_id TEXT,
+      yt_video_id TEXT,
+      youtube_live_url TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_streams_user ON streams(user_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS youtube_connections (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      client_id_cipher TEXT NOT NULL,
+      client_secret_cipher TEXT NOT NULL,
+      refresh_token_cipher TEXT,
+      channel_id TEXT,
+      channel_title TEXT,
+      channel_thumbnail TEXT,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }

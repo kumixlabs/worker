@@ -24,6 +24,15 @@ export interface StreamRecord {
   autoStopAt: string | null;
   recurrence: StreamRecurrence;
   recurrenceRule: StreamRecurrenceRule | null;
+  youtubeConnectionId: string | null;
+  ytTitle: string | null;
+  ytDescription: string | null;
+  ytPrivacy: string | null;
+  ytMadeForKids: boolean;
+  ytDvr: boolean;
+  ytBroadcastId: string | null;
+  ytVideoId: string | null;
+  youtubeLiveUrl: string | null;
   createdAt: string;
   updatedAt: string;
   playlistName: string | null;
@@ -35,4 +44,20 @@ export interface StreamScheduleInput {
   weekdays?: number[];
   day?: number;
   durationMinutes?: number;
+}
+
+export type YoutubeConnectionStatus = "pending" | "connected" | "expired";
+
+export interface SafeYoutubeConnection {
+  id: string;
+  userId: string;
+  hasClientSecret: boolean;
+  hasRefreshToken: boolean;
+  clientIdMasked: string;
+  channelId: string | null;
+  channelTitle: string | null;
+  channelThumbnail: string | null;
+  status: YoutubeConnectionStatus;
+  createdAt: string;
+  updatedAt: string;
 }

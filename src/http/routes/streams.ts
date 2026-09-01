@@ -17,6 +17,7 @@ import {
   listStreams,
   updateStream,
 } from "../../db/streams";
+import { getYoutubeConnection } from "../../db/youtube";
 import { encryptSecret } from "../../lib/crypto";
 import { scheduleFromInput } from "../../runtime/scheduler";
 import { assertStreamQuota } from "../../services/quota";
@@ -47,10 +48,17 @@ const streamCreateSchema = z.object({
     .string()
     .trim()
     .url()
-    .regex(/^rtmps?:\/\//i, "Must be an rtmp:// or rtmps:// URL"),
+    .regex(/^rtmps?:\/\//i, "Must be an rtmp:// or rtmps:// URL")
+    .optional(),
   shuffle: z.boolean().optional(),
   loop: z.boolean().optional(),
   schedule: scheduleSchema.optional(),
+  youtubeConnectionId: z.string().nullable().optional(),
+  ytTitle: z.string().trim().max(200).nullable().optional(),
+  ytDescription: z.string().trim().max(5000).nullable().optional(),
+  ytPrivacy: z.enum(["public", "unlisted", "private"]).nullable().optional(),
+  ytMadeForKids: z.boolean().optional(),
+  ytDvr: z.boolean().optional(),
 });
 
 const streamPatchSchema = z.object({
@@ -65,6 +73,12 @@ const streamPatchSchema = z.object({
   shuffle: z.boolean().optional(),
   loop: z.boolean().optional(),
   schedule: scheduleSchema.nullable().optional(),
+  youtubeConnectionId: z.string().nullable().optional(),
+  ytTitle: z.string().trim().max(200).nullable().optional(),
+  ytDescription: z.string().trim().max(5000).nullable().optional(),
+  ytPrivacy: z.enum(["public", "unlisted", "private"]).nullable().optional(),
+  ytMadeForKids: z.boolean().optional(),
+  ytDvr: z.boolean().optional(),
 });
 
 function startErrorResponse(error: unknown) {
@@ -97,13 +111,26 @@ export function registerStreamRoutes(app: Hono): void {
       if (!parsed.success) return fail("BAD_REQUEST", "Invalid request body", 400);
       const playlist = getPlaylistById(parsed.data.playlistId, userId);
       if (!playlist) return fail("NOT_FOUND", "Playlist not found", 404);
+      if (!parsed.data.targetUrl && !parsed.data.youtubeConnectionId)
+        return fail("BAD_REQUEST", "targetUrl or youtubeConnectionId is required", 400);
+      if (parsed.data.youtubeConnectionId) {
+        const conn = getYoutubeConnection(parsed.data.youtubeConnectionId);
+        if (!conn || conn.userId !== userId)
+          return fail("NOT_FOUND", "YouTube connection not found", 404);
+      }
       const record = insertStream({
         userId,
         playlistId: parsed.data.playlistId,
         name: parsed.data.name,
-        targetUrl: encryptSecret(parsed.data.targetUrl),
+        targetUrl: encryptSecret(parsed.data.targetUrl ?? ""),
         shuffle: parsed.data.shuffle ?? false,
         loop: parsed.data.loop ?? true,
+        youtubeConnectionId: parsed.data.youtubeConnectionId ?? null,
+        ytTitle: parsed.data.ytTitle ?? null,
+        ytDescription: parsed.data.ytDescription ?? null,
+        ytPrivacy: parsed.data.ytPrivacy ?? null,
+        ytMadeForKids: parsed.data.ytMadeForKids ?? false,
+        ytDvr: parsed.data.ytDvr ?? true,
         ...(parsed.data.schedule ? scheduleFromInput(parsed.data.schedule) : {}),
       });
       addEvent(userId, "stream", `Created stream "${record.name}"`);
@@ -124,12 +151,23 @@ export function registerStreamRoutes(app: Hono): void {
       if (!parsed.success) return fail("BAD_REQUEST", "Invalid request body", 400);
       if (parsed.data.playlistId && !getPlaylistById(parsed.data.playlistId, userId))
         return fail("NOT_FOUND", "Playlist not found", 404);
+      if (parsed.data.youtubeConnectionId) {
+        const conn = getYoutubeConnection(parsed.data.youtubeConnectionId);
+        if (!conn || conn.userId !== userId)
+          return fail("NOT_FOUND", "YouTube connection not found", 404);
+      }
       const record = updateStream(current.id, userId, {
         name: parsed.data.name,
         targetUrl: parsed.data.targetUrl ? encryptSecret(parsed.data.targetUrl) : undefined,
         shuffle: parsed.data.shuffle,
         loop: parsed.data.loop,
         playlistId: parsed.data.playlistId,
+        youtubeConnectionId: parsed.data.youtubeConnectionId,
+        ytTitle: parsed.data.ytTitle,
+        ytDescription: parsed.data.ytDescription,
+        ytPrivacy: parsed.data.ytPrivacy,
+        ytMadeForKids: parsed.data.ytMadeForKids,
+        ytDvr: parsed.data.ytDvr,
         ...(parsed.data.schedule !== undefined
           ? parsed.data.schedule
             ? scheduleFromInput(parsed.data.schedule)

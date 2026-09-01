@@ -19,6 +19,7 @@ import { registerMediaRoutes } from "./routes/media";
 import { registerPlaylistRoutes } from "./routes/playlists";
 import { registerStreamRoutes } from "./routes/streams";
 import { registerSystemRoutes } from "./routes/system";
+import { registerYoutubeRoutes } from "./routes/youtube";
 import { findPublicDir, serveStatic } from "./static";
 
 /**
@@ -221,7 +222,12 @@ export function createApiApp() {
   // Dashboard /api/* routes: require a Better Auth session unless explicitly public.
   app.use("/api/*", async (c, next) => {
     const path = c.req.path;
-    if (path.startsWith("/api/auth") || path === "/api/bootstrap" || signedRequest(c)) {
+    if (
+      path.startsWith("/api/auth") ||
+      path === "/api/bootstrap" ||
+      path === "/api/youtube/callback" ||
+      signedRequest(c)
+    ) {
       return await next();
     }
     return await requireSession(c, next);
@@ -233,6 +239,7 @@ export function createApiApp() {
   registerMediaRoutes(app);
   registerPlaylistRoutes(app);
   registerStreamRoutes(app);
+  registerYoutubeRoutes(app);
 
   app.all("/api/*", (c) => fail("NOT_FOUND", "Unknown API route", 404));
 

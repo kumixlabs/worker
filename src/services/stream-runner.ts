@@ -6,7 +6,7 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, rmSync } from "node:fs";
+import { appendFileSync, createWriteStream, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { getDb } from "../db/client";
@@ -16,6 +16,7 @@ import { getStreamById, type StreamRecord, setStreamStatus } from "../db/streams
 import { decryptSecret } from "../lib/crypto";
 import { getDataDir } from "../runtime/config";
 import { getFfmpegPath } from "../runtime/ffmpeg";
+import { completeYouTubeBroadcast, prepareYouTubeBroadcast } from "./youtube";
 
 interface RunningStream {
   child: ChildProcess;
@@ -111,7 +112,29 @@ export async function startStream(userId: string, streamId: string): Promise<Str
   const videos = items.filter((item) => item.kind !== "audio");
   if (videos.length === 0) throw new StreamStartError("Playlist has no videos", "EMPTY_PLAYLIST");
 
-  const targetUrl = decryptSecret(stream.targetUrl);
+  let targetUrl = decryptSecret(stream.targetUrl);
+  if (stream.youtubeConnectionId) {
+    try {
+      const yt = await prepareYouTubeBroadcast(userId, streamId);
+      if (yt.ingestUrl && yt.streamKey) {
+        targetUrl = `${yt.ingestUrl.replace(/\/$/, "")}/${yt.streamKey}`;
+        logPreStart(
+          streamId,
+          `YouTube broadcast ${yt.broadcastId} ready (https://youtu.be/${yt.videoId})`,
+        );
+      }
+    } catch (error) {
+      cleanup(streamId);
+      setStreamStatus(streamId, "failed", {
+        error: `YouTube broadcast preparation failed: ${error instanceof Error ? error.message : String(error)}`,
+        stoppedAt: new Date().toISOString(),
+      });
+      throw new StreamStartError(
+        `YouTube broadcast preparation failed: ${error instanceof Error ? error.message : String(error)}`,
+        "YOUTUBE_PREPARE_FAILED",
+      );
+    }
+  }
   if (!targetUrl || !/^rtmps?:\/\//i.test(targetUrl))
     throw new StreamStartError("Invalid or missing RTMP target URL", "INVALID_TARGET");
 
@@ -181,6 +204,15 @@ export async function startStream(userId: string, streamId: string): Promise<Str
   return getStreamById(streamId, userId) as StreamRecord;
 }
 
+function logPreStart(streamId: string, line: string): void {
+  try {
+    const logPath = join(logsDir(), `${streamId}.log`);
+    appendFileSync(logPath, `${line}\n`);
+  } catch {
+    // best-effort note only
+  }
+}
+
 function cleanup(streamId: string): void {
   const entry = running.get(streamId);
   if (!entry) return;
@@ -212,6 +244,9 @@ export async function stopStream(userId: string, streamId: string): Promise<Stre
     entry.child.kill("SIGKILL");
     cleanup(streamId);
     setStreamStatus(streamId, "stopped", { stoppedAt: new Date().toISOString() });
+  }
+  if (stream.youtubeConnectionId && stream.ytBroadcastId) {
+    await completeYouTubeBroadcast(stream.youtubeConnectionId, stream.ytBroadcastId);
   }
   return getStreamById(streamId, userId) as StreamRecord;
 }

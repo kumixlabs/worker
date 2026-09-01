@@ -199,7 +199,17 @@
     "sessionsRevokeAll": "Sign out other devices",
     "sessionsRevoked": "Session revoked",
     "sessionsLoading": "Loading sessions…",
-    "sessionsLoadError": "Could not load sessions"
+    "sessionsLoadError": "Could not load sessions",
+    "tabYoutube": "YouTube",
+    "youtubeTitleTab": "YouTube Live connections",
+    "youtubeDescription": "Bring your own Google Cloud OAuth client. Create credentials with redirect URI {origin}/api/youtube/callback, then connect your channel.",
+    "youtubeClientId": "Client ID",
+    "youtubeClientSecret": "Client secret",
+    "youtubeConnect": "Connect channel",
+    "youtubeAuthorizeOpened": "Authorization page opened — complete consent in the new tab.",
+    "youtubeStatus_pending": "Waiting for authorization",
+    "youtubeStatus_connected": "Connected",
+    "youtubeStatus_expired": "Expired — reconnect"
   },
   "Users": {
     "title": "Users",
@@ -357,6 +367,17 @@
     "scheduleHour": "Hour",
     "scheduleMinute": "Minute",
     "scheduleDuration": "Duration (min)",
-    "scheduleDays": "Days"
+    "scheduleDays": "Days",
+    "youtubeConnection": "YouTube channel",
+    "youtubeNone": "None (manual RTMP URL)",
+    "youtubeTitle": "Broadcast title",
+    "youtubeDescription": "Description",
+    "youtubePrivacy": "Privacy",
+    "privacyPublic": "Public",
+    "privacyUnlisted": "Unlisted",
+    "privacyPrivate": "Private",
+    "youtubeMadeForKids": "Made for kids",
+    "youtubeDvr": "Enable DVR",
+    "colLiveUrl": "Live URL"
   }
 }

@@ -3,7 +3,11 @@ import { QueryClient } from "@tanstack/react-query";
 import type { EventRecord } from "../../../src/types/event";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 import type { PlaylistItemRecord, PlaylistRecord } from "../../../src/types/playlist";
-import type { StreamRecord, StreamScheduleInput } from "../../../src/types/stream";
+import type {
+  SafeYoutubeConnection,
+  StreamRecord,
+  StreamScheduleInput,
+} from "../../../src/types/stream";
 import type { WorkerMetrics, WorkerSettings, WorkerStats } from "../../../src/types/worker";
 
 export const queryClient = new QueryClient({
@@ -67,6 +71,21 @@ async function request<T>(path: string, init?: RequestInit) {
 }
 
 export type PublicSettings = Pick<WorkerSettings, "diskUsageLimitPercent" | "timezone">;
+
+export interface StreamInput {
+  name: string;
+  playlistId: string;
+  targetUrl?: string;
+  shuffle?: boolean;
+  loop?: boolean;
+  schedule?: StreamScheduleInput;
+  youtubeConnectionId?: string | null;
+  ytTitle?: string | null;
+  ytDescription?: string | null;
+  ytPrivacy?: "public" | "unlisted" | "private" | null;
+  ytMadeForKids?: boolean;
+  ytDvr?: boolean;
+}
 
 export const api = {
   getAdminUsers: () => request<unknown[]>("/api/admin/users"),
@@ -215,28 +234,23 @@ export const api = {
 
   // Streams
   streams: (options?: RequestInit) => request<StreamRecord[]>("/api/streams", options),
-  createStream: (body: {
-    name: string;
-    playlistId: string;
-    targetUrl: string;
-    shuffle?: boolean;
-    loop?: boolean;
-    schedule?: StreamScheduleInput;
-  }) =>
+  youtubeConnections: (options?: RequestInit) =>
+    request<SafeYoutubeConnection[]>("/api/youtube/connections", options),
+  createYoutubeConnection: (body: { clientId: string; clientSecret: string }) =>
+    request<{ connection: SafeYoutubeConnection; authUrl: string }>("/api/youtube/connections", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteYoutubeConnection: (id: string) =>
+    request<{ deleted: boolean }>(`/api/youtube/connections/${id}`, { method: "DELETE" }),
+  createStream: (body: StreamInput) =>
     request<StreamRecord>("/api/streams", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   patchStream: (
     id: string,
-    body: {
-      name?: string;
-      playlistId?: string;
-      targetUrl?: string;
-      shuffle?: boolean;
-      loop?: boolean;
-      schedule?: StreamScheduleInput | null;
-    },
+    body: Partial<StreamInput> & { schedule?: StreamScheduleInput | null },
   ) =>
     request<StreamRecord>(`/api/streams/${id}`, {
       method: "PATCH",
