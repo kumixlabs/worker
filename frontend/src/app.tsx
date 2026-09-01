@@ -13,6 +13,7 @@ import { MediaPage } from "@/routes/media";
 import { PlaylistDetailPage } from "@/routes/playlist-detail";
 import { PlaylistsPage } from "@/routes/playlists";
 import { SettingsPage } from "@/routes/settings";
+import { StreamsPage } from "@/routes/streams";
 
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
   { path: "/media", element: <MediaPage />, errorElement: <RouteError /> },
   { path: "/playlists", element: <PlaylistsPage />, errorElement: <RouteError /> },
   { path: "/playlists/:id", element: <PlaylistDetailPage />, errorElement: <RouteError /> },
+  { path: "/streams", element: <StreamsPage />, errorElement: <RouteError /> },
   { path: "/log", element: <LogPage />, errorElement: <RouteError /> },
   { path: "/users", element: <Navigate to="/admin/users" replace /> },
   {

@@ -17,6 +17,7 @@ import { doc } from "./routes/common";
 import { registerEventRoutes } from "./routes/events";
 import { registerMediaRoutes } from "./routes/media";
 import { registerPlaylistRoutes } from "./routes/playlists";
+import { registerStreamRoutes } from "./routes/streams";
 import { registerSystemRoutes } from "./routes/system";
 import { findPublicDir, serveStatic } from "./static";
 
@@ -231,6 +232,7 @@ export function createApiApp() {
   registerEventRoutes(app);
   registerMediaRoutes(app);
   registerPlaylistRoutes(app);
+  registerStreamRoutes(app);
 
   app.all("/api/*", (c) => fail("NOT_FOUND", "Unknown API route", 404));
 

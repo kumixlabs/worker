@@ -110,7 +110,8 @@
       "restart_scheduled": "Restart dijadwalkan",
       "restart_failed": "Restart gagal",
       "reconciled": "Direkonsiliasi"
-    }
+    },
+    "close": "Tutup"
   },
   "Dashboard": {
     "title": "Dashboard Live",
@@ -312,5 +313,37 @@
     "addAudios": "Tambah audio",
     "addAudiosDescription": "Pilih trek audio yang diputar di atas rangkaian video.",
     "emptyAudios": "Belum ada audio latar. Tambahkan audio untuk di-mix ke playlist."
+  },
+  "Streams": {
+    "title": "Stream",
+    "description": "Kirim playlist ke target RTMP dengan FFmpeg.",
+    "new": "Stream baru",
+    "create": "Buat stream",
+    "edit": "Edit",
+    "dialogDescription": "Satu stream mengirim satu playlist ke satu URL RTMP.",
+    "colName": "Nama",
+    "colStatus": "Status",
+    "colOptions": "Opsi",
+    "colCreated": "Dibuat",
+    "playlist": "Playlist",
+    "playlistPlaceholder": "Pilih playlist",
+    "targetUrl": "URL target RTMP",
+    "targetUrlKeep": "Kosongkan untuk memakai URL yang lama",
+    "shuffle": "Acak video tiap start",
+    "loop": "Loop playlist sampai dihentikan",
+    "start": "Start",
+    "stop": "Stop",
+    "viewLog": "Lihat log",
+    "logTitle": "Log stream — {name}",
+    "logDescription": "64 KB terakhir output FFmpeg, diperbarui tiap 5 detik.",
+    "started": "Stream \"{name}\" dimulai",
+    "stopped": "Stream \"{name}\" dihentikan",
+    "created": "Stream dibuat",
+    "updated": "Stream diperbarui",
+    "deleted": "Stream dihapus",
+    "deleteTitle": "Hapus stream",
+    "deleteDescription": "Hapus stream \"{name}\"? Tidak bisa dibatalkan.",
+    "searchPlaceholder": "Cari stream",
+    "empty": "Belum ada stream. Buat satu untuk mulai siaran."
   }
 }

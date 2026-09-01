@@ -17,6 +17,7 @@ import { readPackageVersion } from "./lib/version";
 import { ensureDataDir, readSettings, resetWorkerData } from "./runtime/config";
 import { runtimeMetrics } from "./runtime/metrics";
 import { latestVersion, performSelfUpdate, type RestartMode } from "./runtime/update";
+import { reconcileStreamsOnBoot, stopAllStreams } from "./services/stream-runner";
 
 function gigabytes(bytes: number): string {
   return (bytes / (1024 * 1024 * 1024)).toFixed(2);
@@ -53,6 +54,7 @@ export function buildCli(): Command {
       const hostname = options.host ?? "localhost";
 
       const app = createApiApp();
+      reconcileStreamsOnBoot();
 
       const server = serve({ fetch: app.fetch, port, hostname }, () => {
         console.log(`Kumix Worker running on http://${hostname}:${port}`);
@@ -65,9 +67,11 @@ export function buildCli(): Command {
         console.log(`\nReceived ${signal}, shutting down...`);
 
         server.close(() => {
-          closeDb();
-          closeAuthDb();
-          process.exit(0);
+          void stopAllStreams().finally(() => {
+            closeDb();
+            closeAuthDb();
+            process.exit(0);
+          });
         });
 
         setTimeout(() => {

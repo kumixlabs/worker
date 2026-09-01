@@ -110,7 +110,8 @@
       "restart_scheduled": "Restart scheduled",
       "restart_failed": "Restart failed",
       "reconciled": "Reconciled"
-    }
+    },
+    "close": "Close"
   },
   "Dashboard": {
     "title": "Live Dashboard",
@@ -312,5 +313,37 @@
     "addAudios": "Add audio",
     "addAudiosDescription": "Pick audio tracks that play over the video sequence.",
     "emptyAudios": "No background audio. Add audio to mix over the playlist."
+  },
+  "Streams": {
+    "title": "Streams",
+    "description": "Push playlists to RTMP targets with FFmpeg.",
+    "new": "New stream",
+    "create": "Create stream",
+    "edit": "Edit",
+    "dialogDescription": "A stream pushes one playlist to a single RTMP ingest URL.",
+    "colName": "Name",
+    "colStatus": "Status",
+    "colOptions": "Options",
+    "colCreated": "Created",
+    "playlist": "Playlist",
+    "playlistPlaceholder": "Pick a playlist",
+    "targetUrl": "RTMP target URL",
+    "targetUrlKeep": "Leave empty to keep the current URL",
+    "shuffle": "Shuffle videos each start",
+    "loop": "Loop playlist until stopped",
+    "start": "Start",
+    "stop": "Stop",
+    "viewLog": "View log",
+    "logTitle": "Stream log — {name}",
+    "logDescription": "Last 64 KB of the FFmpeg output, refreshed every 5 seconds.",
+    "started": "Stream \"{name}\" started",
+    "stopped": "Stream \"{name}\" stopped",
+    "created": "Stream created",
+    "updated": "Stream updated",
+    "deleted": "Stream deleted",
+    "deleteTitle": "Delete stream",
+    "deleteDescription": "Delete stream \"{name}\"? This cannot be undone.",
+    "searchPlaceholder": "Search streams",
+    "empty": "No streams yet. Create one to go live."
   }
 }

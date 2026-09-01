@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import type { EventRecord } from "../../../src/types/event";
 import type { MediaFolderRecord, MediaRecord } from "../../../src/types/media";
 import type { PlaylistItemRecord, PlaylistRecord } from "../../../src/types/playlist";
+import type { StreamRecord } from "../../../src/types/stream";
 import type { WorkerMetrics, WorkerSettings, WorkerStats } from "../../../src/types/worker";
 
 export const queryClient = new QueryClient({
@@ -204,6 +205,41 @@ export const api = {
     options.onProgress?.(1);
     return unwrapUploadResponse(response);
   },
+
+  // Streams
+  streams: (options?: RequestInit) => request<StreamRecord[]>("/api/streams", options),
+  createStream: (body: {
+    name: string;
+    playlistId: string;
+    targetUrl: string;
+    shuffle?: boolean;
+    loop?: boolean;
+  }) =>
+    request<StreamRecord>("/api/streams", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchStream: (
+    id: string,
+    body: {
+      name?: string;
+      playlistId?: string;
+      targetUrl?: string;
+      shuffle?: boolean;
+      loop?: boolean;
+    },
+  ) =>
+    request<StreamRecord>(`/api/streams/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteStream: (id: string) =>
+    request<{ deleted: boolean }>(`/api/streams/${id}`, { method: "DELETE" }),
+  startStream: (id: string) =>
+    request<StreamRecord>(`/api/streams/${id}/start`, { method: "POST" }),
+  stopStream: (id: string) => request<StreamRecord>(`/api/streams/${id}/stop`, { method: "POST" }),
+  streamLog: (id: string, options?: RequestInit) =>
+    request<{ log: string }>(`/api/streams/${id}/log`, options),
 };
 
 async function unwrapUploadResponse(response: Response): Promise<MediaRecord> {

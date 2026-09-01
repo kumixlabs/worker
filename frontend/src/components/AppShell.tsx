@@ -1,5 +1,14 @@
 import { type ReactNode, useEffect, useMemo } from "react";
-import { Images, LayoutDashboard, ListVideo, PanelLeft, Settings, Terminal, X } from "lucide-react";
+import {
+  Images,
+  LayoutDashboard,
+  ListVideo,
+  PanelLeft,
+  Radio,
+  Settings,
+  Terminal,
+  X,
+} from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslations } from "use-intl";
 
@@ -34,6 +43,7 @@ const navItems = [
   { to: "/", key: "overview", icon: LayoutDashboard },
   { to: "/media", key: "media", icon: Images },
   { to: "/playlists", key: "playlists", icon: ListVideo },
+  { to: "/streams", key: "streams", icon: Radio },
   { to: "/log", key: "log", icon: Terminal },
 ] as const;
 

@@ -239,5 +239,24 @@ function ensureSchema(database: SqliteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id, updated_at);
     CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist ON playlist_items(playlist_id, position);
     CREATE INDEX IF NOT EXISTS idx_playlist_items_media ON playlist_items(media_id);
+
+    CREATE TABLE IF NOT EXISTS streams (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      target_url TEXT NOT NULL,
+      shuffle INTEGER NOT NULL DEFAULT 0,
+      loop INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'stopped',
+      log_path TEXT,
+      started_at TEXT,
+      stopped_at TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_streams_user ON streams(user_id, created_at);
   `);
 }

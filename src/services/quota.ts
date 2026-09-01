@@ -3,6 +3,7 @@
  */
 
 import { getMediaStorageBytes } from "../db/media";
+import { countRunningStreams } from "../db/streams";
 
 export interface UserUsage {
   storageBytes: number;
@@ -14,7 +15,7 @@ export interface UserUsage {
  * ponytail: streamCount stays 0 until streams land again.
  */
 export function getUserUsage(userId: string): UserUsage {
-  return { storageBytes: getMediaStorageBytes(userId), streamCount: 0 };
+  return { storageBytes: getMediaStorageBytes(userId), streamCount: countRunningStreams(userId) };
 }
 
 /**
@@ -43,15 +44,15 @@ export function assertStorageQuota(
  * Checks whether user can create/start another stream.
  * Throws an Error with code QUOTA_STREAMS_EXCEEDED if quota is reached.
  * Admin (maxStreams === null/undefined) is unlimited.
- * ponytail: no-op until streams land again.
  */
 export function assertStreamQuota(
   userId: string | null | undefined,
   maxStreams: number | null | undefined,
 ): void {
   if (!userId || maxStreams === null || maxStreams === undefined) return;
-  if (maxStreams <= 0) {
-    const error = new Error("Stream quota reached: limit is 0 concurrent stream(s)");
+  const running = countRunningStreams(userId);
+  if (running >= maxStreams) {
+    const error = new Error(`Stream quota reached: ${running}/${maxStreams} concurrent stream(s)`);
     (error as { code?: string }).code = "QUOTA_STREAMS_EXCEEDED";
     throw error;
   }
